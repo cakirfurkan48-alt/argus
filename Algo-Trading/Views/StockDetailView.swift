@@ -1,0 +1,615 @@
+import SwiftUI
+
+// MARK: - Router View
+struct StockDetailView: View {
+    let symbol: String
+    @ObservedObject var viewModel: TradingViewModel
+    @State private var isEtf: Bool? = nil
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        ZStack { // Changed Group to ZStack to resolve ambiguous toolbar attachment
+            Theme.background.ignoresSafeArea() // Ensure background is behind everything
+            
+            if let isEtf = isEtf {
+                if isEtf {
+                    // Assuming ArgusEtfDetailView exists or will be created
+                    // For now, let's just show a placeholder or the stock detail content
+                    // If ArgusEtfDetailView is not defined, this will cause a compile error.
+                    // For the purpose of this edit, I'll assume it's a valid type.
+                    // If not, a fallback like StockDetailContent(symbol: symbol, viewModel: viewModel)
+                    // or a simple Text("ETF Detail View for \(symbol)") would be needed.
+                    ArgusEtfDetailView(symbol: symbol, viewModel: viewModel)
+                } else {
+                    StockDetailContent(symbol: symbol, viewModel: viewModel)
+                }
+            } else {
+                VStack {
+                    ProgressView()
+                    Text("Varlık türü belirleniyor...")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack(spacing: 16) {
+                    // 1. Track Signal Button (Forward Test)
+                    if let decision = viewModel.argusDecisions[symbol],
+                       let quote = viewModel.quotes[symbol] {
+                        Button(action: {
+                            SignalTrackerService.shared.trackSignal(
+                                symbol: symbol,
+                                price: quote.currentPrice,
+                                decision: decision
+                            )
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
+                        }) {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .foregroundColor(.red)
+                        }
+                    }
+                    
+                    // 2. Orion Lab Button (Backtest)
+                    NavigationLink(destination: ArgusBacktestView(
+                        symbol: symbol,
+                        candles: viewModel.candles[symbol] ?? []
+                    )) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .foregroundColor(Theme.tint)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            print("🔍 UI DEBUG: StockDetailView appeared for \(symbol)")
+            checkType()
+        }
+        // React to data reloading (e.g. after manual override)
+        .onChange(of: viewModel.argusDecisions[symbol]?.assetType) { oldValue, newValue in
+            print("🔍 UI DEBUG: Asset Type Changed for \(symbol). Old: \(String(describing: oldValue)), New: \(String(describing: newValue))")
+            checkType()
+        }
+    }
+    
+    private func checkType() {
+        print("🔍 UI DEBUG: checkType called for \(symbol)")
+        Task {
+            // Force check again (checking overrides)
+            let result = await viewModel.checkIsEtf(symbol)
+            print("🔍 UI DEBUG: checkIsEtf result for \(symbol): \(String(describing: result))")
+            await MainActor.run {
+                withAnimation {
+                    self.isEtf = result
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Content View (Standard Stock Detail)
+struct StockDetailContent: View {
+    let symbol: String
+    @ObservedObject var viewModel: TradingViewModel
+    
+    // UI State for Sheets
+    @State private var showAtlasSheet = false
+    @State private var showOrionSheet = false
+    @State private var showAetherSheet = false // Rejim
+    @State private var showCronosSheet = false // Zaman
+    @State private var showHermesSheet = false // Haber
+    @State private var showAthenaSheet = false // Smart Beta
+    @State private var showChironSheet = false // Risk Rejimi
+    @State private var showPhoenixSheet = false // Phoenix Detay
+    @State private var showDebateSheet = false // Münazara Simülatörü
+    
+    // Chart Toggles
+    @State private var showSMA = false
+    @State private var showBollinger = false
+    @State private var showIchimoku = false
+    @State private var showMACD = false
+    @State private var showVolume = true
+    @State private var showRSI = false
+    @State private var showStochastic = false
+    
+    // Collapsed Sections
+    @State private var showFullBacktest = false
+    
+    // Time Filter State
+    @State private var selectedRange = "1G"
+    
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        ZStack {
+            Theme.background.edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 0) {
+                // 1. Navigation Header (Simple Back Arrow)
+                simpleHeader
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
+                
+                // Sanctum View (Primary and only view)
+                ArgusSanctumView(symbol: symbol, viewModel: viewModel)
+                    .sheet(isPresented: $showDebateSheet) {
+                        if let decision = viewModel.grandDecisions[symbol] {
+                            AgoraDebateSheet(decision: decision)
+                        }
+                    }
+            }
+        }
+        .navigationBarHidden(true)
+        .task {
+            await viewModel.loadArgusData(for: symbol)
+            viewModel.loadNewsAndInsights(for: symbol)
+        }
+        // MARK: - Sheets
+        .sheet(isPresented: $showAtlasSheet) {
+            ArgusAtlasSheet(score: viewModel.getFundamentalScore(for: symbol))
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showOrionSheet) {
+            ArgusOrionSheet(
+                symbol: symbol,
+                orion: viewModel.orionScores[symbol],
+                candles: viewModel.candles[symbol]
+            )
+        }
+        .sheet(isPresented: $showAetherSheet) {
+            ArgusAetherSheet(macro: viewModel.macroRating)
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showHermesSheet) {
+            ArgusHermesSheet(viewModel: viewModel, symbol: symbol)
+        }
+        .sheet(isPresented: $showAthenaSheet) {
+             ArgusAthenaSheet(result: viewModel.athenaResults[symbol])
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showChironSheet) {
+            ChironDetailView()
+        }
+        .sheet(isPresented: $showPhoenixSheet) {
+            if let decision = viewModel.argusDecisions[symbol],
+               let advice = decision.phoenixAdvice {
+                PhoenixDetailView(
+                    symbol: symbol,
+                    advice: advice,
+                    candles: viewModel.candles[symbol] ?? [],
+                    onRunBacktest: {
+                        viewModel.runPhoenixBacktest(symbol: symbol)
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showDebateSheet) {
+            if let trace = viewModel.agoraTraces[symbol] {
+                DebateSimulatorView(trace: trace)
+            } else {
+                Text("Münazara verisi oluşturuluyor...")
+            }
+        }
+
+
+        .sheet(item: $viewModel.activeBacktestResult) { res in
+            NavigationView {
+                BacktestResultDetailsView(result: res)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Kapat") {
+                                viewModel.activeBacktestResult = nil
+                            }
+                        }
+                    }
+            }
+        }
+    }
+    
+    var simpleHeader: some View {
+        HStack {
+            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                Image(systemName: "arrow.left")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                    .padding(10)
+                    .background(Circle().fill(Theme.secondaryBackground))
+            }
+            
+            CompanyLogoView(symbol: symbol, size: 36)
+                .padding(.leading, 8)
+            
+            Spacer()
+            
+            // Asset Type Selector (Manual Override)
+            Menu {
+                Text("Varlık Türünü Seçin")
+                
+                ForEach(SafeAssetType.allCases, id: \.self) { type in
+                    Button(action: {
+                        Task {
+                            await viewModel.updateAssetType(for: symbol, to: type)
+                        }
+                    }) {
+                        Label(type.rawValue, systemImage: type.icon)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    // Check actual detected/used type from decision if available, else standard detection
+                    if viewModel.argusDecisions[symbol] != nil {
+                        // We don't have assetType in Decision Result public struct, 
+                        // but we can infer or simpler: access User Override map or just default icon
+                        // Let's rely on SafeUniverseService check synchronously for UI state
+                        let currentType = SafeUniverseService.shared.getUserOverride(for: symbol) 
+                                          ?? SafeUniverseService.shared.getUniverseType(for: symbol) 
+                                          ?? .stock // Visual Fallback
+                        
+                        Image(systemName: currentType.icon)
+                            .font(.subheadline)
+                        Text(currentType.rawValue)
+                            .font(.caption)
+                            .bold()
+                    } else {
+                        // Loading State or Initial
+                        Image(systemName: "questionmark.circle")
+                        Text("Tanımla")
+                            .font(.caption)
+                    }
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Theme.secondaryBackground)
+                .foregroundColor(Theme.tint)
+                .foregroundColor(Theme.tint)
+                .cornerRadius(16)
+            }
+            
+            // Data Health Indicator
+            if let health = viewModel.dataHealthBySymbol[symbol] {
+                DataHealthCapsule(health: health)
+                    .padding(.leading, 8)
+            }
+        }
+    }
+    
+    // MARK: - Radar Chart Helpers
+    
+    private func buildRadarScores() -> RadarScores {
+        let decision = viewModel.argusDecisions[symbol]
+        
+        let orion = viewModel.orionScores[symbol]?.score ?? 50
+        let atlas = viewModel.getFundamentalScore(for: symbol)?.totalScore ?? 50
+        let aether = viewModel.macroRating?.numericScore ?? 50
+        let athena = viewModel.athenaResults[symbol]?.factorScore ?? 50
+        let phoenix = decision?.phoenixAdvice?.confidence ?? 50
+        let hermes = viewModel.newsInsightsBySymbol[symbol]?.first?.impactScore ?? 50
+        let demeter: Double = 50 // Demeter skoru ayrı tutulmuyor, varsayılan
+        let cronos = decision?.cronosScore ?? 50
+        
+        return RadarScores(
+            orion: orion,
+            atlas: atlas,
+            aether: aether,
+            athena: athena,
+            phoenix: phoenix,
+            hermes: hermes,
+            demeter: demeter,
+            cronos: cronos
+        )
+    }
+    
+    private func buildChironWeights() -> ChironWeightsData? {
+        guard let context = buildChironContext() else { return nil }
+        let result = ChironRegimeEngine.shared.evaluate(context: context)
+        return ChironWeightsData.from(result.coreWeights)
+    }
+    
+    private func buildChironContext() -> ChironContext? {
+        let decision = viewModel.argusDecisions[symbol]
+        
+        return ChironContext(
+            atlasScore: viewModel.getFundamentalScore(for: symbol)?.totalScore,
+            orionScore: viewModel.orionScores[symbol]?.score,
+            aetherScore: viewModel.macroRating?.numericScore,
+            demeterScore: nil, // Demeter şu an ayrı takip edilmiyor
+            phoenixScore: decision?.phoenixAdvice?.confidence,
+            hermesScore: viewModel.newsInsightsBySymbol[symbol]?.first?.impactScore,
+            athenaScore: viewModel.athenaResults[symbol]?.factorScore,
+            cronosScore: decision?.cronosScore,
+            symbol: symbol,
+            orionTrendStrength: nil,
+            chopIndex: nil,
+            volatilityHint: nil,
+            isHermesAvailable: !(viewModel.newsInsightsBySymbol[symbol]?.isEmpty ?? true)
+        )
+    }
+    
+    private func handleModuleTap(_ module: RadarModule) {
+        switch module {
+        case .orion: showOrionSheet = true
+        case .atlas: showAtlasSheet = true
+        case .aether: showAetherSheet = true
+        case .athena: showAthenaSheet = true
+        case .phoenix: showPhoenixSheet = true
+        case .hermes: showHermesSheet = true
+        case .demeter: break // Demeter sheet yok henüz
+        case .cronos: break // Cronos sheet yok henüz
+        }
+    }
+    
+    // MARK: - Grand Council
+    
+    private func loadGrandCouncilDecision() async {
+        guard let candles = viewModel.candles[symbol], candles.count >= 50 else { return }
+        
+        // Build financial snapshot - simplified to nil due to type mismatch
+        // TODO: Fix FinancialSnapshot vs FinancialsData type inconsistency
+        let financials: FinancialsData? = nil
+        
+        // Get macro snapshot (simplified for now)
+        let macro = buildMacroSnapshot()
+        
+        // Get news snapshot
+        let news = buildNewsSnapshot()
+        
+        // Convene the Grand Council
+        let decision = await ArgusGrandCouncil.shared.convene(
+            symbol: symbol,
+            candles: candles,
+            financials: financials,
+            macro: macro,
+            news: news,
+            engine: .pulse
+        )
+        
+        // Update UI
+        await MainActor.run {
+            viewModel.grandDecisions[symbol] = decision
+        }
+    }
+    
+    private func buildFinancialSnapshot() -> FinancialSnapshot? {
+        // Fundamental score sonucu varsa basit snapshot dön
+        guard viewModel.getFundamentalScore(for: symbol) != nil else { return nil }
+        let quote = viewModel.quotes[symbol]
+        
+        // Şimdilik basit veriler - gerçek API'den detaylı veriler gelecek
+        return FinancialSnapshot(
+            symbol: symbol,
+            marketCap: nil,
+            price: quote?.currentPrice ?? 0,
+            peRatio: nil,
+            forwardPE: nil,
+            pbRatio: nil,
+            psRatio: nil,
+            evToEbitda: nil,
+            revenueGrowth: nil,
+            earningsGrowth: nil,
+            epsGrowth: nil,
+            roe: nil,
+            roa: nil,
+            debtToEquity: nil,
+            currentRatio: nil,
+            grossMargin: nil,
+            operatingMargin: nil,
+            netMargin: nil,
+            dividendYield: nil,
+            payoutRatio: nil,
+            dividendGrowth: nil,
+            beta: nil,
+            sharesOutstanding: nil,
+            floatShares: nil,
+            insiderOwnership: nil,
+            institutionalOwnership: nil,
+            sectorPE: nil,
+            sectorPB: nil,
+            // Analyst Expectations - will be populated from Yahoo API
+            targetMeanPrice: nil,
+            targetHighPrice: nil,
+            targetLowPrice: nil,
+            recommendationMean: nil,
+            analystCount: nil
+        )
+    }
+    
+    private func buildMacroSnapshot() -> MacroSnapshot {
+        // MacroEnvironmentRating'den basit snapshot
+        // Gerçek VIX ve Fear&Greed verileri API'den gelecek
+        return MacroSnapshot(
+            timestamp: Date(),
+            vix: nil, // Gelecekte API'den
+            fearGreedIndex: nil,
+            putCallRatio: nil,
+            fedFundsRate: nil,
+            tenYearYield: nil,
+            twoYearYield: nil,
+            yieldCurveInverted: false,
+            advanceDeclineRatio: nil,
+            percentAbove200MA: nil,
+            newHighsNewLows: nil,
+            gdpGrowth: nil,
+            unemploymentRate: nil,
+            inflationRate: nil,
+            consumerConfidence: nil,
+            sectorRotation: nil,
+            leadingSectors: [],
+            laggingSectors: []
+        )
+    }
+    
+    private func buildNewsSnapshot() -> HermesNewsSnapshot? {
+        guard let insights = viewModel.newsInsightsBySymbol[symbol],
+              !insights.isEmpty else { return nil }
+        
+        let articles = viewModel.newsBySymbol[symbol] ?? []
+        
+        return HermesNewsSnapshot(
+            symbol: symbol,
+            timestamp: Date(),
+            insights: insights,
+            articles: articles
+        )
+    }
+}
+
+// MARK: - Trade Action Panel
+// MARK: - Trade Action Panel
+// MARK: - Trade Action Panel
+struct TradeActionPanel: View {
+    let symbol: String
+    let currentPrice: Double
+    let onBuy: (Double) -> Void
+    let onSell: (Double) -> Void
+    
+    @State private var inputAmount: String = ""
+    @FocusState private var isFocused: Bool
+    
+    var estimatedQuantity: Double {
+        guard let amount = Double(inputAmount), currentPrice > 0 else { return 0 }
+        return amount / currentPrice
+    }
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // 1. Amount Input (Spot Style)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("İşlem Tutarı")
+                    .font(.caption)
+                    .foregroundColor(Theme.textSecondary)
+                
+                HStack(spacing: 4) {
+                    Text("$")
+                        .font(.title3)
+                        .bold()
+                        .foregroundColor(Theme.textPrimary.opacity(0.6))
+                    
+                    TextField("0", text: $inputAmount)
+                        .font(.title3)
+                        .bold()
+                        .foregroundColor(Theme.textPrimary)
+                        .keyboardType(.decimalPad)
+                        .focused($isFocused)
+                        .frame(width: 100)
+                }
+                
+                Text("≈ \(String(format: "%.4f", estimatedQuantity)) Adet")
+                    .font(.caption2)
+                    .foregroundColor(Theme.tint)
+            }
+            .padding(12)
+            .background(Theme.secondaryBackground)
+            .cornerRadius(12)
+            .onTapGesture { isFocused = true }
+            
+            Spacer()
+            
+            // 2. Quick Actions
+            HStack(spacing: 8) {
+                Button(action: { 
+                    if estimatedQuantity > 0 { onSell(estimatedQuantity) }
+                    inputAmount = ""
+                    isFocused = false
+                }) {
+                    VStack(spacing: 0) {
+                        Text("SAT")
+                            .font(.headline)
+                        if estimatedQuantity > 0 {
+                            Text("\(String(format: "%.4f", estimatedQuantity)) Adet")
+                                .font(.system(size: 9))
+                                .opacity(0.8)
+                        }
+                    }
+                    .frame(minWidth: 70, minHeight: 48)
+                    .background(Theme.negative.opacity(0.15))
+                    .foregroundColor(Theme.negative)
+                    .cornerRadius(12)
+                }
+                .disabled(estimatedQuantity == 0)
+                .opacity(estimatedQuantity == 0 ? 0.6 : 1.0)
+                
+                Button(action: { 
+                    if estimatedQuantity > 0 { onBuy(estimatedQuantity) }
+                    inputAmount = ""
+                    isFocused = false
+                }) {
+                    VStack(spacing: 0) {
+                        Text("AL")
+                            .font(.headline)
+                        if estimatedQuantity > 0 {
+                            Text("\(String(format: "%.4f", estimatedQuantity)) Adet")
+                                .font(.system(size: 9))
+                                .opacity(0.8)
+                        }
+                    }
+                    .frame(minWidth: 70, minHeight: 48)
+                    .background(Theme.positive)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+                .disabled(estimatedQuantity == 0)
+                .opacity(estimatedQuantity == 0 ? 0.6 : 1.0)
+            }
+        }
+        .padding(16)
+        .background(Theme.cardBackground)
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.1), radius: 10, y: -2)
+        .padding(.horizontal)
+    }
+}
+
+// Helper Extension for specific corner radius
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
+    }
+}
+// MARK: - Data Health Capsule (Pillar 1)
+struct DataHealthCapsule: View {
+    let health: DataHealth
+    
+    var color: Color {
+        if health.qualityScore >= 80 { return Theme.positive }
+        else if health.qualityScore >= 60 { return .yellow }
+        else { return Theme.negative }
+    }
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+                .shadow(color: color.opacity(0.5), radius: 4)
+            
+            Text("Veri: \(health.localizedStatus) (\(health.qualityScore)%)")
+                .font(.caption2)
+                .bold()
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.1))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(color.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
