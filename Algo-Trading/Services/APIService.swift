@@ -5,7 +5,7 @@ class APIService {
     static let shared = APIService()
     
     // ⚠️ Replace with your own API Key if needed
-    private var apiKey = "PLACEHOLDER_FINNHUB_KEY"
+    private var apiKey = Secrets.finnhubKey
     
     private init() {}
     

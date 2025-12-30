@@ -4,7 +4,7 @@ class TwelveDataFundamentalsProvider: FundamentalsProvider {
     static let shared = TwelveDataFundamentalsProvider()
     
     // API Configuration
-    private let apiKey = "PLACEHOLDER_TWELVE_DATA_KEY" // Valid Twelve Data Key (Demo/Free)
+    private let apiKey = Secrets.twelveDataKey // Valid Twelve Data Key (Demo/Free)
     private let baseURL = "https://api.twelvedata.com"
     
     private init() {}
