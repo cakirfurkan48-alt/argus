@@ -114,6 +114,8 @@ extension TradingViewModel {
                 // Yeni verileri merge et
                 for (k, v) in collected {
                     newQuotes[k] = v
+                    // FIX: WatchlistViewModel için Store'u güncelle
+                    MarketDataStore.shared.injectLiveQuote(v, source: "ArgusDataService")
                 }
                 // TEK ATAMA = TEK RE-RENDER
                 self.quotes = newQuotes
@@ -131,6 +133,7 @@ extension TradingViewModel {
             let quote = try await ArgusDataService.shared.fetchQuote(symbol: symbol)
             await MainActor.run {
                 self.quotes[symbol] = quote
+                MarketDataStore.shared.injectLiveQuote(quote, source: "ArgusDataService")
             }
         } catch {
             print("Single Fetch Failed for \(symbol): \(error)")
