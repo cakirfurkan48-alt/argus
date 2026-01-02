@@ -106,11 +106,17 @@ extension TradingViewModel {
             // ArgusDataService kullan (Heimdall yerine)
             let collected = try await ArgusDataService.shared.fetchQuotes(symbols: allSymbols)
             
+            // PERFORMANS OPTİMİZASYONU: Tek seferde batch güncelleme
+            // Her sembol için ayrı quotes[k]=v yapmak yerine tek atama
             await MainActor.run {
-                // Merge with existing so we don't lose data if partial fail
+                // Önce mevcut quotes'u kopyala
+                var newQuotes = self.quotes
+                // Yeni verileri merge et
                 for (k, v) in collected {
-                    self.quotes[k] = v
+                    newQuotes[k] = v
                 }
+                // TEK ATAMA = TEK RE-RENDER
+                self.quotes = newQuotes
                 self.isLoading = false
             }
         } catch {
@@ -267,12 +273,15 @@ extension TradingViewModel {
         
         let (g, l, a) = await (try? gainers, try? losers, try? active) as? ([Quote]?, [Quote]?, [Quote]?) ?? (nil, nil, nil)
         
+        // PERFORMANS OPTİMİZASYONU: Tüm güncellemeleri topla, tek seferde uygula
         await MainActor.run {
+            var newQuotes = self.quotes
+            
            if let gainers = g {
                self.topGainers = gainers.compactMap { q in
                    guard let s = q.symbol else { return nil }
                    var mQ = q; mQ.symbol = s
-                   self.quotes[s] = mQ
+                   newQuotes[s] = mQ // Batch'e ekle
                    return mQ
                }
            }
@@ -281,7 +290,7 @@ extension TradingViewModel {
                self.topLosers = losers.compactMap { q in
                    guard let s = q.symbol else { return nil }
                    var mQ = q; mQ.symbol = s
-                   self.quotes[s] = mQ
+                   newQuotes[s] = mQ // Batch'e ekle
                    return mQ
                }
            }
@@ -290,11 +299,13 @@ extension TradingViewModel {
                self.mostActive = active.compactMap { q in
                    guard let s = q.symbol else { return nil }
                    var mQ = q; mQ.symbol = s
-                   self.quotes[s] = mQ
+                   newQuotes[s] = mQ // Batch'e ekle
                    return mQ
                }
            }
            
+           // TEK ATAMA = DAHA AZ RE-RENDER
+           self.quotes = newQuotes
            self.isLoading = false
         }
     }
