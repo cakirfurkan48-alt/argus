@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct MarketView: View {
-    @EnvironmentObject var viewModel: TradingViewModel
+    @EnvironmentObject var viewModel: TradingViewModel // Legacy (Geçiş döneminde korunuyor)
+    @EnvironmentObject var watchlistVM: WatchlistViewModel // FAZ 2: Yeni modüler sistem
     @ObservedObject var notificationStore = NotificationStore.shared
     
     // Market Mode: Global veya BIST
@@ -14,13 +15,13 @@ struct MarketView: View {
     @State private var showNotifications = false
     @State private var showAetherDetail = false
     
-    // Filtered Watchlist
+    // Filtered Watchlist - ARTIK WatchlistViewModel'DEN OKUYOR (Performans iyileştirmesi)
     var filteredWatchlist: [String] {
         switch selectedMarket {
         case .global:
-            return viewModel.watchlist.filter { !$0.uppercased().hasSuffix(".IS") }
+            return watchlistVM.watchlist.filter { !$0.uppercased().hasSuffix(".IS") }
         case .bist:
-            return viewModel.watchlist.filter { $0.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0) }
+            return watchlistVM.watchlist.filter { $0.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0) }
         }
     }
     
@@ -145,6 +146,8 @@ struct MarketView: View {
     }
     
     private func deleteSymbol(_ symbol: String) {
+        // HER İKİ SİSTEMDEN DE SİL (Geçiş dönemi senkronizasyonu)
+        watchlistVM.removeSymbol(symbol)
         if let index = viewModel.watchlist.firstIndex(of: symbol) {
             viewModel.deleteFromWatchlist(at: IndexSet(integer: index))
         }
