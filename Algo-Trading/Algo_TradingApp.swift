@@ -13,8 +13,11 @@ struct Algo_TradingApp: App {
     // Create container manually to access context easily for Singleton injection
     let container: ModelContainer
     
-    // Unified Singleton ViewModel
+    // Unified Singleton ViewModel (Legacy - Geçiş döneminde korunuyor)
     @StateObject private var tradingViewModel = TradingViewModel()
+    
+    // FAZ 2: Yeni modüler koordinatör (Paralel çalışıyor)
+    @StateObject private var coordinator = AppStateCoordinator.shared
 
     init() {
         do {
@@ -47,6 +50,9 @@ struct Algo_TradingApp: App {
                 if hasAcceptedDisclaimer {
                     ContentView()
                         .environmentObject(tradingViewModel)
+                        .environmentObject(coordinator) // Yeni koordinatör
+                        .environmentObject(coordinator.watchlist) // Yeni WatchlistVM
+                        .environmentObject(coordinator.portfolio) // Yeni PortfolioVM
                         .task {
                             // One-time startup logic
                             tradingViewModel.bootstrap()
