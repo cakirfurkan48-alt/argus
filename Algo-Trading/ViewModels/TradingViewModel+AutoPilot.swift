@@ -55,6 +55,7 @@ extension TradingViewModel {
                 symbols: symbols,
                 equity: currentEquity,
                 buyingPower: currentBalance,
+                bistBuyingPower: currentBistBalance, // Fix: Pass BIST Balance
                 portfolio: portfolioMap
             )
         }.value

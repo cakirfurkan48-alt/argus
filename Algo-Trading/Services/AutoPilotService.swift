@@ -21,7 +21,15 @@ final class AutoPilotService: Sendable {
     
     /// Scans the provided list of symbols for high-conviction setups.
     /// Returns a list of Signals. Execution happens in ViewModel.
-    func scanMarket(symbols: [String], equity: Double, buyingPower: Double, portfolio: [String: Trade]) async -> (signals: [TradeSignal], logs: [ScoutLog]) {
+    /// Scans the provided list of symbols for high-conviction setups.
+    /// Returns a list of Signals. Execution happens in ViewModel.
+    func scanMarket(
+        symbols: [String], 
+        equity: Double, 
+        buyingPower: Double, 
+        bistBuyingPower: Double, // NEW: TL Balance for BIST
+        portfolio: [String: Trade]
+    ) async -> (signals: [TradeSignal], logs: [ScoutLog]) {
         guard !isScanning else { return ([], []) }
         isScanning = true
         defer { isScanning = false }
@@ -45,6 +53,10 @@ final class AutoPilotService: Sendable {
         
         for symbol in symbols {
             do {
+                // 1. Determine Correct Buying Power based on Market
+                let isBist = symbol.uppercased().hasSuffix(".IS")
+                let effectiveBuyingPower = isBist ? bistBuyingPower : buyingPower
+                
                 // 1. Fetch Data
                 // Priority: Realtime Quote > Candle Close
                 var currentPrice: Double = 0.0
@@ -73,8 +85,8 @@ final class AutoPilotService: Sendable {
                 let decision = await ArgusAutoPilotEngine.shared.evaluate(
                     symbol: symbol,
                     currentPrice: currentPrice,
-                    equity: equity,
-                    buyingPower: buyingPower,
+                    equity: equity, // Total Equity (approx)
+                    buyingPower: effectiveBuyingPower, // CORRECT CURRENCY BALANCE
                     portfolioState: portfolio,
                     candles: candles,
                     atlasScore: atlas?.totalScore,
