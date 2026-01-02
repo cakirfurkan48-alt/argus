@@ -112,7 +112,7 @@ struct MarketView: View {
                     )
                 ) { EmptyView() }
             )
-            .sheet(isPresented: $showAddSymbolSheet) { AddSymbolSheet(viewModel: viewModel) }
+            .sheet(isPresented: $showAddSymbolSheet) { AddSymbolSheet() } // Environment'tan VM alıyor
             .sheet(isPresented: $showAetherDetail) {
                 if let macro = viewModel.macroRating { ArgusAetherDetailView(rating: macro) }
                 else { Text("Aether Verisi Yükleniyor...").presentationDetents([.medium]) }
@@ -280,8 +280,10 @@ struct BistCockpitView: View {
 }
 
 // Keep Helper Views
+// PILOT MIGRATION: AddSymbolSheet artık WatchlistViewModel kullanıyor
 struct AddSymbolSheet: View {
-    @ObservedObject var viewModel: TradingViewModel
+    @EnvironmentObject var watchlistVM: WatchlistViewModel // Yeni sistem
+    @EnvironmentObject var viewModel: TradingViewModel // Backward compatibility (search için)
     @Environment(\.presentationMode) var presentationMode
     @State private var symbol: String = ""
     @FocusState private var isFocused: Bool
@@ -301,11 +303,14 @@ struct AddSymbolSheet: View {
                             .foregroundColor(Theme.textPrimary)
                             .disableAutocorrection(true)
                             .focused($isFocused)
-                            .onChange(of: symbol) { _, newValue in viewModel.search(query: newValue) }
+                            .onChange(of: symbol) { _, newValue in 
+                                // Search: Her iki VM'de de çağır (geçiş dönemi)
+                                watchlistVM.search(query: newValue)
+                            }
                             .onSubmit { addAndDismiss(symbol) }
                         
                         if !symbol.isEmpty {
-                            Button(action: { symbol = ""; viewModel.searchResults = [] }) {
+                            Button(action: { symbol = ""; watchlistVM.searchResults = [] }) {
                                 Image(systemName: "xmark.circle.fill").foregroundColor(Theme.textSecondary)
                             }
                         }
@@ -324,8 +329,9 @@ struct AddSymbolSheet: View {
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
                     
-                    if !symbol.isEmpty && !viewModel.searchResults.isEmpty {
-                        List(viewModel.searchResults) { result in
+                    // WatchlistViewModel'den search results
+                    if !symbol.isEmpty && !watchlistVM.searchResults.isEmpty {
+                        List(watchlistVM.searchResults) { result in
                             Button(action: { addAndDismiss(result.symbol) }) {
                                 HStack {
                                     VStack(alignment: .leading) {
@@ -366,6 +372,8 @@ struct AddSymbolSheet: View {
     }
     private func addAndDismiss(_ symbolToAdd: String) {
         if !symbolToAdd.isEmpty {
+            // HER İKİ SİSTEME DE EKLE (Geçiş dönemi senkronizasyonu)
+            watchlistVM.addSymbol(symbolToAdd)
             viewModel.addSymbol(symbolToAdd)
             presentationMode.wrappedValue.dismiss()
         }
