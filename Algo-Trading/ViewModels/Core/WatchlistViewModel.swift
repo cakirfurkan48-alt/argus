@@ -33,7 +33,7 @@ final class WatchlistViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - UserDefaults Keys
-    private let watchlistKey = "user_watchlist"
+
     
     // MARK: - Init
     init() {
@@ -130,17 +130,38 @@ final class WatchlistViewModel: ObservableObject {
     
     // MARK: - Persistence
     
+    // MARK: - Persistence
+    // TradingViewModel ile uyumlu olması için "watchlist_v2" ve JSON formatı kullanıyoruz.
+    
+    private let watchlistKey = "watchlist_v2"
+    
     private func saveWatchlist() {
-        UserDefaults.standard.set(watchlist, forKey: watchlistKey)
+        if let encoded = try? JSONEncoder().encode(watchlist) {
+            UserDefaults.standard.set(encoded, forKey: watchlistKey)
+        }
     }
     
     private func loadWatchlist() {
-        if let saved = UserDefaults.standard.array(forKey: watchlistKey) as? [String] {
-            watchlist = saved
-        } else {
-            // Varsayılan watchlist
-            watchlist = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
+        // Önce v2 key'ini dene (JSON Data)
+        if let data = UserDefaults.standard.data(forKey: watchlistKey),
+           let decoded = try? JSONDecoder().decode([String].self, from: data) {
+            self.watchlist = decoded
+            print("✅ Watchlist loaded from \(watchlistKey) (\(decoded.count) symbols)")
+            return
         }
+        
+        // Eğer v2 yoksa, belki eski "user_watchlist" vardır (Array)
+        // Migration amaçlı kontrol
+        if let savedOld = UserDefaults.standard.array(forKey: "user_watchlist") as? [String], !savedOld.isEmpty {
+            self.watchlist = savedOld
+            print("⚠️ Watchlist migrated from old key to v2")
+            saveWatchlist() // Yeni formata taşı
+            return
+        }
+           
+        // Hiçbiri yoksa varsayılan
+        print("ℹ️ No saved watchlist found. Using default.")
+        watchlist = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "THYAO.IS", "GARAN.IS"]
     }
     
     // MARK: - Discovery
