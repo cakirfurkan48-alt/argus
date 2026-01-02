@@ -169,7 +169,15 @@ struct GlobalCockpitView: View {
                 rating: viewModel.macroRating,
                 onTap: { showAetherDetail = true }
             )
-            .onAppear { if viewModel.macroRating == nil { viewModel.loadMacroEnvironment() } }
+            // PERFORMANS: Macro load artık background'da, Bootstrap'ta zaten çağrılıyor
+            // Sadece cache boşsa lazy load yap
+            .onAppear { 
+                if viewModel.macroRating == nil { 
+                    Task.detached(priority: .background) {
+                        await MainActor.run { viewModel.loadMacroEnvironment() }
+                    }
+                } 
+            }
             
             ScoutStoriesBar().padding(.top, 8)
             

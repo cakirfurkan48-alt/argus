@@ -267,12 +267,9 @@ struct PortfolioView: View {
             .sheet(isPresented: $showHistory) {
                 TransactionHistorySheet(viewModel: viewModel, marketMode: selectedMarket)
             }
-            .onAppear {
-                // Ensure Aether is fresh when viewing Portfolio
-                Task {
-                    _ = await MacroRegimeService.shared.computeMacroEnvironment()
-                }
-            }
+            // PERFORMANS: Gereksiz Aether yüklemesi kaldırıldı
+            // MacroRegimeService zaten Bootstrap'ta çağrılıyor (Phase 4)
+            // .onAppear { } // Artık boş - ağır işlem yok
         }
     }
     private func mapAndShowInfo(_ engine: AutoPilotEngine) {
