@@ -49,15 +49,7 @@ struct SettingsView: View {
                         
                         // 2. Main Settings
                         VStack(spacing: 2) {
-                            SettingsRow(icon: "globe", title: "Dil / Language", value: settingsViewModel.language == "tr" ? "Türkçe" : "English") {
-                                // Toggle Logic within row or picker
-                            }
-                            Divider().padding(.leading, 56)
-                            
                             SettingsRow(icon: "moon.fill", title: "Karanlık Mod", isToggle: true, isOn: $settingsViewModel.isDarkMode)
-                            Divider().padding(.leading, 56)
-                            
-                            SettingsRow(icon: "dollarsign.circle.fill", title: "Para Birimi", value: settingsViewModel.currency)
                         }
                         .background(Theme.cardBackground)
                         .cornerRadius(20)
@@ -201,33 +193,15 @@ struct SettingsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 
-                                // Athena (Factors)
-                                NavigationLink(destination: AthenaLabView()) {
-                                    SettingsRow(icon: "building.columns.fill", title: "Athena Lab", iconColor: .cyan, hasChevron: true)
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                // Orion (Technical)
+                                // Orion (Technical Analysis)
                                 NavigationLink(destination: OrionLabView()) {
                                     SettingsRow(icon: "star.fill", title: "Orion Lab", iconColor: .purple, hasChevron: true)
                                 }
                                 Divider().padding(.leading, 56)
                                 
-                                // Atlas (Fundamental)
-                                NavigationLink(destination: AtlasLabView()) {
-                                    SettingsRow(icon: "map.fill", title: "Atlas Lab", iconColor: .green, hasChevron: true)
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                // Signal Journal (Forward Test)
-                                NavigationLink(destination: SignalJournalView()) {
-                                    SettingsRow(icon: "notebook", title: "Sinyal Karnesi (Forward Test)", iconColor: .pink, hasChevron: true)
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                // Data Health
+                                // Data Health / Mimir
                                 NavigationLink(destination: ArgusDataHealthView()) {
-                                    SettingsRow(icon: "eye.fill", title: "Mimir Intelligence (System Health)", iconColor: .indigo, hasChevron: true)
+                                    SettingsRow(icon: "eye.fill", title: "Mimir Intelligence", iconColor: .indigo, hasChevron: true)
                                 }
                                 Divider().padding(.leading, 56)
                                 

@@ -14,6 +14,12 @@ struct OrionComponentScores: Codable, Sendable {
     let pattern: Double     // 0-15 (V2 NEW)
     let volatility: Double  // 0-15 (Legacy, maybe deprecated or merged)
     
+    // Detailed Indicators for Voice/UI
+    let rsi: Double?
+    let macdHistogram: Double?
+    
+    // Flags for missing data
+    
     // Flags for missing data
     let isRsAvailable: Bool
     

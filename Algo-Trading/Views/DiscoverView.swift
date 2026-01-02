@@ -174,7 +174,8 @@ struct DiscoverMarketCard: View {
                     .bold()
                     .foregroundColor(.white)
                 
-                Text(String(format: "$%.2f", quote.currentPrice))
+                let isBist = (quote.symbol ?? "").uppercased().hasSuffix(".IS")
+                Text(String(format: isBist ? "₺%.0f" : "$%.2f", quote.currentPrice))
                     .font(.subheadline)
                     .foregroundColor(Color.gray)
             }
@@ -238,7 +239,8 @@ struct DiscoverMarketRow: View {
             Spacer()
             
             VStack(alignment: .trailing, spacing: 4) {
-                Text(String(format: "$%.2f", quote.currentPrice))
+                let isBist = (quote.symbol ?? "").uppercased().hasSuffix(".IS")
+                Text(String(format: isBist ? "₺%.0f" : "$%.2f", quote.currentPrice))
                     .font(.headline)
                     .foregroundColor(.white)
                 

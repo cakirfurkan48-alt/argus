@@ -42,6 +42,20 @@ struct SymbolResolver {
                 print("🔁 SymbolAlias: \(symbol) -> \(alias) (Provider: \(provider.rawValue))")
                 return alias
             }
+            
+            // BIST Sembolü Kontrolü (Türkiye Borsası)
+            // Eğer sembol zaten .IS ile bitiyorsa dokunma
+            if upper.hasSuffix(".IS") {
+                return upper
+            }
+            
+            // Bilinen BIST sembolleri için otomatik .IS suffix ekle
+            if isBistSymbol(upper) {
+                let bistSymbol = "\(upper).IS"
+                print("🇹🇷 BIST Symbol: \(symbol) -> \(bistSymbol)")
+                return bistSymbol
+            }
+            
             return upper
             
         case .eodhd:
@@ -54,5 +68,23 @@ struct SymbolResolver {
         default:
             return upper
         }
+    }
+    
+    // MARK: - BIST Detection
+    // BIST 30 + Önemli BIST 100 sembolleri
+    private let bistSymbols: Set<String> = [
+        "THYAO", "ASELS", "KCHOL", "AKBNK", "GARAN", "SAHOL", "TUPRS", "EREGL",
+        "BIMAS", "SISE", "PETKM", "SASA", "HEKTS", "FROTO", "TOASO", "ENKAI",
+        "ISCTR", "YKBNK", "VAKBN", "HALKB", "PGSUS", "TAVHL", "TCELL", "TTKOM",
+        "KOZAL", "KOZAA", "TKFEN", "MGROS", "SOKM", "AEFES", "ARCLK", "ALARK",
+        "ASTOR", "BBRYO", "BRSAN", "CIMSA", "DOAS", "EGEEN", "EKGYO", "ENJSA",
+        "GESAN", "KONTR", "ODAS", "OYAKC", "SMRTG", "ULKER", "VESTL", "YEOTK",
+        "GUBRF", "ISMEN", "AKSEN", "BERA", "DOHOL", "EUPWR", "GLYHO", "IPEKE",
+        "KORDS", "LOGO", "MAVI", "NETAS", "OTKAR", "PRKME", "QUAGR", "RYGYO",
+        "TURSG", "TTRAK", "ZOREN"
+    ]
+    
+    func isBistSymbol(_ symbol: String) -> Bool {
+        return bistSymbols.contains(symbol.uppercased())
     }
 }

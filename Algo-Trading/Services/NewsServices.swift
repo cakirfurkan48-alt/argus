@@ -8,7 +8,7 @@ protocol NewsProvider {
 // MARK: - 2.2 FinnhubNewsProvider
 final class FinnhubNewsProvider: NewsProvider {
     // Valid Finnhub Key from APIKeyStore (via Secrets)
-    private var apiKey: String { Secrets.shared.finnhub }
+    private var apiKey: String { Secrets.finnhubKey }
     private let baseURL = "https://finnhub.io/api/v1/company-news"
     
     func fetchNews(symbol: String, limit: Int) async throws -> [NewsArticle] {
@@ -116,13 +116,12 @@ final class AggregatedNewsService {
             }
         }
         
-        // 1. USE HEIMDALL ORCHESTRATOR (Centralized Routing: FMP > Finnhub > Yahoo)
+        // ArgusDataService kullan (Heimdall yerine)
         do {
-            let articles = try await HeimdallOrchestrator.shared.requestNews(symbol: symbol)
-            // Heimdall already handles dedup and sources. just limit.
-            return Array(articles.prefix(limit))
+            let articles = try await ArgusDataService.shared.fetchNews(symbol: symbol, limit: limit)
+            return articles
         } catch {
-            print("⚠️ AggregatedNewsService: Heimdall failed for \(symbol): \(error)")
+            print("⚠️ AggregatedNewsService: ArgusDataService failed for \(symbol): \(error)")
             
             // Fallback: Try Legacy Finnhub Directly
             do {

@@ -3,7 +3,7 @@ import SwiftUI
 struct HeimdallKeysView: View {
     @StateObject private var store = APIKeyStore.shared
     @State private var showingAddSheet = false
-    @State private var selectedProvider: ArgusProvider = .fred
+    @State private var selectedProvider: APIProvider = .fred
     @State private var newKey = ""
     
     var body: some View {
@@ -13,11 +13,14 @@ struct HeimdallKeysView: View {
                     Text("Hiç anahtar bulunamadı. Migration bekleniyor veya manuel ekleyin.")
                         .foregroundColor(.secondary)
                 } else {
-                    ForEach(Array(store.keys.values.sorted(by: { $0.provider.rawValue < $1.provider.rawValue })), id: \.provider) { meta in
-                        KeyRow(metadata: meta)
+                    // Map dictionary to array
+                    let keysArray = store.keys.map { $0 }.sorted { $0.key.rawValue < $1.key.rawValue }
+                    
+                    ForEach(keysArray, id: \.key) { (provider, key) in
+                        KeyRow(provider: provider, key: key)
                             .swipeActions {
                                 Button("Sil", role: .destructive) {
-                                    Task { store.deleteKey(provider: meta.provider) }
+                                    Task { store.deleteKey(provider: provider) }
                                 }
                             }
                     }
@@ -26,8 +29,8 @@ struct HeimdallKeysView: View {
             
             Section(header: Text("Yeni Anahtar Ekle")) {
                 Picker("Sağlayıcı", selection: $selectedProvider) {
-                    ForEach(ArgusProvider.allCases.filter { $0.requiresKey }, id: \.self) { prov in
-                        Text(prov.displayName).tag(prov)
+                    ForEach(APIProvider.allCases, id: \.self) { prov in
+                        Text(prov.rawValue).tag(prov)
                     }
                 }
                 
@@ -50,41 +53,28 @@ struct HeimdallKeysView: View {
             }
         }
         .navigationTitle("Anahtar Kasası")
-        .task {
-            // Force migration check or load on appear if needed, though init handles it.
-        }
     }
 }
 
 struct KeyRow: View {
-    let metadata: APIKeyMetadata
+    let provider: APIProvider
+    let key: String
     
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
-                Text(metadata.provider.displayName)
+                Text(provider.rawValue)
                     .font(.headline)
-                Text(metadata.maskedPreview)
+                Text(key.count > 4 ? String(key.prefix(4)) + "..." : "****")
                     .font(.monospaced(.caption)())
                     .foregroundColor(.secondary)
             }
             
             Spacer()
             
-            if metadata.isValid {
-                Label("Aktif", systemImage: "checkmark.shield.fill")
-                    .foregroundColor(.green)
-                    .font(.caption)
-            } else {
-                VStack(alignment: .trailing) {
-                    Label("Hatalı", systemImage: "exclamationmark.shield.fill")
-                        .foregroundColor(.red)
-                        .font(.caption)
-                    if let err = metadata.lastErrorCategory {
-                        Text(err).font(.caption2).foregroundColor(.red)
-                    }
-                }
-            }
+            Label("Aktif", systemImage: "checkmark.shield.fill")
+                .foregroundColor(.green)
+                .font(.caption)
         }
     }
 }

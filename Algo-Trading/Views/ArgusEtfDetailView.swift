@@ -46,8 +46,9 @@ struct ArgusEtfDetailView: View {
                     
                     // 1. Price
                     if let quote = viewModel.quotes[symbol] {
+                        let isBist = symbol.uppercased().hasSuffix(".IS")
                         HStack(alignment: .lastTextBaseline) {
-                            Text(String(format: "$%.2f", quote.currentPrice))
+                            Text(String(format: isBist ? "₺%.0f" : "$%.2f", quote.currentPrice))
                                 .font(.system(size: 36, weight: .bold))
                                 .foregroundColor(.white)
                             

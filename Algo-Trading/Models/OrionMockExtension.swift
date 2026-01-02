@@ -12,6 +12,10 @@ extension OrionScoreResult {
                 structure: 25.0,
                 pattern: 8.0,
                 volatility: 12.0,
+                
+                rsi: 55.0,
+                macdHistogram: 0.15,
+                
                 isRsAvailable: true,
                 trendDesc: "Güçlü Trend",
                 momentumDesc: "Pozitif İvme",

@@ -1,7 +1,14 @@
 import Foundation
 
-struct OrionAnalysisService {
+final class OrionAnalysisService: @unchecked Sendable {
     static let shared = OrionAnalysisService()
+    private let lock = NSLock()
+    
+    // MARK: - CACHING - Performans optimizasyonu
+    private var cache: [String: (result: OrionScoreResult, candleCount: Int, timestamp: Date)] = [:]
+    private let cacheDuration: TimeInterval = 300 // 5 dakika cache
+    
+    private init() {}
     
     // MARK: - Shared Helpers (Used by Athena etc.)
     
@@ -48,6 +55,16 @@ struct OrionAnalysisService {
     
     /// Main entry point for Orion Technical Score (V3 Architecture - Rebalanced)
     func calculateOrionScore(symbol: String, candles: [Candle], spyCandles: [Candle]? = nil) -> OrionScoreResult? {
+        // CACHE CHECK - Aynı sembol ve benzer veri için cache kullan
+        lock.lock()
+        if let cached = cache[symbol],
+           cached.candleCount == candles.count,
+           Date().timeIntervalSince(cached.timestamp) < cacheDuration {
+            lock.unlock()
+            return cached.result
+        }
+        lock.unlock()
+        
         // Need decent history
         guard candles.count > 50 else { return nil }
         let sorted = candles.sorted { $0.date < $1.date }
@@ -71,7 +88,7 @@ struct OrionAnalysisService {
         // --- 2. TREND - Now includes MACD ---
         let (trendRaw, trendDesc) = calculateTrendLeg(candles: sorted) // Max 30
         let (rsScore, rsDesc, rsAvail) = calculateRSLeg(stock: sorted, spy: spyCandles) // Max 15
-        let (macdScore, _) = calculateMACDForTrend(candles: sorted) // Max 10
+        let (macdScore, _, macdHist) = calculateMACDForTrend(candles: sorted) // Max 10
         
         let trendWeighted: Double
         if rsAvail {
@@ -85,7 +102,7 @@ struct OrionAnalysisService {
         }
         
         // --- 3. MOMENTUM - RSI + Volume only (no MACD) ---
-        let (momRaw, momDesc) = calculateMomentumLegNoMACD(candles: sorted) // Max 15 (RSI only)
+        let (momRaw, momDesc, rsiValue) = calculateMomentumLegNoMACD(candles: sorted) // Max 15 (RSI only)
         let (volRaw, volDesc) = calculateVolLiquidityLeg(candles: sorted) // Max 15
         
         // RSI(15) + Volume(15) = 30 → scale to momentumMax
@@ -109,6 +126,28 @@ struct OrionAnalysisService {
             finalScore *= 1.08
         }
         
+        // MARK: - BIST MODÜLÜ (Turquoise)
+        // Sadece BIST hisselerinde çalışır, diğerlerine dokunmaz
+        var bistAnalysisDesc: String? = nil
+        if SymbolResolver.shared.isBistSymbol(symbol) || symbol.uppercased().hasSuffix(".IS") {
+            // Orion BIST Engine (Class based, synchronous call safe)
+            let bistDecision = OrionBistEngine.shared.analyze(symbol: symbol, candles: sorted)
+            
+            // BIST skoru normal skora etki eder (±10 puan aralığında)
+            let bistModifier: Double
+            switch bistDecision.action {
+            case .buy:
+                bistModifier = 10.0
+            case .sell:
+                bistModifier = -10.0
+            case .hold:
+                bistModifier = 0.0
+            }
+            
+            finalScore += bistModifier
+            bistAnalysisDesc = "🇹🇷 BIST: \(bistDecision.action.rawValue) | \(bistDecision.winningProposal?.reasoning ?? "")"
+        }
+        
         // Cap
         finalScore = min(100.0, max(0.0, finalScore))
         
@@ -119,22 +158,42 @@ struct OrionAnalysisService {
             structure: structWeighted, // NEW
             pattern: patternWeighted, // NEW
             volatility: volRaw, // Legacy field
+            
+            // Detailed Indicators
+            rsi: rsiValue,
+            macdHistogram: macdHist,
+            
             isRsAvailable: rsAvail,
             trendDesc: "\(trendDesc) | \(rsDesc)",
             momentumDesc: "\(momDesc) | \(volDesc)",
             structureDesc: structRes?.description ?? "Yapı Nötr",
-            patternDesc: patternRes.description,
+            patternDesc: bistAnalysisDesc ?? patternRes.description, // BIST varsa BIST açıklaması göster
             rsDesc: rsDesc,
             volDesc: volDesc
         )
         
-        return OrionScoreResult(
+        let result = OrionScoreResult(
             symbol: symbol,
             score: finalScore,
             components: components,
             verdict: getVerdict(score: finalScore),
             generatedAt: Date()
         )
+        
+        // CACHE SAVE - Sonucu cache'e kaydet
+        lock.lock()
+        cache[symbol] = (result: result, candleCount: candles.count, timestamp: Date())
+        lock.unlock()
+        
+        return result
+    }
+    
+    /// Async wrapper for background execution - prevents main thread hang
+    func calculateOrionScoreAsync(symbol: String, candles: [Candle], spyCandles: [Candle]? = nil) async -> OrionScoreResult? {
+        // Offload to background thread
+        return await Task.detached(priority: .userInitiated) {
+            return self.calculateOrionScore(symbol: symbol, candles: candles, spyCandles: spyCandles)
+        }.value
     }
     
     // MARK: - Leg 1: Trend Quality (30p)
@@ -359,11 +418,11 @@ struct OrionAnalysisService {
     }
     
     // MARK: - NEW LEG: MACD for Trend (Max 10p)
-    private func calculateMACDForTrend(candles: [Candle]) -> (Double, String) {
+    private func calculateMACDForTrend(candles: [Candle]) -> (Double, String, Double?) {
         let (macdLine, signal, hist) = macd(candles)
         
         guard let h = hist, let sig = signal, let _ = macdLine else {
-            return (5.0, "MACD Veri Yok")
+            return (5.0, "MACD Veri Yok", nil)
         }
         
         var score = 0.0
@@ -391,12 +450,12 @@ struct OrionAnalysisService {
             }
         }
         
-        return (min(10.0, score), desc)
+        return (min(10.0, score), desc, h)
     }
     
     // MARK: - NEW LEG: Momentum without MACD (Max 15p - RSI only)
-    private func calculateMomentumLegNoMACD(candles: [Candle]) -> (Double, String) {
-        guard let rsiVal = rsi(candles, 14) else { return (7.5, "Veri Yok") }
+    private func calculateMomentumLegNoMACD(candles: [Candle]) -> (Double, String, Double?) {
+        guard let rsiVal = rsi(candles, 14) else { return (7.5, "Veri Yok", nil) }
         
         var score = 0.0
         var notes: [String] = []
@@ -432,7 +491,7 @@ struct OrionAnalysisService {
             }
         }
         
-        return (min(15.0, score), notes.joined(separator: ", "))
+        return (min(15.0, score), notes.joined(separator: ", "), rsiVal)
     }
     
     // MARK: - NEW LEG: Volatility (Max 100 base, scaled to 5%)

@@ -54,6 +54,10 @@ struct ArgusGrandDecision: Sendable, Equatable, Codable {
     let phoenixAdvice: PhoenixAdvice? = nil
     let cronosScore: Double? = nil
     
+    // Rich Data for Voice/UI
+    let orionDetails: OrionScoreResult?
+    let financialDetails: FinancialSnapshot?
+    
     let timestamp: Date
     
     var shouldTrade: Bool {
@@ -104,6 +108,8 @@ actor ArgusGrandCouncil {
         athena: AthenaFactorResult? = nil,
         demeter: DemeterScore? = nil,
         chiron: ChronosResult? = nil,
+        // NEW: BIST Macro Input (Sirkiye)
+        sirkiyeInput: SirkiyeEngine.SirkiyeInput? = nil,
         forceRefresh: Bool = false
     ) async -> ArgusGrandDecision {
         
@@ -119,13 +125,21 @@ actor ArgusGrandCouncil {
         print("🏛️🏛️🏛️ ARGUS ÜST KONSEYİ TOPLANIYOR: \(symbol)")
         print("=".padding(toLength: 50, withPad: "=", startingAt: 0))
         
+        let isBist = symbol.uppercased().hasSuffix(".IS")
+        
         // 2. Gather all council decisions (Parallel execution could be optimized here)
-        let orionDecision = await OrionCouncil.shared.convene(symbol: symbol, candles: candles, engine: engine)
+        let orionDecision: CouncilDecision
+        
+        if isBist {
+            print("🇹🇷 Orion TR (Turquoise) Devrede - \(symbol)")
+            orionDecision = await OrionBistEngine.shared.analyze(symbol: symbol, candles: candles)
+        } else {
+            orionDecision = await OrionCouncil.shared.convene(symbol: symbol, candles: candles, engine: engine)
+        }
         
         var atlasDecision: AtlasDecision? = nil
         if let fin = financials {
             // Map FinancialsData to FinancialSnapshot for Atlas
-            // Include all available extended metrics
             let snapshot = FinancialSnapshot(
                 symbol: fin.symbol,
                 marketCap: fin.marketCap,
@@ -161,10 +175,24 @@ actor ArgusGrandCouncil {
                 recommendationMean: nil,
                 analystCount: nil
             )
-            atlasDecision = await AtlasCouncil.shared.convene(symbol: symbol, financials: snapshot, engine: engine)
+            
+            if isBist {
+                print("🇹🇷 Atlas TR (Turquoise) Devrede - \(symbol)")
+                atlasDecision = await AtlasBistEngine.shared.analyze(symbol: symbol, financials: snapshot)
+            } else {
+                atlasDecision = await AtlasCouncil.shared.convene(symbol: symbol, financials: snapshot, engine: engine)
+            }
         }
         
-        let aetherDecision = await AetherCouncil.shared.convene(macro: macro)
+        // 3. Aether (Macro) - Project Turquoise Integration (Sirkiye)
+        let aetherDecision: AetherDecision
+        
+        if isBist, let bistInput = sirkiyeInput {
+            print("🇹🇷 Sirkiye (Politik Korteks) Devrede - \(symbol)")
+            aetherDecision = await SirkiyeEngine.shared.analyze(input: bistInput)
+        } else {
+            aetherDecision = await AetherCouncil.shared.convene(macro: macro)
+        }
         
         var hermesDecision: HermesDecision? = nil
         if let newsData = news {
@@ -183,6 +211,43 @@ actor ArgusGrandCouncil {
             hermes: hermesDecision,
             engine: engine,
             weights: weights,
+            // Rich Data context
+            orionDetails: OrionAnalysisService.shared.calculateOrionScore(symbol: symbol, candles: candles, spyCandles: nil),
+            financialDetails: atlasDecision != nil ? FinancialSnapshot(
+                symbol: symbol,
+                marketCap: financials?.marketCap,
+                price: candles.last?.close ?? 0.0,
+                peRatio: financials?.peRatio,
+                forwardPE: financials?.forwardPERatio,
+                pbRatio: financials?.priceToBook,
+                psRatio: financials?.priceToSales,
+                evToEbitda: financials?.evToEbitda,
+                revenueGrowth: financials?.revenueGrowth,
+                earningsGrowth: financials?.earningsGrowth,
+                epsGrowth: nil,
+                roe: financials?.returnOnEquity,
+                roa: financials?.returnOnAssets,
+                debtToEquity: financials?.debtToEquity,
+                currentRatio: financials?.currentRatio,
+                grossMargin: financials?.grossMargin,
+                operatingMargin: financials?.operatingMargin,
+                netMargin: financials?.profitMargin,
+                dividendYield: financials?.dividendYield,
+                payoutRatio: nil,
+                dividendGrowth: nil,
+                beta: nil,
+                sharesOutstanding: nil,
+                floatShares: nil,
+                insiderOwnership: nil,
+                institutionalOwnership: nil,
+                sectorPE: nil,
+                sectorPB: nil,
+                targetMeanPrice: nil,
+                targetHighPrice: nil,
+                targetLowPrice: nil,
+                recommendationMean: nil,
+                analystCount: nil
+            ) : nil,
             // Advisors
             athena: athena,
             demeter: demeter,
@@ -225,6 +290,9 @@ actor ArgusGrandCouncil {
         hermes: HermesDecision?,
         engine: AutoPilotEngine,
         weights: CouncilMemberWeights,
+        // Details
+        orionDetails: OrionScoreResult?,
+        financialDetails: FinancialSnapshot?,
         // Advisors
         athena: AthenaFactorResult?,
         demeter: DemeterScore?,
@@ -240,7 +308,7 @@ actor ArgusGrandCouncil {
         advisorNotes.append(CouncilAdvisorGenerator.generateDemeterAdvice(score: demeter))
         
         // Calculate temp action for Chiron check (simplified, will refine later if needed)
-        let tempAction = orion.action 
+        let _ = orion.action 
         advisorNotes.append(CouncilAdvisorGenerator.generateChironAdvice(result: chiron, action: .neutral))
 
         
@@ -399,6 +467,8 @@ actor ArgusGrandCouncil {
             atlasDecision: atlas,
             aetherDecision: aether,
             hermesDecision: hermes,
+            orionDetails: orionDetails,
+            financialDetails: financialDetails,
             timestamp: Date()
         )
     }

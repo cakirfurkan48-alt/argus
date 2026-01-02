@@ -1,11 +1,16 @@
 import Foundation
 import Combine
 
-enum APIProvider: String, CaseIterable, Identifiable {
+enum APIProvider: String, CaseIterable, Identifiable, Codable {
     case twelveData = "Twelve Data"
     case finnhub = "Finnhub"
     case alphaVantage = "Alpha Vantage"
     case eodhd = "EODHD"
+    case fmp = "FMP"
+    case tiingo = "Tiingo"
+    case marketstack = "MarketStack"
+    case gemini = "Gemini AI"
+    case fred = "FRED"
     
     var id: String { rawValue }
 }

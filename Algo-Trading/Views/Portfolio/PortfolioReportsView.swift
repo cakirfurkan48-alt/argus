@@ -58,6 +58,7 @@ struct ReportVetoItem: Identifiable {
 // MARK: - Reports View
 struct PortfolioReportsView: View {
     @ObservedObject var viewModel: TradingViewModel
+    var mode: PortfolioView.MarketMode = .global
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -67,8 +68,8 @@ struct PortfolioReportsView: View {
                     title: "GÜN SONU",
                     subtitle: formattedDate(Date()),
                     icon: "sun.max.fill",
-                    color: .orange,
-                    reportText: viewModel.dailyReport
+                    color: mode == .global ? .orange : .red,
+                    reportText: mode == .global ? viewModel.dailyReport : viewModel.bistDailyReport
                 )
                 
                 // WEEKLY REPORT CARD
@@ -76,8 +77,8 @@ struct PortfolioReportsView: View {
                     title: "HAFTALIK",
                     subtitle: weekRangeString(),
                     icon: "calendar",
-                    color: .purple,
-                    reportText: viewModel.weeklyReport
+                    color: mode == .global ? .purple : .orange,
+                    reportText: mode == .global ? viewModel.weeklyReport : viewModel.bistWeeklyReport
                 )
             }
             .padding(.horizontal)

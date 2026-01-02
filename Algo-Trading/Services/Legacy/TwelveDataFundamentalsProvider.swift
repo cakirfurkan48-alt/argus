@@ -29,29 +29,37 @@ class TwelveDataFundamentalsProvider: FundamentalsProvider {
     }
     
     private func fetchFromNetwork(symbol: String) async throws -> FinancialsData {
-        // Twelve Data requires separate calls for Income, Balance, Cashflow, Statistics
-        // Statistics endpoint gives Valuation metrics (PE, PB, etc.)
+        let isBist = symbol.uppercased().hasSuffix(".IS")
         
+        // Twelve Data requires separate calls for Income, Balance, Cashflow, Statistics
         async let incomeTask = fetch(endpoint: "income_statement", symbol: symbol)
         async let balanceTask = fetch(endpoint: "balance_sheet", symbol: symbol)
         async let cashFlowTask = fetch(endpoint: "cash_flow", symbol: symbol)
+        
+        // Statistics endpoint is often empty or unreliable for BIST. Make it optional.
         async let statisticsTask = fetch(endpoint: "statistics", symbol: symbol)
-        // Quote for current price might be needed if statistics doesn't provide all
         
         let (incomeData, balanceData, cashFlowData, statsData) = await (try? incomeTask, try? balanceTask, try? cashFlowTask, try? statisticsTask)
         
-        guard let iData = incomeData, let bData = balanceData else {
-            throw URLError(.resourceUnavailable)
+        // BIST RELAXED CHECK: If BIST, require only Income Statement. Balance/Cashflow are bonus.
+        // GLOBAL STRICT CHECK: Require Income + Balance.
+        
+        if isBist {
+            if incomeData == nil { throw URLError(.resourceUnavailable) }
+        } else {
+            guard incomeData != nil, balanceData != nil else {
+                throw URLError(.resourceUnavailable)
+            }
         }
         
         let decoder = JSONDecoder()
         
         // 1. Income Statement
-        let incomeResp = try? decoder.decode(TDIncomeStatementResponse.self, from: iData)
+        let incomeResp = try? decoder.decode(TDIncomeStatementResponse.self, from: incomeData ?? Data())
         let annualIncome = incomeResp?.income_statement ?? []
         
         // 2. Balance Sheet
-        let balanceResp = try? decoder.decode(TDBalanceSheetResponse.self, from: bData)
+        let balanceResp = try? decoder.decode(TDBalanceSheetResponse.self, from: balanceData ?? Data())
         let annualBalance = balanceResp?.balance_sheet ?? []
         
         // 3. Cash Flow
@@ -62,9 +70,8 @@ class TwelveDataFundamentalsProvider: FundamentalsProvider {
         let statsResp = try? decoder.decode(TDStatisticsResponse.self, from: statsData ?? Data())
         let statistics = statsResp?.statistics
         
-        guard let lastIncome = annualIncome.first,
-              let lastBalance = annualBalance.first else {
-            throw URLError(.resourceUnavailable)
+        guard let lastIncome = annualIncome.first else {
+             throw URLError(.resourceUnavailable)
         }
         
         // Parsing Helpers
@@ -73,18 +80,16 @@ class TwelveDataFundamentalsProvider: FundamentalsProvider {
         
         let totalRevenue = val(lastIncome.revenue) ?? val(lastIncome.sales)
         let netIncome = val(lastIncome.net_income)
-        let totalShareholderEquity = val(lastBalance.total_equity) ?? val(lastBalance.shareholders_equity)
         
-        guard let rev = totalRevenue, rev > 0,
-              let ni = netIncome,
-              let eq = totalShareholderEquity else {
-            throw URLError(.resourceUnavailable)
-        }
+        // For BIST, Balance Sheet might be missing or delayed. Handle gracefully.
+        let lastBalance = annualBalance.first
+        let totalShareholderEquity = lastBalance != nil ? (val(lastBalance?.total_equity) ?? val(lastBalance?.shareholders_equity)) : nil
+        
         
         // Optional Data
         let ebitda = val(lastIncome.ebitda)
-        let shortTermDiff = (val(lastBalance.short_term_debt) ?? 0.0)
-        let longTermDiff = (val(lastBalance.long_term_debt) ?? 0.0)
+        let shortTermDiff = lastBalance != nil ? (val(lastBalance?.short_term_debt) ?? 0.0) : nil
+        let longTermDiff = lastBalance != nil ? (val(lastBalance?.long_term_debt) ?? 0.0) : nil
         
         let lastCashFlow = annualCash.first
         let operatingCashflow = val(lastCashFlow?.operating_cash_flow)
@@ -99,18 +104,15 @@ class TwelveDataFundamentalsProvider: FundamentalsProvider {
         let forwardPERatio = val(statistics?.valuations_metrics.forward_pe)
         let priceToBook = val(statistics?.valuations_metrics.price_to_book)
         let evToEbitda = val(statistics?.valuations_metrics.enterprise_value_to_ebitda)
-        let dividendYield = val(statistics?.dividends_and_splits.dividend_yield) // Usually percentage string or double
-        
-        // Forward Growth (Approximation from PEG or other if available, or nil)
-        let forwardGrowth: Double? = nil // Twelve Data stats might not have direct growth estimate in standard endpoint
+        let dividendYield = val(statistics?.dividends_and_splits.dividend_yield) 
         
         return FinancialsData(
             symbol: symbol,
-            currency: incomeResp?.meta.currency ?? "USD",
+            currency: incomeResp?.meta.currency ?? (isBist ? "TRY" : "USD"),
             lastUpdated: Date(),
-            totalRevenue: rev,
-            netIncome: ni,
-            totalShareholderEquity: eq,
+            totalRevenue: totalRevenue,
+            netIncome: netIncome,
+            totalShareholderEquity: totalShareholderEquity,
             marketCap: nil,
             revenueHistory: revenueHistory,
             netIncomeHistory: netIncomeHistory,
@@ -125,7 +127,8 @@ class TwelveDataFundamentalsProvider: FundamentalsProvider {
             priceToBook: priceToBook,
             evToEbitda: evToEbitda,
             dividendYield: dividendYield,
-            forwardGrowthEstimate: forwardGrowth
+            forwardGrowthEstimate: nil,
+            isETF: false
         )
     }
     
@@ -136,8 +139,9 @@ class TwelveDataFundamentalsProvider: FundamentalsProvider {
         let (data, response) = try await URLSession.shared.data(from: url)
         
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-            // Twelve Data might return 400/404/429
-            throw URLError(.badServerResponse)
+            // Log but don't throw immediately let fetchFromNetwork handle nil
+             print("⚠️ TwelveData Error [\(endpoint)]: \(httpResponse.statusCode)")
+             throw URLError(.badServerResponse)
         }
         
         return data

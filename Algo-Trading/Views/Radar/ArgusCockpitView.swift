@@ -1,6 +1,13 @@
 import SwiftUI
 
 // MARK: - TRADER TERMINAL VIEW
+
+// Global Scope Enum
+enum MarketTab {
+    case global
+    case bist
+}
+
 struct ArgusCockpitView: View {
     @EnvironmentObject var viewModel: TradingViewModel
     
@@ -8,6 +15,7 @@ struct ArgusCockpitView: View {
     @State private var sortOption: TerminalSortOption = .councilScore
     @State private var hideLowQualityData: Bool = true
     @State private var searchText: String = ""
+    @State private var selectedMarket: MarketTab = .global // Tab State
     
     // Overlay State
     @State private var selectedSymbolForModule: String? = nil
@@ -15,9 +23,9 @@ struct ArgusCockpitView: View {
     
     // Sort Options
     enum TerminalSortOption: String, CaseIterable, Identifiable {
-        case councilScore = "Konsey"
-        case orion = "Orion (Teknik)"
-        case atlas = "Atlas (Temel)"
+        case councilScore = "Konsey / Divan"
+        case orion = "Orion / Tahta"
+        case atlas = "Atlas / Kasa"
         case potential = "Potansiyel"
         
         var id: String { rawValue }
@@ -71,7 +79,8 @@ struct ArgusCockpitView: View {
                     TerminalControlBar(
                         sortOption: $sortOption,
                         hideLowQualityData: $hideLowQualityData,
-                        count: terminalData.count
+                        count: terminalData.count,
+                        selectedMarket: selectedMarket
                     )
                     
                     // Terminal List
@@ -120,9 +129,9 @@ struct ArgusCockpitView: View {
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         HStack(spacing: 4) {
-                            Image(systemName: "desktopcomputer")
-                                .foregroundColor(.cyan)
-                            Text("ARGUS TERMINAL")
+                            Image(systemName: selectedMarket == .bist ? "building.columns.fill" : "globe")
+                                .foregroundColor(selectedMarket == .bist ? .red : .cyan)
+                            Text(selectedMarket == .bist ? "SİRKİYE KOKPİTİ" : "GLOBAL TERMINAL")
                                 .font(.system(.headline, design: .monospaced))
                                 .bold()
                                 .foregroundColor(.white)
@@ -152,6 +161,24 @@ struct ArgusCockpitView: View {
             await viewModel.bootstrapTerminalData()
         }
     }
+    
+    // Tab Button Helper
+    @ViewBuilder
+    func tabButton(title: String, tab: MarketTab) -> some View {
+        Button(action: { withAnimation { selectedMarket = tab } }) {
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(selectedMarket == tab ? .white : .gray)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
+                
+                Rectangle()
+                    .fill(selectedMarket == tab ? (tab == .bist ? Color.red : Color.cyan) : Color.clear)
+                    .frame(height: 2)
+            }
+        }
+    }
 }
 
 // MARK: - SUBCOMPONENTS
@@ -160,11 +187,12 @@ struct TerminalControlBar: View {
     @Binding var sortOption: ArgusCockpitView.TerminalSortOption
     @Binding var hideLowQualityData: Bool
     let count: Int
+    let selectedMarket: MarketTab // Updated Type
     
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("\(count) SONUÇ")
+                Text("\(count) \(selectedMarket == .bist ? "HİSSE" : "TICKER")")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(.gray)
                 
@@ -180,7 +208,8 @@ struct TerminalControlBar: View {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.up.arrow.down")
                             .font(.caption)
-                        Text(sortOption.rawValue)
+                        // Dynamic Sort Labels based on Market
+                        Text(sortLabel(for: sortOption))
                             .font(.caption)
                             .bold()
                     }
@@ -188,7 +217,7 @@ struct TerminalControlBar: View {
                     .padding(.vertical, 6)
                     .background(Color.white.opacity(0.05))
                     .cornerRadius(8)
-                    .foregroundColor(.cyan)
+                    .foregroundColor(selectedMarket == .bist ? .red : .cyan)
                 }
             }
             
@@ -209,6 +238,16 @@ struct TerminalControlBar: View {
         .padding()
         .background(Color(hex: "10141f"))
         .overlay(Rectangle().frame(height: 1).foregroundColor(.white.opacity(0.05)), alignment: .bottom)
+    }
+    
+    func sortLabel(for option: ArgusCockpitView.TerminalSortOption) -> String {
+        guard selectedMarket == .bist else { return option.rawValue }
+        switch option {
+        case .councilScore: return "Divan Puanı"
+        case .orion: return "Tahta (Teknik)"
+        case .atlas: return "Kasa (Temel)"
+        case .potential: return "Potansiyel"
+        }
     }
 }
 
@@ -232,12 +271,23 @@ struct TerminalStockRow: View {
         HStack(spacing: 12) {
             // Ticker & Price
             VStack(alignment: .leading, spacing: 4) {
-                Text(symbol)
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
+                HStack(spacing: 4) {
+                    Text(symbol.replacingOccurrences(of: ".IS", with: ""))
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                    
+                    if symbol.uppercased().hasSuffix(".IS") {
+                        Text("TR")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.red)
+                            .padding(2)
+                            .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.red, lineWidth: 1))
+                    }
+                }
                 
                 if let quote = viewModel.quotes[symbol] {
-                    Text(String(format: "$%.2f", quote.currentPrice))
+                    let isBist = symbol.uppercased().hasSuffix(".IS")
+                    Text(String(format: isBist ? "₺%.2f" : "$%.2f", quote.currentPrice))
                         .font(.caption)
                         .foregroundColor(.gray)
                 } else {
@@ -246,21 +296,25 @@ struct TerminalStockRow: View {
                         .foregroundColor(.gray)
                 }
             }
-            .frame(width: 70, alignment: .leading)
+            .frame(width: 80, alignment: .leading)
             
             // Scores
-            HStack(spacing: 16) {
+            let isBist = symbol.uppercased().hasSuffix(".IS")
+            HStack(spacing: 12) {
                 Button(action: onOrionTap) {
-                    TerminalScoreBadge(label: "T", score: orionScore, color: .cyan)
+                    // Orion (O) or Tahta (T)
+                    TerminalScoreBadge(label: isBist ? "T" : "O", score: orionScore, color: .cyan)
                 }
                 .buttonStyle(PlainButtonStyle())
                 
                 Button(action: onAtlasTap) {
-                    TerminalScoreBadge(label: "F", score: atlasScore, color: .yellow)
+                    // Atlas (A) or Kasa (K)
+                    TerminalScoreBadge(label: isBist ? "K" : "A", score: atlasScore, color: .yellow)
                 }
                 .buttonStyle(PlainButtonStyle())
                 
-                TerminalScoreBadge(label: "K", score: councilScore, color: .green)
+                // Council (Star)
+                TerminalScoreBadge(label: "★", score: councilScore, color: .green)
             }
             
             Spacer()

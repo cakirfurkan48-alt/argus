@@ -403,6 +403,22 @@ extension TradingViewModel {
              let chronos = ChronosService.shared.analyzeTime(symbol: symbol, candles: dailyCandles)
              await MainActor.run { self.chronosDetails[symbol] = chronos }
 
+             // Prepare BIST Input (Turquoise - Sirkiye (Politik Korteks))
+             var sirkiyeInput: SirkiyeEngine.SirkiyeInput? = nil
+             if symbol.uppercased().hasSuffix(".IS") {
+                 let usdQuote = await MainActor.run { self.quotes["USD/TRY"] }
+                 if let q = usdQuote {
+                     sirkiyeInput = SirkiyeEngine.SirkiyeInput(
+                         usdTry: q.currentPrice,
+                         usdTryPrevious: q.previousClose ?? q.currentPrice,
+                         dxy: 104.0, // Fallback/Global
+                         brentOil: 80.0,
+                         globalVix: 20.0,
+                         newsSnapshot: hermesSnapshot // Passing Real News data for Political Cortex
+                     )
+                 }
+             }
+
              let grandDecision = await ArgusGrandCouncil.shared.convene(
                  symbol: symbol,
                  candles: dailyCandles,
@@ -412,7 +428,8 @@ extension TradingViewModel {
                  engine: .pulse, // Defaulting to pulse/standard for now
                  athena: athenaScore,
                  demeter: demeterScore,
-                 chiron: chronos
+                 chiron: chronos,
+                 sirkiyeInput: sirkiyeInput
              )
              
              await MainActor.run {
@@ -630,7 +647,7 @@ extension TradingViewModel {
         let benchmark = self.candles["SPY"]
         
         // Calculate Orion 3.0 (5-Legged)
-        let result = OrionAnalysisService.shared.calculateOrionScore(
+        let result = await OrionAnalysisService.shared.calculateOrionScoreAsync(
             symbol: symbol,
             candles: dailyCandles ?? [],
             spyCandles: benchmark

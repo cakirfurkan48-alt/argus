@@ -67,9 +67,13 @@ struct CrystalWatchlistRow: View {
             
             // 3. Data Pill
             if let q = quote {
+                let isBist = symbol.uppercased().hasSuffix(".IS")
+                let currencySymbol = isBist ? "₺" : "$"
+                let priceFormat = "%.2f"
+                
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text(String(format: "$%.2f", q.currentPrice))
-                        .font(.system(size: 15, weight: .bold)) // Numbers look best in San Francisco
+                    Text(String(format: "\(currencySymbol)\(priceFormat)", q.currentPrice))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundColor(Theme.textPrimary)
                     
                     Text(String(format: "%.2f%%", q.percentChange))

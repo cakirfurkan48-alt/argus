@@ -11,9 +11,11 @@ class RSSParser: NSObject, XMLParserDelegate {
     
     // Limits
     private let limit: Int
+    private let sourceName: String
     
-    init(limit: Int) {
+    init(limit: Int, sourceName: String) {
         self.limit = limit
+        self.sourceName = sourceName
     }
     
     func parse(data: Data) -> [NewsArticle] {
@@ -56,7 +58,7 @@ class RSSParser: NSObject, XMLParserDelegate {
                 let article = NewsArticle(
                     id: UUID().uuidString,
                     symbol: "MARKET", // General
-                    source: "Investing.com",
+                    source: sourceName,
                     headline: currentTitle.trimmingCharacters(in: .whitespacesAndNewlines),
                     summary: currentDescription.trimmingCharacters(in: .whitespacesAndNewlines),
                     url: currentLink.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -70,83 +72,119 @@ class RSSParser: NSObject, XMLParserDelegate {
 
 // MARK: - RSSNewsProvider
 final class RSSNewsProvider: NewsProvider {
-    // Investing.com Turkey Feeds
-    private let feedURLs: [String: String] = [
-        "GENERAL": "https://tr.investing.com/rss/news_25.rss", // Genel Haberler
-        "FOREX": "https://tr.investing.com/rss/news_1.rss",   // Döviz
-        "STOCK": "https://tr.investing.com/rss/news_285.rss", // Hisse Senedi
-        "CRYPTO": "https://tr.investing.com/rss/news_301.rss", // Kripto
-        "ANALYSIS": "https://tr.investing.com/rss/market_overview.rss" // Piyasa Analizleri
+    
+    // Comprehensive Source List (Economy, Politics, Mainstream, Independent)
+    private let feedSources: [String: [(name: String, url: String)]] = [
+        "BIST_MIX": [
+            // --- EKONOMİ ODAKLI ---
+            ("Bloomberg HT", "https://www.bloomberght.com/rss"),
+            ("Investing TR", "https://tr.investing.com/rss/news_25.rss"),
+            ("Investing Hisse", "https://tr.investing.com/rss/news_285.rss"),
+            ("Ekonomim", "https://www.ekonomim.com/rss"),
+            ("Patronlar Dünyası", "https://www.patronlardunyasi.com/rss"),
+            ("Borsa Gündem", "https://www.borsagundem.com/rss"),
+            ("Foreks Haber", "https://www.foreks.com/rss"),
+            ("BigPara", "https://bigpara.hurriyet.com.tr/rss"),
+            ("Para Analiz", "https://www.paraanaliz.com/feed/"),
+            
+            // --- BAĞIMSIZ & ELEŞTİREL (SİYASET/GENEL) ---
+            ("BBC Türkçe", "http://feeds.bbci.co.uk/turkce/rss.xml"),
+            ("Euronews TR", "https://tr.euronews.com/rss?format=xml"),
+            ("DW Türkçe", "https://rss.dw.com/xml/rss-tr-all"),
+            ("T24", "https://t24.com.tr/rss"),
+            ("Gazete Duvar", "https://www.gazeteduvar.com.tr/rss"),
+            ("Diken", "http://www.diken.com.tr/feed/"),
+            ("BirGün", "https://www.birgun.net/xml/rss.xml"),
+            ("Evrensel", "https://www.evrensel.net/rss/haber.xml"),
+            ("Bianet", "https://bianet.org/rss"),
+            ("Halk TV", "https://halktv.com.tr/rss"),
+            ("Tele1", "https://tele1.com.tr/feed/"),
+            ("Kısa Dalga", "https://kisadalga.net/rss"),
+            
+            // --- MERKEZ & ANA AKIM (DENGE İÇİN) ---
+            ("Sözcü", "https://www.sozcu.com.tr/feeds-rss-category-gundem"),
+            ("Sözcü Ekonomi", "https://www.sozcu.com.tr/feeds-rss-category-ekonomi"),
+            ("Cumhuriyet", "https://www.cumhuriyet.com.tr/rss"),
+            ("Habertürk", "https://www.haberturk.com/rss/manset.xml"),
+            ("Habertürk Ekonomi", "https://www.haberturk.com/rss/ekonomi.xml"),
+            ("NTV", "https://www.ntv.com.tr/gundem.rss"),
+            ("NTV Ekonomi", "https://www.ntv.com.tr/ekonomi.rss"),
+            ("CNN Türk", "https://www.cnnturk.com/feed/rss/all/news"),
+            ("Milliyet Ekonomi", "https://www.milliyet.com.tr/rss/rssnew/ekonomi.xml"),
+            ("Hürriyet Ekonomi", "https://www.hurriyet.com.tr/rss/ekonomi"),
+            ("Karar", "https://www.karar.com/rss/rss.xml"),
+            ("Gazete Oksijen", "https://gazeteoksijen.com/rss")
+        ],
+        "FOREX": [
+            ("Investing Forex", "https://tr.investing.com/rss/news_1.rss"),
+            ("Bloomberg HT", "https://www.bloomberght.com/rss"),
+            ("Döviz.com", "https://www.doviz.com/rss/tum-haberler")
+        ],
+        "CRYPTO": [
+            ("Investing Crypto", "https://tr.investing.com/rss/news_301.rss"),
+            ("CoinDesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
+            ("CoinTelegraph TR", "https://tr.cointelegraph.com/rss")
+        ]
     ]
     
     func fetchNews(symbol: String, limit: Int) async throws -> [NewsArticle] {
-        // Decide which feed to use
-        let feedKey: String
-        if symbol == "GENERAL" || symbol == "MARKET" {
-            feedKey = "GENERAL"
-        } else if symbol.contains("USD") || symbol.contains("EUR") {
-            feedKey = "FOREX"
+        // Decide category
+        let categoryKey: String
+        if symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol) || symbol == "GENERAL" {
+            categoryKey = "BIST_MIX"
         } else if symbol.contains("BTC") || symbol.contains("ETH") {
-            feedKey = "CRYPTO"
+            categoryKey = "CRYPTO"
         } else {
-             // For specific Stocks, RSS is just "General Stock News", NOT "Specific AAPL News".
-             // Returning General Stock News for "AAPL" is misleading (Duplicate News Issue).
-             // We should ONLY return this if explicitly asked for "STOCK_MARKET".
-             // If asked for "AAPL", we should return [] if no specific source available,
-             // rather than filling it with random Turkish stock news.
-             return []
+            categoryKey = "FOREX" // Default fallback for USD/EUR or Globals
         }
         
-        guard let urlStr = feedURLs[feedKey], let url = URL(string: urlStr) else {
-            return []
+        guard let sources = feedSources[categoryKey] else { return [] }
+        
+        // Concurrent Fetching
+        return await withTaskGroup(of: [NewsArticle].self) { group in
+            for (name, urlStr) in sources {
+                group.addTask {
+                    return await self.fetchSingleFeed(name: name, urlStr: urlStr, limit: limit)
+                }
+            }
+            
+            var allArticles: [NewsArticle] = []
+            for await articles in group {
+                allArticles.append(contentsOf: articles)
+            }
+            
+            // Deduplicate (by Headline) and Sort
+            let uniqueArticles = Array(Dictionary(grouping: allArticles, by: { $0.headline }).values.compactMap { $0.first })
+            let sorted = uniqueArticles.sorted { $0.publishedAt > $1.publishedAt }
+            
+            // Save to Cache (First 20 items to save space)
+            let topArticles = Array(sorted.prefix(limit))
+            if !topArticles.isEmpty {
+                 DataCacheService.shared.save(value: topArticles, kind: .news, symbol: symbol, source: "Multi-Source")
+            }
+            return topArticles
         }
+    }
+    
+    private func fetchSingleFeed(name: String, urlStr: String, limit: Int) async -> [NewsArticle] {
+        guard let url = URL(string: urlStr) else { return [] }
         
         do {
             var request = URLRequest(url: url)
             request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            request.setValue("application/rss+xml, application/xml, text/xml, */*", forHTTPHeaderField: "Accept")
-            request.timeoutInterval = 10
+            request.timeoutInterval = 6 // Fast timeout per feed
             
             let (data, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
-                print("RSS HTTP Status: \(httpResponse.statusCode)")
-                throw URLError(.badServerResponse)
+                return []
             }
             
-            let parser = RSSParser(limit: limit)
-            let parsed = parser.parse(data: data)
-            
-            if parsed.isEmpty {
-                 throw URLError(.cancelled)
-            }
-            
-            // Success: Save to Cache
-            DataCacheService.shared.save(value: parsed, kind: .news, symbol: symbol, source: "Investing.com")
-            
-            return parsed
+            let parser = RSSParser(limit: limit, sourceName: name)
+            return parser.parse(data: data)
         } catch {
-            print("RSS Fetch Failed: \(error). Checking cache...")
-            
-            // Fallback to Cache
-            if let entry = await DataCacheService.shared.getEntry(kind: .news, symbol: symbol),
-               let articles = try? JSONDecoder().decode([NewsArticle].self, from: entry.data) {
-                print("💾 Using Cached News for \(symbol) from \(entry.source)")
-                return articles
-            }
-            
-            // If No Cache, return Error Mock
-            return [
-                NewsArticle(
-                    id: UUID().uuidString,
-                    symbol: "MARKET",
-                    source: "Investing.com (Error)",
-                    headline: "Piyasa Verileri Alınamadı",
-                    summary: "İnternet bağlantınızı kontrol edin. Önbellekte veri bulunamadı. Hata: \(error.localizedDescription)",
-                    url: "https://tr.investing.com",
-                    publishedAt: Date()
-                )
-            ]
+            print("RSS Fail (\(name)): \(error.localizedDescription)")
+            return []
         }
     }
 }

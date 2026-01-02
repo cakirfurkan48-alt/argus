@@ -4,156 +4,77 @@ struct MarketView: View {
     @EnvironmentObject var viewModel: TradingViewModel
     @ObservedObject var notificationStore = NotificationStore.shared
     
+    // Market Mode: Global veya BIST
+    enum MarketMode { case global, bist }
+    @State private var selectedMarket: MarketMode = .global
+    @Namespace private var animation // For sliding tab effect
+    
     // UI State
     @State private var showAddSymbolSheet = false
     @State private var showNotifications = false
     @State private var showAetherDetail = false
-    @State private var searchText = ""
+    
+    // Filtered Watchlist
+    var filteredWatchlist: [String] {
+        switch selectedMarket {
+        case .global:
+            return viewModel.watchlist.filter { !$0.uppercased().hasSuffix(".IS") }
+        case .bist:
+            return viewModel.watchlist.filter { $0.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0) }
+        }
+    }
     
     var body: some View {
         NavigationView {
             ZStack {
                 Theme.background.ignoresSafeArea()
                 
-                // Main Content
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // MARK: - Zone 1: Aether HUD (Dynamic Header)
-                        AetherHUDView(
-                            rating: viewModel.macroRating,
-                            onTap: { showAetherDetail = true }
-                        )
-                        .onAppear {
-                            if viewModel.macroRating == nil {
-                                viewModel.loadMacroEnvironment()
-                            }
-                        }
-                        
-                        // MARK: - Zone 1.5: Scout Stories (Instagram-style)
-                        ScoutStoriesBar()
-                            .padding(.top, 8)
-                        
-                        // MARK: - Zone 2: Smart Strip (The Ticker)
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("PİYASA GÖZLEM")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(Theme.textSecondary)
-                                .padding(.horizontal, 16)
-                                .padding(.top, 16)
-                            
-                            SmartTickerStrip(viewModel: viewModel)
-                        }
-                        
-                        
-                        // MARK: - Zone 1.5: Demeter Active Shocks (Market Context)
-                        if !viewModel.activeShocks.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(viewModel.activeShocks) { shock in
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .font(.caption)
-                                                .foregroundColor(.red)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(shock.type.displayName)
-                                                    .font(.caption)
-                                                    .bold()
-                                                    .foregroundColor(.primary)
-                                                Text(shock.description)
-                                                    .font(.caption2)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                        }
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(Theme.secondaryBackground)
-                                        .cornerRadius(8)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                                        )
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                            }
-                            .padding(.top, 8)
-                        }
-                        
-                        Divider()
-                            .background(Theme.border)
-                            .padding(.vertical, 16)
-                        
-                        // MARK: - Zone 3: Crystal Watchlist
-                        VStack(alignment: .leading, spacing: 12) {
-                            // List Header
-                            HStack {
-                                Text("İZLEME LİSTESİ")
-                                    .font(.caption)
-                                    .bold()
-                                    .foregroundColor(Theme.textSecondary)
-                                
-                                Spacer()
-                                
-                                // Live Toggle (Mini)
-                                HStack(spacing: 4) {
-                                    Circle().fill(viewModel.isLiveMode ? Color.green : Color.gray).frame(width: 6, height: 6)
-                                    Text(viewModel.isLiveMode ? "LIVE" : "DELAY")
-                                        .font(.caption2)
-                                        .foregroundColor(Theme.textSecondary)
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            
-                            if viewModel.watchlist.isEmpty {
-                                MarketEmptyStateView()
-                                    .padding(.top, 40)
+                VStack(spacing: 0) {
+                    // 1. CUSTOM HEADER (Premium Toggle)
+                    HStack {
+                        marketTabButton(title: "GLOBAL 🌍", mode: .global)
+                        marketTabButton(title: "SİRKİYE 🇹🇷", mode: .bist)
+                    }
+                    .padding()
+                    .background(Theme.secondaryBackground.opacity(0.5))
+                    
+                    // 2. MAIN SCROLL CONTENT
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            if selectedMarket == .global {
+                                GlobalCockpitView(
+                                    viewModel: viewModel,
+                                    watchlist: filteredWatchlist,
+                                    showAetherDetail: $showAetherDetail,
+                                    deleteAction: deleteSymbol
+                                )
+                                .transition(.move(edge: .leading))
                             } else {
-                                LazyVStack(spacing: 0) {
-                                    ForEach(viewModel.watchlist, id: \.self) { symbol in
-                                        NavigationLink(destination: StockDetailView(symbol: symbol, viewModel: viewModel)) {
-                                            CrystalWatchlistRow(
-                                                symbol: symbol,
-                                                quote: viewModel.quotes[symbol],
-                                                candles: viewModel.candles[symbol]
-                                            )
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 4)
-                                        }
-                                        .buttonStyle(PlainButtonStyle()) // No grey highlight
-                                        .contextMenu {
-                                            Button(role: .destructive) {
-                                                deleteSymbol(symbol)
-                                            } label: {
-                                                Label("Listeden Sil", systemImage: "trash")
-                                            }
-                                        }
-                                    }
-                                }
+                                BistCockpitView(
+                                    viewModel: viewModel,
+                                    watchlist: filteredWatchlist,
+                                    deleteAction: deleteSymbol
+                                )
+                                .transition(.move(edge: .trailing))
                             }
+                            
+                            Spacer(minLength: 100)
                         }
-                        .padding(.bottom, 120) // Space for FAB + tab bar
+                        .padding(.top)
                     }
                 }
-                .refreshable {
-                    viewModel.loadData()
-                }
+                .animation(.spring(), value: selectedMarket)
                 
                 // MARK: - Overlays (FAB & Notifications)
                 VStack {
-                    // Top Bar (Ghost)
+                    // Notifications (Ghost Top Right)
                     HStack {
-                       Spacer()
-                       Button(action: { showNotifications = true }) {
+                        Spacer()
+                        Button(action: { showNotifications = true }) {
                             ZStack(alignment: .topTrailing) {
                                 Image(systemName: "bell.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(Theme.textPrimary)
-                                    .padding(10)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                                    .shadow(radius: 5)
-                                
+                                    .font(.system(size: 20)).foregroundColor(Theme.textPrimary)
+                                    .padding(10).background(.ultraThinMaterial).clipShape(Circle()).shadow(radius: 5)
                                 if notificationStore.unreadCount > 0 {
                                     Circle().fill(Color.red).frame(width: 10, height: 10).offset(x: 2, y: -2)
                                 }
@@ -164,7 +85,7 @@ struct MarketView: View {
                     
                     Spacer()
                     
-                    // Floating Action Button (FAB)
+                    // FAB (Add Symbol)
                     HStack {
                         Spacer()
                         Button(action: { showAddSymbolSheet = true }) {
@@ -172,15 +93,16 @@ struct MarketView: View {
                                 .font(.system(size: 24, weight: .semibold))
                                 .foregroundColor(.black)
                                 .frame(width: 56, height: 56)
-                                .background(Theme.primary) // Mint/Gold
+                                .background(selectedMarket == .global ? Theme.primary : Color.cyan)
                                 .clipShape(Circle())
-                                .shadow(color: Theme.primary.opacity(0.4), radius: 10, x: 0, y: 5)
+                                .shadow(color: (selectedMarket == .global ? Theme.primary : Color.cyan).opacity(0.4), radius: 10, x: 0, y: 5)
                         }
                         .padding(.trailing, 20)
-                        .padding(.bottom, 100) // Extra padding to sit above tab bar
+                        .padding(.bottom, 20)
                     }
                 }
             }
+            .navigationBarHidden(true)
             .background(
                 NavigationLink(
                     destination: StockDetailView(symbol: viewModel.selectedSymbolForDetail ?? "", viewModel: viewModel),
@@ -188,25 +110,37 @@ struct MarketView: View {
                         get: { viewModel.selectedSymbolForDetail != nil },
                         set: { if !$0 { viewModel.selectedSymbolForDetail = nil } }
                     )
-                ) {
-                    EmptyView()
-                }
+                ) { EmptyView() }
             )
-            .navigationBarHidden(true)
-            .sheet(isPresented: $showAddSymbolSheet) {
-                AddSymbolSheet(viewModel: viewModel)
-            }
+            .sheet(isPresented: $showAddSymbolSheet) { AddSymbolSheet(viewModel: viewModel) }
             .sheet(isPresented: $showAetherDetail) {
-                if let macro = viewModel.macroRating {
-                    ArgusAetherDetailView(rating: macro)
+                if let macro = viewModel.macroRating { ArgusAetherDetailView(rating: macro) }
+                else { Text("Aether Verisi Yükleniyor...").presentationDetents([.medium]) }
+            }
+            .sheet(isPresented: $showNotifications) { NotificationsView(viewModel: viewModel) }
+        }
+    }
+    
+    // Custom Tab Button
+    @ViewBuilder
+    func marketTabButton(title: String, mode: MarketMode) -> some View {
+        Button(action: { withAnimation { selectedMarket = mode } }) {
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .fontWeight(selectedMarket == mode ? .bold : .regular)
+                    .foregroundColor(selectedMarket == mode ? .white : .gray)
+                
+                if selectedMarket == mode {
+                    Rectangle()
+                        .fill(mode == .global ? Theme.primary : Color.cyan)
+                        .frame(height: 2)
+                        .matchedGeometryEffect(id: "TabUnderline", in: animation)
                 } else {
-                    Text("Aether Verisi Yükleniyor...")
-                        .presentationDetents([.medium])
+                    Rectangle().fill(Color.clear).frame(height: 2)
                 }
             }
-            .sheet(isPresented: $showNotifications) {
-                NotificationsView(viewModel: viewModel)
-            }
+            .frame(maxWidth: .infinity)
         }
     }
     
@@ -217,31 +151,153 @@ struct MarketView: View {
     }
 }
 
-// Preserve existing helpers (AddSymbolSheet etc) unless moved. 
-// Assuming they are needed here or in a separate file. 
-// For this rewrite, I will assume AddSymbolSheet is available or needs to be re-declared if it was only in this file. 
-// The previous view had AddSymbolSheet inside. I should keep it to avoid compilation error.
+// MARK: - GLOBAL COCKPIT
+struct GlobalCockpitView: View {
+    @ObservedObject var viewModel: TradingViewModel
+    let watchlist: [String]
+    @Binding var showAetherDetail: Bool
+    let deleteAction: (String) -> Void
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Aether HUD
+            AetherHUDView(
+                rating: viewModel.macroRating,
+                onTap: { showAetherDetail = true }
+            )
+            .onAppear { if viewModel.macroRating == nil { viewModel.loadMacroEnvironment() } }
+            
+            ScoutStoriesBar().padding(.top, 8)
+            
+            SmartTickerStrip(viewModel: viewModel)
+                .padding(.top, 16)
+            
+            // Watchlist Header
+            HStack {
+                Text("GLOBAL İZLEME")
+                    .font(.caption).bold().foregroundColor(Theme.textSecondary)
+                Spacer()
+                Text(viewModel.isLiveMode ? "LIVE" : "DELAY")
+                    .font(.caption2).bold()
+                    .foregroundColor(viewModel.isLiveMode ? .green : .gray)
+            }
+            .padding(.horizontal)
+            .padding(.top, 20)
+            .padding(.bottom, 8)
+            
+            // Watchlist
+            if watchlist.isEmpty {
+                MarketEmptyStateView().padding(.top, 40)
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(watchlist, id: \.self) { symbol in
+                        NavigationLink(destination: StockDetailView(symbol: symbol, viewModel: viewModel)) {
+                            CrystalWatchlistRow(
+                                symbol: symbol,
+                                quote: viewModel.quotes[symbol],
+                                candles: viewModel.candles[symbol]
+                            )
+                            .padding(.horizontal, 16).padding(.vertical, 4)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .contextMenu {
+                            Button(role: .destructive) { deleteAction(symbol) } label: { Label("Sil", systemImage: "trash") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
-// ... [Copying AddSymbolSheet struct from previous file content to ensure it compiles] ...
-// Ideally this should be moved to its own file, but sticking to "Single File Rewrite" for safety.
+// MARK: - BIST COCKPIT (SİRKİYE)
+struct BistCockpitView: View {
+    @ObservedObject var viewModel: TradingViewModel
+    let watchlist: [String]
+    let deleteAction: (String) -> Void
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Sirkiye Dashboard Header
+            HStack {
+                Text("SİRKİYE KOKPİTİ")
+                    .font(.title3).bold()
+                    .tracking(1)
+                    .foregroundColor(.white)
+                Spacer()
+                Image(systemName: "eye.fill")
+                    .foregroundColor(.cyan)
+            }
+            .padding(.horizontal)
+            
+            SirkiyeDashboardView(viewModel: viewModel)
+                .padding(.bottom, 8)
+            
+            // Watchlist Header
+            HStack {
+                Text("BIST TAKİP (TL)")
+                    .font(.caption).bold().foregroundColor(Theme.textSecondary)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 20)
+            .padding(.bottom, 8)
+            
+            if watchlist.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "chart.bar.doc.horizontal")
+                        .font(.system(size: 48)).foregroundColor(Theme.textSecondary.opacity(0.3))
+                    Text("BIST hissesi ekle")
+                        .foregroundColor(Theme.textSecondary)
+                }.padding(.top, 40)
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(watchlist, id: \.self) { symbol in
+                        NavigationLink(destination: StockDetailView(symbol: symbol, viewModel: viewModel)) {
+                            // Enhanced Bist Watchlist Row
+                            BistCockpitRow(
+                                symbol: symbol,
+                                quote: viewModel.quotes[symbol],
+                                orionResult: viewModel.orionScores[symbol], // V2 Result without cast
+                                onAppear: {
+                                    // Trigger Orion Analysis if missing
+                                    if viewModel.orionScores[symbol] == nil {
+                                        Task { await viewModel.loadOrionScore(for: symbol) }
+                                    }
+                                }
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .contextMenu {
+                            Button(role: .destructive) { deleteAction(symbol) } label: { Label("Sil", systemImage: "trash") }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+}
 
+// Keep Helper Views
 struct AddSymbolSheet: View {
     @ObservedObject var viewModel: TradingViewModel
     @Environment(\.presentationMode) var presentationMode
     @State private var symbol: String = ""
     @FocusState private var isFocused: Bool
-    
     let popularSymbols = ["NVDA", "AMD", "TSLA", "AAPL", "MSFT", "META", "AMZN", "GOOGL", "NFLX", "COIN"]
+    let popularBist = ["THYAO.IS", "ASELS.IS", "AKBNK.IS", "KCHOL.IS", "EREGL.IS"]
+    @State private var searchBist = false
     
     var body: some View {
         NavigationView {
              ZStack {
                 Theme.background.ignoresSafeArea()
                 VStack(spacing: 20) {
+                    // Search Bar
                      HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(Theme.textSecondary)
-                        TextField("Sembol Ara (Örn: PLTR)", text: $symbol)
+                        Image(systemName: "magnifyingglass").foregroundColor(Theme.textSecondary)
+                        TextField("Sembol Ara (Örn: \(searchBist ? "THYAO.IS" : "PLTR"))", text: $symbol)
                             .foregroundColor(Theme.textPrimary)
                             .disableAutocorrection(true)
                             .focused($isFocused)
@@ -259,6 +315,14 @@ struct AddSymbolSheet: View {
                     .cornerRadius(12)
                     .padding(.horizontal)
                     .padding(.top)
+                    
+                    // Toggle for Suggestions
+                    Picker("Piyasa", selection: $searchBist) {
+                        Text("Global").tag(false)
+                        Text("BIST").tag(true)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
                     
                     if !symbol.isEmpty && !viewModel.searchResults.isEmpty {
                         List(viewModel.searchResults) { result in
@@ -278,10 +342,10 @@ struct AddSymbolSheet: View {
                         .background(Theme.background)
                     } else {
                         VStack(alignment: .leading) {
-                            Text("Popüler").font(.caption).foregroundColor(Theme.textSecondary).padding(.horizontal)
+                            Text("Popüler (\(searchBist ? "BIST" : "Global"))").font(.caption).foregroundColor(Theme.textSecondary).padding(.horizontal)
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack {
-                                    ForEach(popularSymbols, id: \.self) { item in
+                                    ForEach(searchBist ? popularBist : popularSymbols, id: \.self) { item in
                                         Button(action: { addAndDismiss(item) }) {
                                             Text(item).padding(.horizontal, 12).padding(.vertical, 8)
                                                 .background(Theme.secondaryBackground).foregroundColor(Theme.textPrimary).cornerRadius(20)
@@ -300,7 +364,6 @@ struct AddSymbolSheet: View {
             .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { isFocused = true } }
         }
     }
-    
     private func addAndDismiss(_ symbolToAdd: String) {
         if !symbolToAdd.isEmpty {
             viewModel.addSymbol(symbolToAdd)
@@ -309,20 +372,89 @@ struct AddSymbolSheet: View {
     }
 }
 
-// Keeping MarketEmptyStateView too
 struct MarketEmptyStateView: View {
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "magnifyingglass.circle")
-                .font(.system(size: 64))
-                .foregroundColor(Theme.textSecondary.opacity(0.5))
-            Text("Takip listen boş")
-                .font(.headline)
-                .foregroundColor(Theme.textPrimary)
-            Text("İzlemek istediğin hisseleri eklemek için\n+ butonuna bas.")
-                .font(.subheadline)
-                .foregroundColor(Theme.textSecondary)
-                .multilineTextAlignment(.center)
+            Image(systemName: "magnifyingglass.circle").font(.system(size: 64)).foregroundColor(Theme.textSecondary.opacity(0.5))
+            Text("Takip listen boş").font(.headline).foregroundColor(Theme.textPrimary)
+            Text("İzlemek istediğin hisseleri eklemek için\n+ butonuna bas.").font(.subheadline).foregroundColor(Theme.textSecondary).multilineTextAlignment(.center)
         }
+    }
+}
+
+// ENHANCED BIST ROW (Previously used OrionBistResult, now V2 OrionScoreResult for compatibility)
+struct BistCockpitRow: View { // Renamed from BistWatchlistRow
+    let symbol: String
+    let quote: Quote? // Changed from BistTicker? to Quote?
+    let orionResult: OrionScoreResult? // V2 Result
+    let onAppear: () -> Void
+    
+    var body: some View {
+        HStack {
+            // Left: Symbol
+            VStack(alignment: .leading, spacing: 4) {
+                Text(symbol.replacingOccurrences(of: ".IS", with: ""))
+                    .font(.headline).bold().foregroundColor(.white)
+                
+                Text("BIST")
+                    .font(.caption2).bold()
+                    .padding(.horizontal, 4).padding(.vertical, 2)
+                    .background(Color.red.opacity(0.3)).cornerRadius(4)
+                    .foregroundColor(.white)
+            }
+            
+            Spacer()
+            
+            // Middle: TAHTA (Signal)
+            if let result = orionResult {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("TAHTA")
+                        .font(.caption2).foregroundColor(.gray)
+                    
+                    HStack(spacing: 4) {
+                        Text(result.verdict)
+                            .font(.caption).bold()
+                            .foregroundColor(color(for: result.verdict))
+                        
+                        Circle()
+                            .fill(color(for: result.verdict))
+                            .frame(width: 6, height: 6)
+                    }
+                }
+            } else {
+                 Text("Tahta: ...")
+                    .font(.caption2).foregroundColor(.gray)
+            }
+            
+            Spacer().frame(width: 20)
+            
+            // Right: Price
+            if let q = quote {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("₺\(String(format: "%.2f", q.currentPrice))")
+                        .font(.body).bold().foregroundColor(.white)
+                    
+                    HStack(spacing: 2) {
+                        Image(systemName: q.isPositive ? "arrow.up" : "arrow.down")
+                        Text("\(String(format: "%.2f", q.percentChange))%")
+                    }
+                    .font(.caption)
+                    .foregroundColor(q.isPositive ? .green : .red)
+                }
+            } else {
+                ProgressView().scaleEffect(0.7)
+            }
+        }
+        .padding()
+        .background(Color(hex: "1A1D26"))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1))
+        .onAppear { onAppear() }
+    }
+    
+    func color(for verdict: String) -> Color {
+        if verdict.contains("Buy") || verdict.contains("Al") { return .green }
+        if verdict.contains("Sell") || verdict.contains("Sat") { return .red }
+        return .yellow
     }
 }

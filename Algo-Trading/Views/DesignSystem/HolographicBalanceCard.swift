@@ -2,17 +2,86 @@ import SwiftUI
 import CoreMotion
 
 // A card that reacts to device tilt (Gyroscope) to give a 3D hologram feel.
+// A card that reacts to device tilt (Gyroscope) to give a 3D hologram feel.
 struct HolographicBalanceCard: View {
     @ObservedObject var viewModel: TradingViewModel
+    var mode: PortfolioView.MarketMode = .global // Default to Global
     
     @State private var pitch: Double = 0.0
     @State private var roll: Double = 0.0
     private let motionManager = CMMotionManager()
     
-    var equity: Double { viewModel.getEquity() }
-    var balance: Double { viewModel.balance }
-    var realized: Double { viewModel.getRealizedPnL() }
-    var unrealized: Double { viewModel.getUnrealizedPnL() }
+    // Dynamic Properties based on Mode
+    var equity: Double {
+        switch mode {
+        case .global: return viewModel.getEquity()
+        case .bist: return calculateBistEquity()
+        }
+    }
+    
+    var balance: Double {
+        switch mode {
+        case .global: return viewModel.balance
+        case .bist: return viewModel.bistBalance
+        }
+    }
+    
+    var realized: Double {
+        switch mode {
+        case .global: return viewModel.getRealizedPnL()
+        case .bist: return calculateBistRealized()
+        }
+    }
+    
+    var unrealized: Double {
+        switch mode {
+        case .global: return viewModel.getUnrealizedPnL()
+        case .bist: return calculateBistUnrealized()
+        }
+    }
+    
+    var currencySymbol: String {
+        return mode == .global ? "$" : "₺"
+    }
+    
+    var themeColor: Color {
+        return mode == .global ? Theme.accent : Color.orange
+    }
+    
+    var themeSecondary: Color {
+        return mode == .global ? Theme.primary : Color.red
+    }
+    
+    var cardTitle: String {
+        return mode == .global ? "ARGUS PORTFOLIO" : "BIST PORTFÖY"
+    }
+    
+    // BIST Helpers
+    private func calculateBistEquity() -> Double {
+        let portfolioValue = viewModel.portfolio
+            .filter { ($0.symbol.hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) && $0.isOpen }
+            .reduce(0.0) { sum, trade in
+                let price = viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
+                return sum + (price * trade.quantity)
+            }
+        return viewModel.bistBalance + portfolioValue
+    }
+    
+    private func calculateBistRealized() -> Double {
+        // BIST realized calculation (Approximation for UI)
+        return viewModel.transactionHistory
+            .filter { $0.type == .sell && ($0.symbol.hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) }
+            .reduce(0.0) { $0 + ($1.pnl ?? 0) }
+    }
+    
+    private func calculateBistUnrealized() -> Double {
+        return viewModel.portfolio
+            .filter { ($0.symbol.hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) && $0.isOpen }
+            .reduce(0.0) { sum, trade in
+                let currentPrice = viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
+                return sum + ((currentPrice - trade.entryPrice) * trade.quantity)
+            }
+    }
     
     var body: some View {
         ZStack {
@@ -21,7 +90,7 @@ struct HolographicBalanceCard: View {
                 ZStack {
                     // Moving Gradient (based on tilt)
                     RadialGradient(
-                        colors: [Theme.accent.opacity(0.2), .clear],
+                        colors: [themeColor.opacity(0.3), .clear],
                         center: UnitPoint(x: 0.5 + roll * 0.2, y: 0.5 + pitch * 0.2),
                         startRadius: 20,
                         endRadius: 200
@@ -41,7 +110,7 @@ struct HolographicBalanceCard: View {
                         )
                 }
             }
-            .shadow(color: Theme.accent.opacity(0.2), radius: 15, x: 0, y: 5)
+            .shadow(color: themeColor.opacity(0.3), radius: 15, x: 0, y: 5)
             .rotation3DEffect(
                 .degrees(pitch * 10),
                 axis: (x: 1, y: 0, z: 0)
@@ -55,13 +124,13 @@ struct HolographicBalanceCard: View {
             VStack(alignment: .leading, spacing: 20) {
                 // Header: Identity
                 HStack {
-                    Image(systemName: "eye.circle.fill")
-                        .foregroundColor(Theme.primary)
-                    Text("ARGUS PORTFOLIO")
+                    Image(systemName: mode == .global ? "eye.circle.fill" : "turkishlirasign.circle.fill")
+                        .foregroundColor(themeSecondary)
+                    Text(cardTitle)
                         .font(.caption)
                         .bold()
                         .tracking(2)
-                        .foregroundColor(Theme.primary)
+                        .foregroundColor(themeSecondary)
                     
                     Spacer()
                     
@@ -79,15 +148,15 @@ struct HolographicBalanceCard: View {
                         .foregroundColor(Theme.textSecondary)
                         .tracking(1)
                     
-                    Text("$\(String(format: "%.0f", equity))")
+                    Text("\(currencySymbol)\(String(format: "%.0f", equity))")
                         .font(.system(size: 36, weight: .black, design: .rounded))
                         .foregroundColor(.white)
-                        .shadow(color: Theme.accent.opacity(0.5), radius: 10)
+                        .shadow(color: themeColor.opacity(0.5), radius: 10)
                 }
                 
                 // Stat Row
                 HStack(spacing: 24) {
-                    statItem(label: "NAKİT", value: balance, color: Theme.accent)
+                    statItem(label: "NAKİT", value: balance, color: themeColor)
                     statItem(label: "K/Z (R)", value: realized, color: realized >= 0 ? Theme.positive : Theme.negative)
                     statItem(label: "ANLIK", value: unrealized, color: unrealized >= 0 ? Theme.positive : Theme.negative)
                 }
@@ -105,7 +174,7 @@ struct HolographicBalanceCard: View {
             Text(label)
                 .font(.system(size: 9, weight: .bold))
                 .foregroundColor(Theme.textSecondary)
-            Text("$\(String(format: "%.0f", value))")
+            Text("\(currencySymbol)\(String(format: "%.0f", value))")
                 .font(.system(size: 14, weight: .bold, design: .monospaced))
                 .foregroundColor(color)
         }

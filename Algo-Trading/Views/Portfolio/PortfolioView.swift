@@ -1,10 +1,4 @@
-// MARK: - Helper for Scroll Offset
-struct ViewOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value += nextValue()
-    }
-}
+import SwiftUI
 
 struct PortfolioView: View {
     @ObservedObject var viewModel: TradingViewModel
@@ -12,13 +6,16 @@ struct PortfolioView: View {
     @State private var showNewTradeSheet = false
     @State private var showHistory = false
     @State private var selectedTrade: Trade? // For Detail View
+    @State private var selectedMarket: MarketMode = .global // Market Switcher State
     
     // Model Info State
     @State private var showModelInfo = false
     @State private var selectedEntityForInfo: ArgusSystemEntity = .corse // Default
     
-    // Scroll Tracking
-    @State private var scrollOffset: CGFloat = 0
+    enum MarketMode {
+        case global
+        case bist
+    }
     
     enum AutoPilotEngineFilter: String, CaseIterable {
         case all = "Genel Bakış"
@@ -27,161 +24,213 @@ struct PortfolioView: View {
         case scouting = "Gözcü (Canlı)"
     }
     
-    // Constants for collapsing logic
-    private let maxHeaderHeight: CGFloat = 320 // Balance + Reports + Padding
-    private let minHeaderHeight: CGFloat = 110 // Selector + Compact Balance
-    
     var body: some View {
         NavigationView {
-            ZStack(alignment: .top) {
-                // Background
-                // Theme.background.ignoresSafeArea() -> Using ArgusGlobalBackground via parent or ZStack below
+            ZStack {
+                // Background removed to reveal ArgusGlobalBackground
+                // Theme.background.ignoresSafeArea()
                 Color.clear
                 
-                // 1. SCROLLABLE CONTENT
-                ScrollView(showsIndicators: false) {
-                    // Spacer to push content down by the current visible header height
-                    // We use a GeometryReader proxy or just a fixed spacer that matches 'maxHeaderHeight' initially
-                    // but visual effect works better if we pad the content top.
-                    
-                    VStack(spacing: 16) {
-                        Spacer().frame(height: maxHeaderHeight)
-                        
-                        // New Scroll Reader Component
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: ViewOffsetKey.self,
-                                value: -proxy.frame(in: .named("scroll")).origin.y
-                            )
-                        }
-                        .frame(height: 0)
-                        
-                        // PORTFOLIO CONTENT
-                        if selectedEngine == .all {
-                            // ... (Same Content Logic)
-                            if !viewModel.portfolio.isEmpty {
-                                ForEach(viewModel.portfolio.filter { $0.isOpen }) { trade in
-                                    PortfolioCard(
-                                        trade: trade,
-                                        selectedTrade: $selectedTrade,
-                                        viewModel: viewModel,
-                                        onInfoTap: { engine in mapAndShowInfo(engine) }
-                                    )
-                                }
-                            } else {
-                                EmptyPortfolioState()
-                            }
-                        } else if selectedEngine == .scouting {
-                            // Scouting Logic
-                            if !viewModel.scoutLogs.isEmpty {
-                                VStack(alignment: .leading, spacing: 16) {
-                                    Text("Son Taramalar")
-                                        .font(.headline)
-                                        .foregroundColor(Theme.textPrimary)
-                                        .padding(.horizontal)
-                                    
-                                    ForEach(viewModel.scoutLogs.sorted(by: { $0.timestamp > $1.timestamp }), id: \.id) { log in
-                                        ScoutHistoryRow(log: log)
-                                    }
-                                }
-                            } else {
-                                EmptyScoutState()
-                            }
-                        } else {
-                            // Filtered View
-                            let targetEngine: AutoPilotEngine? = (selectedEngine == .corse) ? .corse : .pulse
-                            let filtered = viewModel.portfolio.filter { $0.engine == targetEngine && $0.isOpen }
-                            
-                            if !filtered.isEmpty {
-                                ForEach(filtered) { trade in
-                                    PortfolioCard(
-                                        trade: trade,
-                                        selectedTrade: $selectedTrade,
-                                        viewModel: viewModel,
-                                        onInfoTap: { engine in mapAndShowInfo(engine) }
-                                    )
-                                }
-                            } else {
-                                Text("\(selectedEngine.rawValue) motorunda açık işlem yok.")
-                                    .foregroundColor(Theme.textSecondary)
-                                    .padding(.top, 40)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 100)
-                }
-                .coordinateSpace(name: "scroll")
-                .onPreferenceChange(ViewOffsetKey.self) { value in
-                    // Clamp offset tracking
-                    self.scrollOffset = value
-                }
-                
-                // 2. DYNAMIC HEADER (Overlay)
-                VStack(spacing: 0) {
-                    // Top Bar (History)
-                    HStack {
-                        Spacer()
-                        Button(action: { showHistory = true }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "clock.arrow.circlepath")
-                                Text("Geçmiş")
-                            }
-                            .font(.caption)
-                            .bold()
-                            .foregroundColor(Theme.textSecondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Theme.cardBackground.opacity(0.8))
-                            .clipShape(Capsule())
-                        }
-                        .padding(.trailing)
-                    }
-                    .padding(.vertical, 8)
-                    .background(Theme.background.opacity(getOpacityForStandardHeader())) // Fade in bg when scrolling
-                    
-                    // Collapsible Content
+                if selectedMarket == .global {
                     VStack(spacing: 0) {
-                        // Balance Card
-                        // Scale down and fade out as we scroll
-                        let balanceScale = max(0.8, 1.0 - (scrollOffset / 300.0))
-                        let balanceOpacity = max(0.0, 1.0 - (scrollOffset / 150.0))
-                        
-                        if balanceOpacity > 0.1 {
-                            PortfolioHeader(viewModel: viewModel)
-                                .scaleEffect(balanceScale)
-                                .opacity(balanceOpacity)
-                                .frame(height: 180 * balanceOpacity) // Collapse height
-                                .clipped()
+                        // Top Bar with History Button & Market Switcher
+                        HStack {
+                            // Market Switcher
+                            Picker("Piyasa", selection: $selectedMarket) {
+                                Text("Global 🌎").tag(MarketMode.global)
+                                Text("BIST 🇹🇷").tag(MarketMode.bist)
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .frame(maxWidth: 200)
+                            
+                            Spacer()
+                            Button(action: { showHistory = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                    Text("Geçmiş")
+                                }
+                                .font(.caption)
+                                .bold()
+                                .foregroundColor(Theme.textSecondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Theme.cardBackground)
+                                .cornerRadius(12)
+                            }
+                            .padding(.trailing)
                         }
+                        .padding(.top, 8)
+                        .padding(.leading)
                         
-                        // Reports
-                        let reportsOpacity = max(0.0, 1.0 - (scrollOffset / 100.0))
-                        if reportsOpacity > 0.1 {
-                            PortfolioReportsView(viewModel: viewModel)
-                                .opacity(reportsOpacity)
-                                .frame(height: 60 * reportsOpacity)
-                                .clipped()
-                                .padding(.bottom, 8)
-                        }
+                        // 1. Header Area (Portfolio Summary) - COMPACT
+                        PortfolioHeader(viewModel: viewModel)
+                            .padding(.top, 0)
+                            .padding(.bottom, 4)
                         
-                        // Engine Selector (Sticky-ish)
-                        // Always visible but maybe compact background
+                        // 1.5 Reports Area - COMPACT
+                        PortfolioReportsView(viewModel: viewModel, mode: .global)
+                            .padding(.bottom, 8)
+                        
+                        // 2. Engine Selector - COMPACT
                         EngineSelector(selected: $selectedEngine)
                             .padding(.horizontal)
                             .padding(.bottom, 8)
-                            .background(
-                                Theme.background
-                                    .opacity(scrollOffset > 50 ? 0.95 : 0.0)
-                                    .blur(radius: 10)
-                            )
+                        
+                        // 3. Trade List
+                        ScrollView {
+                            LazyVStack(spacing: 16) {
+                                if selectedEngine == .all {
+                                    // Combined View
+                                    if !viewModel.portfolio.isEmpty {
+                                        // Active Section
+                                        ForEach(viewModel.portfolio.filter { $0.isOpen }) { trade in
+                                            PortfolioCard(
+                                                trade: trade,
+                                                selectedTrade: $selectedTrade,
+                                                viewModel: viewModel,
+                                                onInfoTap: { engine in
+                                                    mapAndShowInfo(engine)
+                                                }
+                                            )
+                                        }
+                                    } else {
+                                        EmptyPortfolioState()
+                                    }
+                                } else if selectedEngine == .scouting {
+                                    // Scouting (Live Signals & Logs)
+                                    
+                                    if !viewModel.scoutLogs.isEmpty {
+                                        VStack(alignment: .leading, spacing: 16) {
+                                            Text("Son Taramalar")
+                                                .font(.headline)
+                                                .foregroundColor(Theme.textPrimary)
+                                                .padding(.horizontal)
+                                                .padding(.top)
+                                            
+                                            ForEach(viewModel.scoutLogs.sorted(by: { $0.timestamp > $1.timestamp }), id: \.id) { log in
+                                                ScoutHistoryRow(log: log)
+                                                    .padding(.horizontal)
+                                            }
+                                        }
+                                    } else {
+                                        VStack(spacing: 16) {
+                                            Image(systemName: "binoculars.fill")
+                                                .font(.system(size: 48))
+                                                .foregroundColor(Theme.textSecondary.opacity(0.3))
+                                            Text("Gözcü Taraması Bekleniyor...")
+                                                .font(.headline)
+                                                .foregroundColor(Theme.textSecondary)
+                                            Text("Henüz bir analiz günlüğü oluşmadı.")
+                                                .font(.caption)
+                                                .foregroundColor(Theme.textSecondary)
+                                        }
+                                        .padding(.top, 40)
+                                    }
+                                    
+                                } else {
+                                    // Filtered View
+                                    let targetEngine: AutoPilotEngine? = (selectedEngine == .corse) ? .corse : .pulse
+                                    let filtered = viewModel.portfolio.filter { $0.engine == targetEngine && $0.isOpen }
+                                    
+                                    if !filtered.isEmpty {
+                                        ForEach(filtered) { trade in
+                                            PortfolioCard(
+                                                trade: trade,
+                                                selectedTrade: $selectedTrade,
+                                                viewModel: viewModel,
+                                                onInfoTap: { engine in
+                                                    mapAndShowInfo(engine)
+                                                }
+                                            )
+                                        }
+                                    } else {
+                                        Text("\(selectedEngine.rawValue) motorunda açık işlem yok.")
+                                            .foregroundColor(Theme.textSecondary)
+                                            .padding(.top, 40)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 100)
+                        }
+                    }
+                } else {
+                    // MARK: - BIST MODE (Same as Global, Red Theme)
+                    VStack(spacing: 0) {
+                        // Top Bar with History Button & Market Switcher (Same as Global)
+                        HStack {
+                            Picker("Piyasa", selection: $selectedMarket) {
+                                Text("Global 🌎").tag(MarketMode.global)
+                                Text("BIST 🇹🇷").tag(MarketMode.bist)
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .frame(maxWidth: 200)
+                            
+                            Spacer()
+                            Button(action: { showHistory = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                    Text("Geçmiş")
+                                }
+                                .font(.caption)
+                                .bold()
+                                .foregroundColor(Theme.textSecondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.red.opacity(0.15)) // Kırmızı ton
+                                .cornerRadius(12)
+                            }
+                            .padding(.trailing)
+                        }
+                        .padding(.top, 8)
+                        .padding(.leading)
+                        
+                        // BIST Header - Holographic
+                        HolographicBalanceCard(viewModel: viewModel, mode: .bist)
+                            .padding(.horizontal)
+                            .padding(.top, 10)
+                            .padding(.bottom, 4)
+                        
+                        // BIST Reports Area
+                        PortfolioReportsView(viewModel: viewModel, mode: .bist)
+                            .padding(.bottom, 8)
+                        
+                        // Trade List
+                        ScrollView {
+                            let bistPortfolio = viewModel.portfolio.filter { $0.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol) }
+                            
+                            LazyVStack(spacing: 16) {
+                                if !bistPortfolio.isEmpty {
+                                    ForEach(bistPortfolio) { trade in
+                                        PortfolioCard(
+                                            trade: trade,
+                                            selectedTrade: $selectedTrade,
+                                            viewModel: viewModel,
+                                            onInfoTap: { engine in
+                                                mapAndShowInfo(engine)
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    VStack(spacing: 16) {
+                                        Image(systemName: "case.fill")
+                                            .font(.system(size: 48))
+                                            .foregroundColor(Color.red.opacity(0.3))
+                                        Text("BIST Portföyün Boş")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                        Text("Piyasa ekranından BIST hissesi al.")
+                                            .font(.caption)
+                                            .foregroundColor(Theme.textSecondary)
+                                    }
+                                    .padding(.top, 40)
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 100)
+                        }
                     }
                 }
-                .background(
-                    Theme.background
-                        .opacity(scrollOffset > 100 ? 0.8 : 0.0)
-                        .edgesIgnoringSafeArea(.top)
-                )
                 
                 // FAB
                 VStack {
@@ -197,12 +246,11 @@ struct PortfolioView: View {
                                 .background(Theme.tint)
                                 .clipShape(Circle())
                                 .shadow(color: Theme.tint.opacity(0.4), radius: 10, x: 0, y: 5)
-                        }
+                            }
                         .padding()
                     }
                 }
-                
-                // Model Info Overlay
+                // Model Info Card Overlay
                 if showModelInfo {
                     SystemInfoCard(entity: selectedEntityForInfo, isPresented: $showModelInfo)
                         .zIndex(100)
@@ -211,27 +259,22 @@ struct PortfolioView: View {
             .navigationBarHidden(true)
             .sheet(isPresented: $showNewTradeSheet) {
                 NewTradeSheet(viewModel: viewModel)
-                    .presentationDetents([.fraction(0.6)])
+                    .presentationDetents([.fraction(0.6)]) // Manage height better
             }
             .sheet(item: $selectedTrade) { trade in
                 TradeDetailSheet(trade: trade, viewModel: viewModel)
             }
             .sheet(isPresented: $showHistory) {
-                TransactionHistorySheet(viewModel: viewModel)
+                TransactionHistorySheet(viewModel: viewModel, marketMode: selectedMarket)
             }
             .onAppear {
+                // Ensure Aether is fresh when viewing Portfolio
                 Task {
                     _ = await MacroRegimeService.shared.computeMacroEnvironment()
                 }
             }
         }
     }
-    
-    private func getOpacityForStandardHeader() -> Double {
-        let opacity = min(1.0, scrollOffset / 150.0)
-        return opacity
-    }
-    
     private func mapAndShowInfo(_ engine: AutoPilotEngine) {
         switch engine {
         case .corse: selectedEntityForInfo = .corse
@@ -243,47 +286,42 @@ struct PortfolioView: View {
         withAnimation { showModelInfo = true }
     }
 }
-// Helper View for Empty Scout
-struct EmptyScoutState: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "binoculars.fill")
-                .font(.system(size: 48))
-                .foregroundColor(Theme.textSecondary.opacity(0.3))
-            Text("Gözcü Taraması Bekleniyor...")
-                .font(.headline)
-                .foregroundColor(Theme.textSecondary)
-            Text("Henüz bir analiz günlüğü oluşmadı.")
-                .font(.caption)
-                .foregroundColor(Theme.textSecondary)
-        }
-        .padding(.top, 40)
-    }
-}
 
-// REST OF FILE (TransactionHistorySheet, etc.) remains unchanged
+// MARK: - History Sheet
 struct TransactionHistorySheet: View {
     @ObservedObject var viewModel: TradingViewModel
+    var marketMode: PortfolioView.MarketMode // Global or BIST
     @Environment(\.presentationMode) var presentationMode
     @State private var selectedTxn: Transaction? // State for tapping
+    
+    // Filtered Transactions
+    var filteredTransactions: [Transaction] {
+        viewModel.transactionHistory.filter { txn in
+            if marketMode == .bist {
+                return txn.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(txn.symbol)
+            } else {
+                return !(txn.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(txn.symbol))
+            }
+        }.sorted(by: { $0.date > $1.date })
+    }
     
     var body: some View {
         NavigationView {
             ZStack {
                 Theme.background.ignoresSafeArea()
                 
-                if viewModel.transactionHistory.isEmpty {
+                if filteredTransactions.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "terminal")
                             .font(.system(size: 48))
                             .foregroundColor(Theme.textSecondary.opacity(0.3))
-                        Text("İşlem Geçmişi Boş")
+                        Text(marketMode == .bist ? "BIST Geçmişi Boş" : "Global Geçmiş Boş")
                             .font(.headline)
                             .foregroundColor(Theme.textSecondary)
                     }
                 } else {
                     List {
-                        ForEach(viewModel.transactionHistory.sorted(by: { $0.date > $1.date })) { txn in
+                        ForEach(filteredTransactions) { txn in
                             Button(action: {
                                 selectedTxn = txn
                             }) {
@@ -428,7 +466,8 @@ struct TransactionDetailView: View {
                             .foregroundColor(.white)
                         
                         VStack(spacing: 0) {
-                            DetailRow(text: "Fiyat: $\(String(format: "%.2f", transaction.price))")
+                            let currencySymbol = transaction.symbol.hasSuffix(".IS") ? "₺" : "$"
+                            DetailRow(text: "Fiyat: \(currencySymbol)\(String(format: "%.2f", transaction.price))")
                             Divider().background(Theme.secondaryBackground)
                             
                             // Highlighted Amount
@@ -437,7 +476,8 @@ struct TransactionDetailView: View {
                                     .font(.subheadline)
                                     .foregroundColor(Theme.textSecondary)
                                 Spacer()
-                                Text("$\(String(format: "%.2f", transaction.amount))")
+                                let currencySymbol = transaction.symbol.hasSuffix(".IS") ? "₺" : "$"
+                                Text("\(currencySymbol)\(String(format: "%.2f", transaction.amount))")
                                     .font(.system(size: 20, weight: .heavy, design: .monospaced))
                                     .foregroundColor(Theme.tint)
                             }
@@ -447,7 +487,8 @@ struct TransactionDetailView: View {
                             DetailRow(text: "Kaynak: \(transaction.source ?? "N/A")")
                             if let fee = transaction.fee {
                                 Divider().background(Theme.secondaryBackground)
-                                DetailRow(text: "Komisyon: $\(String(format: "%.2f", fee))")
+                                let currencySymbol = transaction.symbol.hasSuffix(".IS") ? "₺" : "$"
+                                DetailRow(text: "Komisyon: \(currencySymbol)\(String(format: "%.2f", fee))")
                             }
                         }
                         .background(Theme.secondaryBackground.opacity(0.5))
@@ -525,7 +566,8 @@ struct TransactionConsoleCard: View {
                         }
                     }
                     
-                    Text("Vol: $\(String(format: "%.2f", txn.amount))")
+                    let currencySymbol = txn.symbol.hasSuffix(".IS") ? "₺" : "$"
+                    Text("Vol: \(currencySymbol)\(String(format: "%.2f", txn.amount))")
                         .font(.system(size: 13, design: .monospaced))
                         .foregroundColor(Theme.textSecondary)
                 }
@@ -534,14 +576,16 @@ struct TransactionConsoleCard: View {
                 
                 // Right: Price & PnL
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("@ $\(String(format: "%.2f", txn.price))")
+                    let currencySymbol = txn.symbol.hasSuffix(".IS") ? "₺" : "$"
+                    Text("@ \(currencySymbol)\(String(format: "%.2f", txn.price))")
                         .font(.system(size: 13, weight: .bold, design: .monospaced))
                         .foregroundColor(Theme.textPrimary)
                     
                     if txn.type == .sell {
                         if let pnl = txn.pnl, let pct = txn.pnlPercent {
                             HStack(spacing: 4) {
-                                Text("\(pnl >= 0 ? "+" : "")$\(String(format: "%.2f", pnl))")
+                                let currencySymbol = txn.symbol.hasSuffix(".IS") ? "₺" : "$"
+                                Text("\(pnl >= 0 ? "+" : "")\(currencySymbol)\(String(format: "%.2f", pnl))")
                                 
                                 Text("(\(String(format: "%.1f", pct))%)")
                                     .font(.system(size: 11))
@@ -715,6 +759,89 @@ struct PortfolioHeader: View {
     }
 }
 
+// BIST Portfolio Header - Red Theme
+struct BistPortfolioHeader: View {
+    @ObservedObject var viewModel: TradingViewModel
+    
+    // BIST filtered data
+    private var bistPortfolio: [Trade] {
+        viewModel.portfolio.filter { $0.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol) }
+    }
+    
+    private var totalValue: Double {
+        bistPortfolio.filter { $0.isOpen }.reduce(0.0) { sum, trade in
+            let price = viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
+            return sum + (price * trade.quantity)
+        }
+    }
+    
+    private var totalPL: Double {
+        bistPortfolio.filter { $0.isOpen }.reduce(0.0) { sum, trade in
+            let price = viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
+            return sum + ((price - trade.entryPrice) * trade.quantity)
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            // Balance Card
+            VStack(spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("BIST Portföy Değeri")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                        Text("₺\(totalValue, specifier: "%.0f")")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+                    Spacer()
+                    // P/L Badge
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("Kar/Zarar")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                        Text("\(totalPL >= 0 ? "+" : "")₺\(totalPL, specifier: "%.2f")")
+                            .font(.headline)
+                            .foregroundColor(totalPL >= 0 ? .green : .red)
+                    }
+                }
+                
+                // Bakiye ve Pozisyon Sayısı
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Kullanılabilir Bakiye")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.5))
+                        Text("₺\(viewModel.bistBalance, specifier: "%.2f")")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                    Spacer()
+                    Text("\(bistPortfolio.filter { $0.isOpen }.count) açık pozisyon")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                    Text("🇹🇷")
+                        .font(.caption)
+                }
+            }
+            .padding()
+            .background(
+                LinearGradient(
+                    colors: [Color.red.opacity(0.8), Color.red.opacity(0.4)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(16)
+        }
+        .padding(.horizontal)
+        .padding(.top, 10)
+    }
+}
+
+
 struct PortfolioCard: View {
     let trade: Trade
     @Binding var selectedTrade: Trade?
@@ -877,7 +1004,8 @@ struct NewTradeSheet: View {
                             HStack {
                                 Text("Birim Fiyat")
                                 Spacer()
-                                Text("$\(String(format: "%.2f", quote.currentPrice))")
+                                let currencySymbol = symbol.uppercased().hasSuffix(".IS") ? "₺" : "$"
+                                Text("\(currencySymbol)\(String(format: "%.2f", quote.currentPrice))")
                             }
                             .foregroundColor(Theme.textSecondary)
                             
@@ -888,7 +1016,8 @@ struct NewTradeSheet: View {
                                     .bold()
                                     .foregroundColor(Theme.textPrimary)
                                 Spacer()
-                                Text("$\(String(format: "%.2f", quote.currentPrice * quantity))")
+                                let currencySymbol = symbol.uppercased().hasSuffix(".IS") ? "₺" : "$"
+                                Text("\(currencySymbol)\(String(format: "%.2f", quote.currentPrice * quantity))")
                                     .font(.title3)
                                     .bold()
                                     .foregroundColor(Theme.tint)

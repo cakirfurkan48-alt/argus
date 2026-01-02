@@ -110,14 +110,29 @@ struct ArgusSanctumView: View {
                     CompanyLogoView(symbol: symbol, size: 36)
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(symbol)
-                            .font(.title3)
-                            .fontWeight(.black)
-                            .foregroundColor(.white)
+                        HStack(spacing: 6) {
+                            Text(symbol)
+                                .font(.title3)
+                                .fontWeight(.black)
+                                .foregroundColor(.white)
+                            
+                            // BIST Badge
+                            if symbol.uppercased().hasSuffix(".IS") {
+                                Text("🇹🇷 BIST")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.red.opacity(0.8))
+                                    .cornerRadius(4)
+                            }
+                        }
                         
                         if let quote = viewModel.quotes[symbol] {
+                            let isBist = symbol.uppercased().hasSuffix(".IS")
                             HStack(spacing: 6) {
-                                Text(String(format: "$%.2f", quote.currentPrice))
+                                Text(String(format: isBist ? "₺%.0f" : "$%.2f", quote.currentPrice))
                                     .font(.headline)
                                     .foregroundColor(.white)
                                 
@@ -300,7 +315,23 @@ struct OrbView: View {
             }
             .shadow(color: module.color, radius: 8)
             
-            Text(module.rawValue)
+            // LOCALIZED ORB LABELS
+            let label: String = {
+                if symbol.uppercased().hasSuffix(".IS") {
+                    switch module {
+                    case .aether: return "SİRKİYE"
+                    case .orion: return "TAHTA"
+                    case .atlas: return "KASA"
+                    case .hermes: return "KULİS"
+                    case .chiron: return "KISMET"
+                    default: return module.rawValue
+                    }
+                } else {
+                    return module.rawValue
+                }
+            }()
+            
+            Text(label)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(module.color)
                 .shadow(color: module.color, radius: 3)
@@ -432,7 +463,24 @@ struct HoloPanelView: View {
                 HStack {
                     Image(systemName: module.icon)
                         .foregroundColor(module.color)
-                    Text(module.rawValue)
+                    
+                    // LOCALIZED NAMES FOR BIST (Eski Borsacı Jargonu)
+                    let title: String = {
+                        if symbol.uppercased().hasSuffix(".IS") {
+                            switch module {
+                            case .aether: return "SİRKİYE"
+                            case .orion: return "TAHTA"
+                            case .atlas: return "KASA"
+                            case .hermes: return "KULİS"
+                            case .chiron: return "KISMET"
+                            default: return module.rawValue
+                            }
+                        } else {
+                            return module.rawValue
+                        }
+                    }()
+                    
+                    Text(title)
                         .font(.headline)
                         .bold()
                         .tracking(2)
@@ -728,54 +776,60 @@ struct HoloPanelView: View {
             }
             
         case .aether:
-            VStack(alignment: .leading, spacing: 16) {
-                // Council Decision for Aether
-                if let grandDecision = viewModel.grandDecisions[symbol] {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "gavel.fill")
-                                .foregroundColor(.purple)
-                            Text("Konsey Kararı")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(.white)
-                            Spacer()
-                            Text(grandDecision.aetherDecision.stance.rawValue)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(grandDecision.aetherDecision.stance == .riskOn ? Color.green.opacity(0.3) : (grandDecision.aetherDecision.stance == .riskOff ? Color.red.opacity(0.3) : Color.gray.opacity(0.3)))
-                                .cornerRadius(8)
-                                .foregroundColor(.white)
-                        }
-                        
-                        HStack {
-                            Text("Rejim: \(grandDecision.aetherDecision.marketMode.rawValue)")
-                            Spacer()
-                            Text("Net Destek: \(Int(grandDecision.aetherDecision.netSupport * 100))%")
-                        }
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                    }
-                    .padding()
-                    .background(Color.purple.opacity(0.1))
-                    .cornerRadius(12)
-                }
-                
-                // NEW: Aether v5 Dashboard Card (Compact)
-                // Tapping on module orb opens sheet via parent ArgusSanctumView
-                if let macro = viewModel.macroRating {
-                    AetherDashboardCard(rating: macro, isCompact: true)
-                } else {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .tint(.purple)
-                        Text("Makro veriler yükleniyor...")
-                            .font(.caption)
+            if symbol.uppercased().hasSuffix(".IS") {
+                // SİRKİYE (BIST)
+                SirkiyeDashboardView(viewModel: viewModel)
+                    .padding(.vertical, 8)
+            } else {
+                // AETHER (Global)
+                VStack(alignment: .leading, spacing: 16) {
+                    // Council Decision for Aether
+                    if let grandDecision = viewModel.grandDecisions[symbol] {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "gavel.fill")
+                                    .foregroundColor(.purple)
+                                Text("Konsey Kararı")
+                                    .font(.caption)
+                                    .bold()
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text(grandDecision.aetherDecision.stance.rawValue)
+                                    .font(.caption)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(grandDecision.aetherDecision.stance == .riskOn ? Color.green.opacity(0.3) : (grandDecision.aetherDecision.stance == .riskOff ? Color.red.opacity(0.3) : Color.gray.opacity(0.3)))
+                                    .cornerRadius(8)
+                                    .foregroundColor(.white)
+                            }
+                            
+                            HStack {
+                                Text("Rejim: \(grandDecision.aetherDecision.marketMode.rawValue)")
+                                Spacer()
+                                Text("Net Destek: \(Int(grandDecision.aetherDecision.netSupport * 100))%")
+                            }
+                            .font(.caption2)
                             .foregroundColor(.gray)
+                        }
+                        .padding()
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(12)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                    
+                    // NEW: Aether v5 Dashboard Card (Compact)
+                    if let macro = viewModel.macroRating {
+                        AetherDashboardCard(rating: macro, isCompact: true)
+                    } else {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .tint(.purple)
+                            Text("Makro veriler yükleniyor...")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                    }
                 }
             }
             

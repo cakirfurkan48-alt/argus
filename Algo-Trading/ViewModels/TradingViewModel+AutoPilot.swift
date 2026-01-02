@@ -35,8 +35,8 @@ extension TradingViewModel {
     
     func runAutoPilot() async {
         // Capture State on Main Thread to avoid racing
-        let (symbols, currentPortfolio, currentBalance, currentEquity, enabled) = await MainActor.run {
-             return (self.watchlist, self.portfolio, self.balance, self.getEquity(), self.isAutoPilotEnabled)
+        let (symbols, currentPortfolio, currentBalance, currentBistBalance, currentEquity, enabled) = await MainActor.run {
+             return (self.watchlist, self.portfolio, self.balance, self.bistBalance, self.getEquity(), self.isAutoPilotEnabled)
         }
         
         guard enabled else { return }
@@ -93,13 +93,30 @@ extension TradingViewModel {
                         // TODO: Properly integrate HermesCacheStore.shared when types are fixed
                         let newsData: HermesNewsSnapshot? = nil
                         
+                        // Prepare BIST Input (Turquoise - Sirkiye)
+                        var sirkiyeInput: SirkiyeEngine.SirkiyeInput? = nil
+                        if signal.symbol.uppercased().hasSuffix(".IS") {
+                            let usdQuote = await MainActor.run { self.quotes["USD/TRY"] }
+                            if let q = usdQuote {
+                                sirkiyeInput = SirkiyeEngine.SirkiyeInput(
+                                    usdTry: q.currentPrice,
+                                    usdTryPrevious: q.previousClose ?? q.currentPrice,
+                                    dxy: 104.0, // Fallback/Global
+                                    brentOil: 80.0,
+                                    globalVix: macro.vix,
+                                    newsSnapshot: nil // AutoPilot uses neutral politics for now
+                                )
+                            }
+                        }
+
                         let decision = await ArgusGrandCouncil.shared.convene(
                             symbol: signal.symbol,
                             candles: candles,
                             financials: financials,
                             macro: macro,
                             news: newsData,
-                            engine: .pulse
+                            engine: .pulse,
+                            sirkiyeInput: sirkiyeInput
                         )
                         
                         await MainActor.run {
@@ -122,14 +139,27 @@ extension TradingViewModel {
                                 continue
                             }
                             
-                            // 2. Dynamic Sizing (10% of Balance)
-                            let allocation = self.balance * 0.10
-                            guard allocation >= 50.0 else { continue } // Min trade $50
+                            // 2. Dynamic Sizing based on Market
+                            let isBist = signal.symbol.uppercased().hasSuffix(".IS")
+                            let allocation: Double
+                            let minTradeAmount: Double
+                            
+                            if isBist {
+                                // BIST Logic: Use TL Balance (Use 5% of BIST balance for diversification within 1M budget)
+                                allocation = currentBistBalance * 0.05
+                                minTradeAmount = 1000.0 // Min 1000 TL
+                            } else {
+                                // Global Logic: Use USD Balance
+                                allocation = currentBalance * 0.10
+                                minTradeAmount = 50.0 // Min 50 USD
+                            }
+                            
+                            guard allocation >= minTradeAmount else { continue }
                             let proposedQuantity = allocation / currentPrice
                             
                             // Get Fresh Scores for Governor
                             // Fix: Cache full Orion result for Argus Voice
-                            let orionResult = OrionAnalysisService.shared.calculateOrionScore(
+                            let orionResult = await OrionAnalysisService.shared.calculateOrionScoreAsync(
                                 symbol: signal.symbol,
                                 candles: self.candles[signal.symbol] ?? [],
                                 spyCandles: self.candles["SPY"]
@@ -242,6 +272,8 @@ extension TradingViewModel {
                                         timestamp: Date()
                                     ),
                                     hermesDecision: nil,
+                                    orionDetails: nil,
+                                    financialDetails: nil,
                                     timestamp: Date()
                                 )
                                 self.grandDecisions[signal.symbol] = grandDecision
@@ -398,9 +430,9 @@ extension TradingViewModel {
         
         // 4. Act (Explicitly Approved if we got here)
         if action == .buy {
-             buy(symbol: symbol, quantity: quantity, source: .autoPilot, engine: nil, decisionTrace: traceSnapshot, marketSnapshot: marketSnapshot)
+             buy(symbol: symbol, quantity: quantity, source: .autoPilot, engine: nil, rationale: signal.reason, decisionTrace: traceSnapshot, marketSnapshot: marketSnapshot)
         } else {
-             sell(symbol: symbol, quantity: quantity, source: .autoPilot, engine: nil, decisionTrace: traceSnapshot, marketSnapshot: marketSnapshot)
+             sell(symbol: symbol, quantity: quantity, source: .autoPilot, engine: nil, decisionTrace: traceSnapshot, marketSnapshot: marketSnapshot, reason: signal.reason)
         }
             
         // Update State
@@ -532,7 +564,7 @@ extension TradingViewModel {
                         // 1. Sell Worst
                         // ...
                         if let tradeToSell = portfolio.first(where: { $0.symbol == sellSymbol && $0.isOpen }) {
-                             self.sell(symbol: sellSymbol, quantity: tradeToSell.quantity, source: .autoPilot)
+                             self.sell(symbol: sellSymbol, quantity: tradeToSell.quantity, source: .autoPilot, reason: "SWAP: \(reason)")
                              // 2. Buy Best
                              await triggerAutoPilotEvaluation(symbol: buySymbol, quote: quote, score: score, isSwap: true)
                         }
@@ -551,7 +583,7 @@ extension TradingViewModel {
          let candidatesCandles = candles[symbol]
          let aetherRating = MacroRegimeService.shared.getCachedRating()
          let atlasScore = FundamentalScoreStore.shared.getScore(for: symbol)?.totalScore
-         let techScore = OrionAnalysisService.shared.calculateOrionScore(symbol: symbol, candles: candidatesCandles ?? [], spyCandles: nil)?.score ?? 0
+         let techScore = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: candidatesCandles ?? [], spyCandles: nil)?.score ?? 0
          let cronosScore = CronosTimeEngine.shared.calculateTimingScore(candles: candidatesCandles ?? [])
          
          let evaluation = await ArgusAutoPilotEngine.shared.evaluate(
@@ -625,7 +657,7 @@ extension TradingViewModel {
                 let atlasScore = FundamentalScoreStore.shared.getScore(for: symbol)?.totalScore
                 
                 // Tech: Calculate Orion Score
-                guard let orionResult = OrionAnalysisService.shared.calculateOrionScore(symbol: symbol, candles: candles, spyCandles: nil) else { continue }
+                guard let orionResult = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: candles, spyCandles: nil) else { continue }
                 
                 // Cronos: Calculate Timing Score directly (requires candles)
                 let cronosScore = CronosTimeEngine.shared.calculateTimingScore(candles: candles)

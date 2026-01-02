@@ -101,30 +101,10 @@ extension TradingViewModel {
         }
         
         do {
-            // Already computed allSymbols above
-            print("🛡️ Refactored: Batch Fetching \(allSymbols.count) symbols via Heimdall...")
+            print("📡 ArgusDataService: Batch Fetching \(allSymbols.count) symbols...")
             
-            var collected: [String: Quote] = [:]
-            
-            // Fetch in Chunks to prevent "Request Storm" causing UI freeze
-            let chunks = allSymbols.chunked(into: 8) // Process 8 symbols at a time
-            
-            for chunk in chunks {
-                try await withThrowingTaskGroup(of: (String, Quote).self) { group in
-                    for symbol in chunk {
-                        group.addTask {
-                            let q = try await HeimdallOrchestrator.shared.requestQuote(symbol: symbol)
-                            return (symbol, q)
-                        }
-                    }
-                    
-                    for try await (sym, q) in group {
-                        collected[sym] = q
-                    }
-                }
-                // Small breather between chunks to let UI breathe if needed
-                // await Task.yield() 
-            }
+            // ArgusDataService kullan (Heimdall yerine)
+            let collected = try await ArgusDataService.shared.fetchQuotes(symbols: allSymbols)
             
             await MainActor.run {
                 // Merge with existing so we don't lose data if partial fail
@@ -134,7 +114,7 @@ extension TradingViewModel {
                 self.isLoading = false
             }
         } catch {
-             print("Watchlist Refresh Failed (Heimdall): \(error)")
+             print("Watchlist Refresh Failed: \(error)")
              await MainActor.run { self.isLoading = false }
         }
     }
@@ -142,7 +122,7 @@ extension TradingViewModel {
     // Helper for Single Fetch (UI View usage)
     func fetchQuote(for symbol: String) async {
         do {
-            let quote = try await HeimdallOrchestrator.shared.requestQuote(symbol: symbol)
+            let quote = try await ArgusDataService.shared.fetchQuote(symbol: symbol)
             await MainActor.run {
                 self.quotes[symbol] = quote
             }
@@ -168,7 +148,7 @@ extension TradingViewModel {
 
         let isMarketOpen = MarketSessionManager.shared.isMarketOpen()
         
-        print("🟢🟢🟢 HEIMDALL: fetchCandles() called for \(watchlist.count) symbols")
+        print("📡 ArgusDataService: fetchCandles() called for \(watchlist.count) symbols")
         
         for symbol in watchlist {
             // Smart Fetching: Candles change even less frequently if day hasn't closed, 
@@ -180,17 +160,17 @@ extension TradingViewModel {
                 // Rate Limit Protection: 0.5s delay between calls
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 
-                // Request 400 candles for proper backtest support using Heimdall
-                print("🛡️ Heimdall: Fetching candles for \(symbol)")
+                // Request 400 candles for proper backtest support
+                print("📡 Candles: \(symbol)")
                 do {
-                    let candleData = try await HeimdallOrchestrator.shared.requestCandles(symbol: symbol, timeframe: "1G", limit: 400)
-                    print("🛡️ Heimdall: Received \(candleData.count) candles for \(symbol)")
+                    let candleData = try await ArgusDataService.shared.fetchCandles(symbol: symbol, timeframe: "1D", limit: 400)
+                    print("📡 Received \(candleData.count) candles for \(symbol)")
                     await MainActor.run {
                         self.candles[symbol] = candleData
                         self.lastFetchTime["\(symbol)_candle"] = Date()
                     }
                 } catch {
-                    print("⚠️ Heimdall: Candle fetch failed for \(symbol): \(error)")
+                    print("⚠️ Candle fetch failed for \(symbol): \(error)")
                 }
         }
     }
@@ -280,13 +260,10 @@ extension TradingViewModel {
     func refreshMarketPulse() async {
         self.isLoading = true
         
-        // 1. Fetch Parallel
-        // Gainers
-        async let gainers = HeimdallOrchestrator.shared.requestScreener(type: .gainers, limit: 10)
-        // Losers
-        async let losers = HeimdallOrchestrator.shared.requestScreener(type: .losers, limit: 10)
-        // Active
-        async let active = HeimdallOrchestrator.shared.requestScreener(type: .mostActive, limit: 10)
+        // 1. Fetch Parallel via ArgusDataService
+        async let gainers = ArgusDataService.shared.fetchScreener(type: .gainers, limit: 10)
+        async let losers = ArgusDataService.shared.fetchScreener(type: .losers, limit: 10)
+        async let active = ArgusDataService.shared.fetchScreener(type: .mostActive, limit: 10)
         
         let (g, l, a) = await (try? gainers, try? losers, try? active) as? ([Quote]?, [Quote]?, [Quote]?) ?? (nil, nil, nil)
         
@@ -349,10 +326,9 @@ extension TradingViewModel {
     }
     
     func fetchTopLosers() async {
-        print("📉 Fetching Top Losers (Heimdall)...")
+        print("📉 Fetching Top Losers...")
         do {
-            // Route through Heimdall Screener
-            let losers = try await HeimdallOrchestrator.shared.requestScreener(type: .losers, limit: 10)
+            let losers = try await ArgusDataService.shared.fetchScreener(type: .losers, limit: 10)
             print("📉 Fetched \(losers.count) losers.")
             await MainActor.run {
                 self.topLosers = losers

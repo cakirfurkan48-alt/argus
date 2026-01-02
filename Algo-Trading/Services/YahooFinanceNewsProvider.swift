@@ -33,7 +33,7 @@ final class YahooFinanceNewsProvider: NewsProvider {
         // Since RSSParser in RSSNewsProvider.swift is internal, we can try to use it.
         // If it fails due to access control (if in different file), we might need to duplicate simple logic.
         // Assuming same module:
-        let parser = RSSParser(limit: limit) 
+        let parser = RSSParser(limit: limit, sourceName: "Yahoo Finance") 
         let articles = parser.parse(data: data)
         
         // Post-process to ensure correct Symbol attribution

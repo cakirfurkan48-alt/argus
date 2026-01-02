@@ -59,7 +59,27 @@ actor HeimdallDebugBundleExporter {
         
         // 6. Keys (Masked)
         let keyDict = await APIKeyStore.shared.keys
-        let keyList = Array(keyDict.values).sorted { $0.provider.rawValue < $1.provider.rawValue }
+        let keyList = keyDict.map { (provider, key) -> APIKeyMetadata in
+            // Map APIProvider to ArgusProvider
+            let argusProvider: ArgusProvider
+            switch provider {
+            case .twelveData: argusProvider = .twelveData
+            case .finnhub: argusProvider = .finnhub
+            case .alphaVantage: argusProvider = .alphaVantage
+            case .eodhd: argusProvider = .eodhd
+            case .fmp: argusProvider = .fmp
+            case .tiingo: argusProvider = .tiingo
+            case .marketstack: argusProvider = .marketStack
+            case .gemini: argusProvider = .gemini
+            case .fred: argusProvider = .fred
+            }
+            
+            return APIKeyMetadata(
+                provider: argusProvider,
+                key: key,
+                isValid: !key.isEmpty && !key.contains("YOUR_") && !key.contains("PLACEHOLDER")
+            )
+        }.sorted { $0.provider.rawValue < $1.provider.rawValue }
         
         // 7. Registry
         let registry = await telepresence.getRegistrySnapshot()

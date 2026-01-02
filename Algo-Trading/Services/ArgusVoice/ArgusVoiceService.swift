@@ -39,7 +39,15 @@ actor ArgusVoiceService {
     ### KURALLAR
     1. **HİKAYELEŞTİR:** "Orion al dedi, Atlas sattı" deme. "Orion teknik fırsatı gördü ancak Atlas temel verilerin bu yükselişi desteklemediğini savundu..." gibi bağlam kur.
     2. **HERMES ENTEGRASYONU:** Eğer Hermes verisi varsa mutlaka haberlerin etkisinden bahset. Yoksa bahsetme.
-    3. **TÜRKÇE:** Sadece Türkçe kullan. Profesyonel ama akıcı bir dille yaz.
+    3. **KANIT ODAKLI KONUŞ:** "Orion al dedi" YETERSİZ. "Orion, RSI 30 seviyesinden dönüş ve Trend Gücü 18/25 olduğu için alım önerdi" ŞEKLİNDE KONUŞ.
+    4. **ATLAS DETAYLARI:** "Temeli sağlam" deme. "F/K 5.4 ile sektör ortalamasının altında ve %40 büyüme var" de.
+    5. **TÜRKÇE:** Sadece Türkçe kullan. Profesyonel, analitik ama akıcı bir dille yaz. Borsa İstanbul jargonuna hakim ol.
+    
+    ### KULLANILACAK VERİLER (Eğer Context'te Varsa):
+    *   **Orion (Teknik):** RSI, Trend Score, Momentum Score, Structure Score.
+    *   **Atlas (Temel):** F/K (PE), Peg Ratio, Büyüme (Growth), Borçluluk (Debt/Equity).
+    *   **Hermes (Haber):** Sentiment ve Özet.
+    *   **Aether (Makro):** Rejim (Risk-On/Off).
     
     ### İSTENEN ÇIKTI FORMATI:
     

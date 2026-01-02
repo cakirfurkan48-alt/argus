@@ -63,9 +63,22 @@ struct AssetChipView: View {
                     }
                 }
                 
-                Text("\(String(format: "%.0f", quantity)) Adet")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(Theme.textSecondary)
+                HStack(spacing: 4) {
+                    Text("\(String(format: "%.0f", quantity)) Adet")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Theme.textSecondary)
+                    
+                    if let price = currentPrice {
+                        Text("•")
+                            .font(.caption2)
+                            .foregroundColor(Theme.textSecondary)
+                        
+                        let symbolPrefix = symbol.hasSuffix(".IS") ? "₺" : "$"
+                        Text("\(symbolPrefix)\(String(format: "%.2f", price))")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundColor(Theme.textPrimary)
+                    }
+                }
             }
             
             Spacer()
@@ -79,7 +92,8 @@ struct AssetChipView: View {
             
             // 4. PnL Column
             VStack(alignment: .trailing, spacing: 2) {
-                Text("$\(String(format: "%.2f", pnl))")
+                let currencySymbol = symbol.hasSuffix(".IS") ? "₺" : "$"
+                Text("\(currencySymbol)\(String(format: "%.2f", pnl))")
                     .font(.system(size: 15, weight: .bold, design: .monospaced))
                     .foregroundColor(pnlColor)
                     // Glow if profitable

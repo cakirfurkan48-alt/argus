@@ -47,16 +47,20 @@ actor ReportEngine {
             let sells = todayTrades.filter { $0.type == .sell }.count
             let totalVol = todayTrades.reduce(0.0) { $0 + $1.amount }
             
+            // Para birimi: BIST varsa TL, yoksa $
+            let hasBist = todayTrades.contains { $0.symbol.uppercased().hasSuffix(".IS") }
+            let currency = hasBist ? "₺" : "$"
+            
             report += "- **Toplam İşlem:** \(todayTrades.count) (Alış: \(buys), Satış: \(sells))\n"
-            report += "- **Hacim:** $\(String(format: "%.2f", totalVol))\n"
+            report += "- **Hacim:** \(currency)\(String(format: "%.2f", totalVol))\n"
             
             report += "\n### Detaylar:\n"
             for trade in todayTrades {
                 let icon = trade.type == .buy ? "🟢 AL" : "🔴 SAT"
                 let price = trade.price
-                // Calculate quantity if valid
                 let qty = price > 0 ? (trade.amount / price) : 0.0
-                report += "- \(icon) **\(trade.symbol)**: \(String(format: "%.2f", price)) ($ üzerinden \(String(format: "%.4f", qty)) adet)\n"
+                let tradeCurrency = trade.symbol.uppercased().hasSuffix(".IS") ? "₺" : "$"
+                report += "- \(icon) **\(trade.symbol)**: \(String(format: "%.2f", price)) (\(tradeCurrency) üzerinden \(String(format: "%.4f", qty)) adet)\n"
             }
         }
         
@@ -128,13 +132,18 @@ actor ReportEngine {
             let totalCount = winCount + lossCount
             let winRate = totalCount > 0 ? (Double(winCount) / Double(totalCount)) * 100 : 0.0
             
-            report += "\n- **Net K/Z:** $\(String(format: "%.2f", totalPnL))"
+            // Para birimi: BIST varsa TL, yoksa $
+            let hasBist = weeklyTrades.contains { $0.symbol.uppercased().hasSuffix(".IS") }
+            let currency = hasBist ? "₺" : "$"
+            
+            report += "\n- **Net K/Z:** \(currency)\(String(format: "%.2f", totalPnL))"
             report += "\n- **İşlem Sayısı:** \(weeklyTrades.count)"
             report += "\n- **Başarı Oranı (Win Rate):** %\(String(format: "%.1f", winRate))"
             
             // Best Trade
             if let best = weeklyTrades.max(by: { ($0.pnl ?? -999) < ($1.pnl ?? -999) }), let pnl = best.pnl, pnl > 0 {
-                report += "\n\n🔥 **Haftanın Yıldızı:** \(best.symbol) (+$\(String(format: "%.2f", pnl)))"
+                let bestCurrency = best.symbol.uppercased().hasSuffix(".IS") ? "₺" : "$"
+                report += "\n\n🔥 **Haftanın Yıldızı:** \(best.symbol) (+\(bestCurrency)\(String(format: "%.2f", pnl)))"
             }
         }
         

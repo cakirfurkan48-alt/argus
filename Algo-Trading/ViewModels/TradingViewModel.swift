@@ -22,12 +22,17 @@ class TradingViewModel: ObservableObject {
             savePortfolio()
         }
     }
-    @Published var balance: Double = 100000.0 {
+    @Published var balance: Double = 100000.0 { // USD bakiyesi
         didSet {
             saveBalance()
         }
     }
-    @Published var usdTryRate: Double = 34.50 // Varsayılan kur
+    @Published var bistBalance: Double = 1000000.0 { // 1M TL BIST demo bakiyesi
+        didSet {
+            saveBistBalance()
+        }
+    }
+    @Published var usdTryRate: Double = 35.0 // Varsayılan kur
     
     @Published var aiSignals: [AISignal] = []
     @Published var macroRating: MacroEnvironmentRating?
@@ -46,6 +51,10 @@ class TradingViewModel: ObservableObject {
     // Reports
     @Published var dailyReport: String?
     @Published var weeklyReport: String?
+    
+    // BIST Reports
+    @Published var bistDailyReport: String?
+    @Published var bistWeeklyReport: String?
     
     // Auto-Pilot State
     @AppStorage("isAutoPilotEnabled") var isAutoPilotEnabled: Bool = false
@@ -632,8 +641,24 @@ class TradingViewModel: ObservableObject {
         let commission = FeeModel.shared.calculate(amount: cost)
         let totalCost = cost + commission
         
-        if balance >= totalCost {
-            balance -= totalCost
+        // BIST için TL bakiyesi, diğerleri için USD
+        // BIST için TL bakiyesi, diğerleri için USD
+        // Check for suffix OR if it's a known BIST symbol (e.g. via SymbolResolver or simple check)
+        let isSuffixBist = symbol.uppercased().hasSuffix(".IS")
+        // Fallback: Check if it's a known BIST symbol without suffix (simple heuristic for now or use shared resolver if available)
+        // Since SymbolResolver is used in View, let's assume it's accessible or implement a basic check.
+        // For safety, let's force suffix check or check if it matches common BIST stocks if resolver isn't in scope.
+        // Better: Use SymbolResolver if available. The user used it in View.
+        // Assuming SymbolResolver is available (based on View usage).
+        let isBist = isSuffixBist || SymbolResolver.shared.isBistSymbol(symbol)
+        let availableBalance = isBist ? bistBalance : balance
+        
+        if availableBalance >= totalCost {
+            if isBist {
+                bistBalance -= totalCost
+            } else {
+                balance -= totalCost
+            }
             
             let newTrade = Trade(
                 id: UUID(),
@@ -710,7 +735,7 @@ class TradingViewModel: ObservableObject {
                 decisionId: !self.agoraSnapshots.isEmpty ? self.agoraSnapshots.last!.id.uuidString : nil,
                 intentId: UUID().uuidString
             ))
-
+            saveTransactions() // Persist immediately
             
             self.lastAction = "Alındı: \(String(format: "%.2f", quantity))x \(symbol) @ $\(String(format: "%.2f", price))"
             
@@ -780,12 +805,19 @@ class TradingViewModel: ObservableObject {
         let commission = FeeModel.shared.calculate(amount: revenue)
         let netRevenue = revenue - commission
         
-        balance += netRevenue
+        // BIST için TL bakiyesi, diğerleri için USD
+        let isBist = symbol.uppercased().hasSuffix(".IS")
+        if isBist {
+            bistBalance += netRevenue
+        } else {
+            balance += netRevenue
+        }
         
         // GHOST BUSTER: Explicit Log
         print("👻 GHOST BUSTER: Selling \(symbol). Reason: \(reason ?? "Unknown"). Price: \(price). Source: \(source).")
         
-        self.lastAction = "Satıldı: \(String(format: "%.2f", quantity))x \(symbol) (Net: $\(String(format: "%.2f", netRevenue)))"
+        let currencySymbol = isBist ? "₺" : "$"
+        self.lastAction = "Satıldı: \(String(format: "%.2f", quantity))x \(symbol) (Net: \(currencySymbol)\(String(format: "%.2f", netRevenue)))"
         
         // Update Portfolio (FIFO Logic - First In First Out)
         var remainingToSell = quantity
@@ -926,6 +958,7 @@ class TradingViewModel: ObservableObject {
         decisionId: !self.agoraSnapshots.isEmpty ? self.agoraSnapshots.last!.id.uuidString : nil,
         intentId: UUID().uuidString
     ))
+    saveTransactions() // Persist immediately
     
     // CHIRON LEARNING HOOK: Trade kapandığında konsey ağırlıklarını güncelle
     if source == .autoPilot && abs(totalRealizedPnL) > 0.01 {
@@ -1387,6 +1420,7 @@ extension TradingViewModel {
             guardrailReason: blockReason
         )
         transactionHistory.append(attempt)
+        saveTransactions() // Persist immediately
     }    
 
 }

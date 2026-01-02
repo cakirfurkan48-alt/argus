@@ -281,28 +281,41 @@ final class MacroRegimeService: @unchecked Sendable {
     // MARK: - Fetching
     
     private func fetchFredData() async -> (FredDataBundle, [String]) {
-        // Heimdall 6.1: REVIVED FRED Fetching with Orchestrator Routing
+        // Heimdall 6.2: SEQUENTIAL FRED Fetching with Rate Limiting Protection
+        // FRED API bazen rate limiting uyguluyor, istekleri sıralı + gecikmeli yapıyoruz
         
-        async let cpi = fetchSeriesSafe(instrument: .cpi)
-        async let unrate = fetchSeriesSafe(instrument: .labor)
-        async let payems = fetchSeriesSafe(instrument: CanonicalInstrument(internalId: "PAYEMS", displayName: "Payrolls", assetType: .index, yahooSymbol: nil, fredSeriesId: "PAYEMS", twelveDataSymbol: nil, sourceType: .macroSeries)) // or use growth map
-        async let fedfunds = fetchSeriesSafe(instrument: CanonicalInstrument(internalId: "FEDFUNDS", displayName: "Fed Funds", assetType: .index, yahooSymbol: nil, fredSeriesId: "FEDFUNDS", twelveDataSymbol: nil, sourceType: .macroSeries))
-        async let dgs10 = fetchSeriesSafe(instrument: .rates) // DGS10
-        async let dgs2 = fetchSeriesSafe(instrument: .bond2y) // DGS2
+        var rCpi: [(Date, Double)] = []
+        var rUnrate: [(Date, Double)] = []
+        var rPayems: [(Date, Double)] = []
+        var rFed: [(Date, Double)] = []
+        var rDgs10: [(Date, Double)] = []
+        var rDgs2: [(Date, Double)] = []
+        var rClaims: [(Date, Double)] = []
+        var rGdp: [(Date, Double)] = []
         
-        async let claims = fetchSeriesSafe(instrument: .claims) // ICSA - Weekly Leading Indicator
+        // Sıralı istekler - aralarına 500ms gecikme
+        rCpi = await fetchSeriesSafe(instrument: .cpi)
+        try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
         
-        // GDP separate? .growth maps to GDPC1 usually.
-        async let gdp = fetchSeriesSafe(instrument: .growth)
-
-        let rCpi = await cpi
-        let rUnrate = await unrate
-        let rPayems = await payems
-        let rFed = await fedfunds
-        let rDgs10 = await dgs10
-        let rDgs2 = await dgs2
-        let rClaims = await claims
-        let rGdp = await gdp // Using GDPC1 for Growth
+        rUnrate = await fetchSeriesSafe(instrument: .labor)
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        
+        rPayems = await fetchSeriesSafe(instrument: CanonicalInstrument(internalId: "PAYEMS", displayName: "Payrolls", assetType: .index, yahooSymbol: nil, fredSeriesId: "PAYEMS", twelveDataSymbol: nil, sourceType: .macroSeries))
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        
+        rFed = await fetchSeriesSafe(instrument: CanonicalInstrument(internalId: "FEDFUNDS", displayName: "Fed Funds", assetType: .index, yahooSymbol: nil, fredSeriesId: "FEDFUNDS", twelveDataSymbol: nil, sourceType: .macroSeries))
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        
+        rDgs10 = await fetchSeriesSafe(instrument: .rates) // DGS10
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        
+        rDgs2 = await fetchSeriesSafe(instrument: .bond2y) // DGS2
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        
+        rClaims = await fetchSeriesSafe(instrument: .claims) // ICSA
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        
+        rGdp = await fetchSeriesSafe(instrument: .growth) // GDPC1
         
         var missing: [String] = []
         if rCpi.isEmpty { missing.append("CPI") }

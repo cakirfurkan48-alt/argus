@@ -125,19 +125,32 @@ struct ArgusLabView: View {
                 }
                 .padding(.horizontal)
 
-                // Algo Selector
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        AlgoTabButton(title: "Argus Core", id: ArgusAlgoId.argusCoreV1, selected: $labViewModel.selectedAlgo)
-                        AlgoTabButton(title: "Orion (Teknik)", id: ArgusAlgoId.orionV1, selected: $labViewModel.selectedAlgo)
-                        AlgoTabButton(title: "Atlas (Temel)", id: ArgusAlgoId.atlasV1, selected: $labViewModel.selectedAlgo)
-                        AlgoTabButton(title: "Aether (Makro)", id: ArgusAlgoId.aetherV1, selected: $labViewModel.selectedAlgo)
-                        AlgoTabButton(title: "Auto-Pilot", id: ArgusAlgoId.autoPilot, selected: $labViewModel.selectedAlgo)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            AlgoTabButton(title: "Argus Core", id: ArgusAlgoId.argusCoreV1, selected: $labViewModel.selectedAlgo)
+                            AlgoTabButton(title: "Orion", id: ArgusAlgoId.orionV1, selected: $labViewModel.selectedAlgo)
+                            AlgoTabButton(title: "Atlas", id: ArgusAlgoId.atlasV1, selected: $labViewModel.selectedAlgo)
+                            AlgoTabButton(title: "Test BIST 🇹🇷", id: "BIST_TEST", selected: $labViewModel.selectedAlgo)
+                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
-                }
-                
-                if labViewModel.isLoading {
+                    
+                    if labViewModel.selectedAlgo == "BIST_TEST" {
+                         VStack {
+                             Button("THYAO Verisi Çek") {
+                                 Task { await BistDataService.shared.testConnection() }
+                             }
+                             .padding()
+                             .background(Color.red)
+                             .foregroundColor(.white)
+                             .cornerRadius(8)
+                             
+                             Text("Sonuçlar Xcode konsolunda görünecek.")
+                                 .font(.caption)
+                                 .foregroundColor(.secondary)
+                         }
+                         .padding()
+                    } else if labViewModel.isLoading {
                     ProgressView("Veriler İşleniyor...")
                         .padding()
                 } else if let stat = labViewModel.stats[labViewModel.selectedAlgo] {

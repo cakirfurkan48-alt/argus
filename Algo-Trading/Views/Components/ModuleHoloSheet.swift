@@ -67,7 +67,9 @@ struct ModuleHoloSheet: View {
                 if viewModel.orionScores[symbol] == nil {
                     // Trigger Orion calc
                    await viewModel.loadCandles(for: symbol, timeframe: "1day")
-                   _ = OrionAnalysisService.shared.calculateOrionScore(symbol: symbol, candles: viewModel.candles[symbol] ?? [], spyCandles: nil)
+                   if let result = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: viewModel.candles[symbol] ?? [], spyCandles: nil) {
+                       viewModel.orionScores[symbol] = result
+                   }
                 }
             }
         }

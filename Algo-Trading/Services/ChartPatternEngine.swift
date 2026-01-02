@@ -15,7 +15,11 @@ final class ChartPatternEngine {
     
     // Rate limiting (15 RPM for free tier = 4 sec interval)
     private var lastRequestTime: Date?
-    private let minInterval: TimeInterval = 5.0 // Increased for safety
+    private let minInterval: TimeInterval = 10.0 // Increased to 10 sec for safety
+    
+    // CACHING - Aynı sembol için tekrar istek gitmemesi için
+    private var cache: [String: (result: ChartPatternAnalysisResult, timestamp: Date)] = [:]
+    private let cacheDuration: TimeInterval = 600 // 10 dakika cache
     
     private init() {}
     
@@ -23,6 +27,12 @@ final class ChartPatternEngine {
     
     /// Analyze candles for chart patterns
     func analyzePatterns(symbol: String, candles: [Candle]) async -> ChartPatternAnalysisResult {
+        // CACHE CHECK - Önce cache'e bak
+        if let cached = cache[symbol], Date().timeIntervalSince(cached.timestamp) < cacheDuration {
+            // print("📦 ChartPattern Cache Hit: \(symbol)")
+            return cached.result
+        }
+        
         // Rate limit check
         if let lastTime = lastRequestTime {
             let elapsed = Date().timeIntervalSince(lastTime)
@@ -44,7 +54,10 @@ final class ChartPatternEngine {
         
         do {
             let response = try await callGemini(prompt: prompt)
-            return parsePatternResponse(symbol: symbol, response: response)
+            let result = parsePatternResponse(symbol: symbol, response: response)
+            // CACHE SAVE - Başarılı sonucu cache'e kaydet
+            cache[symbol] = (result: result, timestamp: Date())
+            return result
         } catch {
             print("❌ ChartPatternEngine: \(error)")
             return ChartPatternAnalysisResult(symbol: symbol, patterns: [], error: error.localizedDescription)

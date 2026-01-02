@@ -73,10 +73,32 @@ struct HermesSheetView: View {
     @ObservedObject var viewModel: TradingViewModel
     let symbol: String
     
+    private var isBist: Bool {
+        symbol.uppercased().hasSuffix(".IS")
+    }
+    
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    
+                    // BIST Banner
+                    if isBist {
+                        HStack(spacing: 8) {
+                            Text("🇹🇷")
+                            Text("BIST Haber Taraması")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                            Text("Investing.com TR")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.red.opacity(0.15))
+                        .cornerRadius(8)
+                        .padding(.horizontal)
+                    }
                     
                     // Manual Scan Button
                     Button(action: {
@@ -91,8 +113,8 @@ struct HermesSheetView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Theme.tint.opacity(0.2))
-                        .foregroundColor(Theme.tint)
+                        .background(isBist ? Color.red.opacity(0.2) : Theme.tint.opacity(0.2))
+                        .foregroundColor(isBist ? Color.red : Theme.tint)
                         .cornerRadius(12)
                     }
                     .disabled(viewModel.isLoadingNews)
@@ -108,7 +130,7 @@ struct HermesSheetView: View {
                             }
                             .padding()
                         } else {
-                            Text("Haber bulunamadı")
+                            Text(isBist ? "BIST haberi bulunamadı" : "Haber bulunamadı")
                                 .foregroundColor(.gray)
                                 .padding()
                         }
@@ -120,7 +142,7 @@ struct HermesSheetView: View {
                 }
                 .padding(.vertical)
             }
-            .navigationTitle("Hermes Haberleri")
+            .navigationTitle(isBist ? "🇹🇷 Hermes BIST" : "Hermes Haberleri")
             .background(Theme.background)
         }
     }

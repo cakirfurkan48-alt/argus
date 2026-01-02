@@ -34,8 +34,20 @@ extension TradingViewModel {
             "NEE", "SO", "DUK",
             // Crypto (2)
             "BTC-USD", "ETH-USD",
-            // 2025 Analyst Picks (Added dynamically)
-            "TSM", "MELI", "UBER", "ASML", "SHOP"
+            // 2025 Analyst Picks
+            "TSM", "MELI", "UBER", "ASML", "SHOP",
+            
+            // BIST 50 - Türkiye Borsası (Kaliteli Hisseler)
+            "THYAO.IS", "ASELS.IS", "KCHOL.IS", "AKBNK.IS", "GARAN.IS",
+            "SAHOL.IS", "TUPRS.IS", "EREGL.IS", "BIMAS.IS", "SISE.IS",
+            "PETKM.IS", "SASA.IS", "HEKTS.IS", "FROTO.IS", "TOASO.IS",
+            "ENKAI.IS", "ISCTR.IS", "YKBNK.IS", "VAKBN.IS", "HALKB.IS",
+            "PGSUS.IS", "TAVHL.IS", "TCELL.IS", "TTKOM.IS", "KOZAL.IS",
+            "KOZAA.IS", "TKFEN.IS", "MGROS.IS", "SOKM.IS", "AEFES.IS",
+            "ARCLK.IS", "ALARK.IS", "ASTOR.IS", "BRSAN.IS", "CIMSA.IS",
+            "DOAS.IS", "EGEEN.IS", "EKGYO.IS", "ENJSA.IS", "GESAN.IS",
+            "KONTR.IS", "ODAS.IS", "ULKER.IS", "VESTL.IS", "GUBRF.IS",
+            "AKSEN.IS", "KORDS.IS", "LOGO.IS", "MAVI.IS", "OTKAR.IS"
         ].sorted()
         
         // Priority: Check v2
@@ -57,17 +69,31 @@ extension TradingViewModel {
             saveWatchlist()
         }
         
-        // DYNAMIC INJECTION: Ensure 2025 Analyst Picks are present (One-time check logic ideally, but simpler to just append missing)
-        let newPicks = ["TSM", "MELI", "UBER", "ASML", "SHOP"]
+        // DYNAMIC INJECTION: Ensure BIST + 2025 Analyst Picks are present
+        let requiredSymbols = [
+            // 2025 Picks
+            "TSM", "MELI", "UBER", "ASML", "SHOP",
+            // BIST Core 50
+            "THYAO.IS", "ASELS.IS", "KCHOL.IS", "AKBNK.IS", "GARAN.IS",
+            "SAHOL.IS", "TUPRS.IS", "EREGL.IS", "BIMAS.IS", "SISE.IS",
+            "PETKM.IS", "SASA.IS", "HEKTS.IS", "FROTO.IS", "TOASO.IS",
+            "ENKAI.IS", "ISCTR.IS", "YKBNK.IS", "VAKBN.IS", "HALKB.IS",
+            "PGSUS.IS", "TAVHL.IS", "TCELL.IS", "TTKOM.IS", "KOZAL.IS",
+            "KOZAA.IS", "TKFEN.IS", "MGROS.IS", "SOKM.IS", "AEFES.IS",
+            "ARCLK.IS", "ALARK.IS", "ASTOR.IS", "BRSAN.IS", "CIMSA.IS",
+            "DOAS.IS", "EGEEN.IS", "EKGYO.IS", "ENJSA.IS", "GESAN.IS",
+            "KONTR.IS", "ODAS.IS", "ULKER.IS", "VESTL.IS", "GUBRF.IS",
+            "AKSEN.IS", "KORDS.IS", "LOGO.IS", "MAVI.IS", "OTKAR.IS"
+        ]
         var addedCount = 0
-        for pick in newPicks {
-            if !self.watchlist.contains(pick) {
-                self.watchlist.append(pick)
+        for symbol in requiredSymbols {
+            if !self.watchlist.contains(symbol) {
+                self.watchlist.append(symbol)
                 addedCount += 1
             }
         }
         if addedCount > 0 {
-            print("✨ Added \(addedCount) new analyst picks to watchlist.")
+            print("✨ Added \(addedCount) new symbols (incl. BIST 50) to watchlist.")
             saveWatchlist()
         }
     }
@@ -144,22 +170,41 @@ extension TradingViewModel {
         UserDefaults.standard.set(balance, forKey: "user_balance_v2")
     }
     
+    func saveBistBalance() {
+        UserDefaults.standard.set(bistBalance, forKey: "bist_balance_v1")
+    }
+    
+    func loadBistBalance() {
+        if let saved = UserDefaults.standard.object(forKey: "bist_balance_v1") as? Double {
+            self.bistBalance = saved
+        } else {
+            // İlk kez - 1M TL demo bakiyesi
+            self.bistBalance = 1_000_000.0
+        }
+    }
+    
     // MARK: - Reset (Debug)
     func resetAllData() {
         UserDefaults.standard.removeObject(forKey: "watchlist_v2")
         UserDefaults.standard.removeObject(forKey: "portfolio_v2")
         UserDefaults.standard.removeObject(forKey: "transactions_v2")
         UserDefaults.standard.removeObject(forKey: "user_balance_v2")
+        UserDefaults.standard.removeObject(forKey: "bist_balance_v1")
         
         // Reset In-Memory
         self.watchlist = ["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL", "AMD", "PLTR", "COIN"]
         self.portfolio = []
         self.transactionHistory = []
         self.balance = 100_000.0
+        self.bistBalance = 1_000_000.0
         
         saveWatchlist()
         savePortfolio()
         saveTransactions()
         saveBalance()
+        saveBistBalance()
+        
+        print("🗑️ All data reset (incl. BIST 1M TL)")
     }
 }
+

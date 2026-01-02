@@ -70,22 +70,28 @@ final class FredProvider: HeimdallProvider, Sendable {
         
         guard let url = URL(string: urlString) else { throw URLError(.badURL) }
         
+        print("🏛️ FRED Direct: Series \(seriesId)")
+        
         do {
-            let data = try await HeimdallNetwork.request(
-                url: url,
-                engine: .aether,
-                provider: .fred,
-                symbol: seriesId
-            )
+            // Basit URLSession - HeimdallNetwork proxy sorunlarından kaçınmak için
+            let (data, response) = try await URLSession.shared.data(from: url)
             
-            let response = try JSONDecoder().decode(FredResponse.self, from: data)
+            // Response kontrolü
+            if let httpResponse = response as? HTTPURLResponse {
+                guard httpResponse.statusCode == 200 else {
+                    print("❌ FRED HTTP Error: \(httpResponse.statusCode)")
+                    throw URLError(.badServerResponse)
+                }
+            }
+            
+            let fredResponse = try JSONDecoder().decode(FredResponse.self, from: data)
             
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             
             var results: [(Date, Double)] = []
             
-            for obs in response.observations.reversed() { 
+            for obs in fredResponse.observations.reversed() { 
                  if let date = formatter.date(from: obs.date),
                     let val = Double(obs.value) {
                      results.append((date, val))
@@ -94,6 +100,7 @@ final class FredProvider: HeimdallProvider, Sendable {
             
             if !results.isEmpty {
                 saveCache(seriesId: seriesId, data: results)
+                print("✅ FRED: \(seriesId) -> \(results.count) observations")
             }
             
             return results

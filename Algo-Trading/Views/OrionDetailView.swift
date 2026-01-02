@@ -41,10 +41,24 @@ struct OrionDetailView: View {
                 VStack(spacing: 16) {
                     HStack {
                         VStack(alignment: .leading) {
-                            Text("ORION 3.0")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(.purple)
+                            HStack(spacing: 6) {
+                                Text("ORION 3.0")
+                                    .font(.caption)
+                                    .bold()
+                                    .foregroundColor(symbol.uppercased().hasSuffix(".IS") ? .red : .purple)
+                                
+                                // BIST Badge
+                                if symbol.uppercased().hasSuffix(".IS") {
+                                    Text("🇹🇷 BIST")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.red.opacity(0.8))
+                                        .cornerRadius(4)
+                                }
+                            }
                             Text("Teknik Puan")
                                 .font(.title2)
                                 .bold()
@@ -63,7 +77,7 @@ struct OrionDetailView: View {
                     
                     Divider()
                     
-                    Text("Orion teknik motoru hisseyi analiz eder. Konsey kararı için aşağıdaki 'Konsey Kararı' bölümüne bakın.")
+                    Text(symbol.uppercased().hasSuffix(".IS") ? "Orion teknik motoru BIST hissesini analiz eder. Türk Lirası bazlı fiyat ve hacim verileri kullanılır." : "Orion teknik motoru hisseyi analiz eder. Konsey kararı için aşağıdaki 'Konsey Kararı' bölümüne bakın.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.leading)
