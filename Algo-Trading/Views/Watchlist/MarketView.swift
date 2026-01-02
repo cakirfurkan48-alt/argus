@@ -156,7 +156,8 @@ struct MarketView: View {
 
 // MARK: - GLOBAL COCKPIT
 struct GlobalCockpitView: View {
-    @ObservedObject var viewModel: TradingViewModel
+    @ObservedObject var viewModel: TradingViewModel // Legacy (Aether, SmartTicker için)
+    @EnvironmentObject var watchlistVM: WatchlistViewModel // Quotes için yeni sistem
     let watchlist: [String]
     @Binding var showAetherDetail: Bool
     let deleteAction: (String) -> Void
@@ -188,7 +189,7 @@ struct GlobalCockpitView: View {
             .padding(.top, 20)
             .padding(.bottom, 8)
             
-            // Watchlist
+            // Watchlist - QUOTES ARTIK WatchlistViewModel'DEN OKUNUYOR
             if watchlist.isEmpty {
                 MarketEmptyStateView().padding(.top, 40)
             } else {
@@ -197,8 +198,8 @@ struct GlobalCockpitView: View {
                         NavigationLink(destination: StockDetailView(symbol: symbol, viewModel: viewModel)) {
                             CrystalWatchlistRow(
                                 symbol: symbol,
-                                quote: viewModel.quotes[symbol],
-                                candles: viewModel.candles[symbol]
+                                quote: watchlistVM.quotes[symbol], // Yeni sistem
+                                candles: viewModel.candles[symbol] // Candles hala TradingVM'den
                             )
                             .padding(.horizontal, 16).padding(.vertical, 4)
                         }
@@ -215,7 +216,8 @@ struct GlobalCockpitView: View {
 
 // MARK: - BIST COCKPIT (SİRKİYE)
 struct BistCockpitView: View {
-    @ObservedObject var viewModel: TradingViewModel
+    @ObservedObject var viewModel: TradingViewModel // Legacy (Orion, SirkiyeDashboard için)
+    @EnvironmentObject var watchlistVM: WatchlistViewModel // Quotes için yeni sistem
     let watchlist: [String]
     let deleteAction: (String) -> Void
     
@@ -260,8 +262,8 @@ struct BistCockpitView: View {
                             // Enhanced Bist Watchlist Row
                             BistCockpitRow(
                                 symbol: symbol,
-                                quote: viewModel.quotes[symbol],
-                                orionResult: viewModel.orionScores[symbol], // V2 Result without cast
+                                quote: watchlistVM.quotes[symbol], // Yeni sistem
+                                orionResult: viewModel.orionScores[symbol], // Orion hala TradingVM'den
                                 onAppear: {
                                     // Trigger Orion Analysis if missing
                                     if viewModel.orionScores[symbol] == nil {
