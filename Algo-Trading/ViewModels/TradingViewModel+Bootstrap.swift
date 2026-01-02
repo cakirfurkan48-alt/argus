@@ -7,6 +7,7 @@ import SwiftUI
 extension TradingViewModel {
     
     /// Call this once on App launch. Idempotent.
+    /// OPTIMIZED: Ağır işlemler geciktirildi, UI hemen açılıyor
     func bootstrap() {
         guard !isBootstrapped else { return }
         isBootstrapped = true
@@ -15,14 +16,8 @@ extension TradingViewModel {
         let signpost = SignpostLogger.shared
         let id = signpost.begin(log: signpost.startup, name: "BOOTSTRAP")
         
-        // DEBUG: Dump Keys for Data Rescue
-        print("------- RESCUE_DUMP_START -------")
-        for (key, val) in UserDefaults.standard.dictionaryRepresentation().sorted(by: { $0.key < $1.key }) {
-            if key.lowercased().contains("watch") || key.lowercased().contains("portfolio") || key.lowercased().contains("symbol") {
-                 print("RESCUE_KEY: \(key) | TYPE: \(type(of: val))")
-            }
-        }
-        print("------- RESCUE_DUMP_END -------")
+        // DEBUG dump KALDIRILDI - Performans için
+        
         defer { 
             signpost.end(log: signpost.startup, name: "BOOTSTRAP", id: id) 
             let duration = Date().timeIntervalSince(startTime)
@@ -30,52 +25,81 @@ extension TradingViewModel {
             DispatchQueue.main.async { self.bootstrapDuration = duration }
         }
         
-        // RL-Lite: Tune System based on history
-        ArgusFeedbackLoopService.shared.tuneSystem(history: portfolio)
+        // PHASE 1: HIZLI - UI'ı bloklamayan işlemler (~100ms hedef)
+        // ---------------------------------------------------------
         
-        // TEMP: Force Reset Quota to clear "Exhausted" state from previous session/bug
-        Task {
-            await QuotaLedger.shared.reset(provider: "Finnhub")
-            await QuotaLedger.shared.reset(provider: "Yahoo")
-            await QuotaLedger.shared.reset(provider: "Yahoo Finance")
-            print("🔄 Quota Reset: Finnhub, Yahoo cleared")
-        }
-        
-        // Start Auto-Pilot Loop if enabled
-        startAutoPilotLoop()
-        
-        // Start Scout Loop (Always active to serve user)
-        print("🚀 Bootstrap: startScoutLoop() ÇAĞRILIYOR...")
-        startScoutLoop()
-        print("🚀 Bootstrap: startScoutLoop() TAMAMLANDI")
-
-        // Load Persistent Data
+        // Load Persistent Data (Disk I/O - hızlı)
         loadWatchlist()
         loadPortfolio()
         loadTransactions()
         loadBalance()
-
-        // 🔴 FIX: Enable Live Mode by Default to ensure "movement"
-        self.isLiveMode = true
         
-        // 🔴 FIX: Connect Stream Immediately for Watchlist
-        print("🔌 Bootstrap: Connecting Stream for \(watchlist.count) symbols...")
-        marketDataProvider.connectStream(symbols: self.watchlist)
-        
-        // Start Watchlist Loop (Polling Backup)
-        startWatchlistLoop()
-        
-        // Hydrate Atlas Fundamentals (Background)
-        Task { 
-            await hydrateAtlas()
-            print("🚀 Bootstrap: Triggering Demeter Sector Analysis...")
-            await runDemeterAnalysis()
-        }
-        
-        // Setup SSoT Bindings
+        // Setup SSoT Bindings (Memory - hızlı)
         setupStoreBindings()
         
-        print("🚀 TradingViewModel Bootstrapped")
+        print("🚀 Phase 1: UI Ready (persisted data loaded)")
+        
+        // PHASE 2: GECİKTİRİLMİŞ - Ağır işlemler background'da
+        // ---------------------------------------------------------
+        Task.detached(priority: .background) { [weak self] in
+            // 2 saniye bekle - UI'ın render olmasına izin ver
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            
+            await MainActor.run {
+                guard let self = self else { return }
+                
+                // RL-Lite: Tune System based on history
+                ArgusFeedbackLoopService.shared.tuneSystem(history: self.portfolio)
+                
+                // Enable Live Mode
+                self.isLiveMode = true
+                
+                // Connect Stream for Watchlist
+                print("🔌 Bootstrap Phase 2: Connecting Stream...")
+                self.marketDataProvider.connectStream(symbols: self.watchlist)
+            }
+        }
+        
+        // PHASE 3: LAZY - Scout/AutoPilot loop'ları daha geç başlasın
+        // ---------------------------------------------------------
+        Task.detached(priority: .utility) { [weak self] in
+            // 5 saniye bekle - Kullanıcı UI'ı görsün önce
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            
+            await MainActor.run {
+                guard let self = self else { return }
+                
+                // Start Scout Loop
+                print("🚀 Bootstrap Phase 3: Starting Scout Loop...")
+                self.startScoutLoop()
+                
+                // Start Auto-Pilot Loop if enabled
+                self.startAutoPilotLoop()
+                
+                // Start Watchlist Loop (Polling Backup)
+                self.startWatchlistLoop()
+            }
+        }
+        
+        // PHASE 4: BACKGROUND - Atlas/Demeter (en ağır işlemler)
+        // ---------------------------------------------------------
+        Task.detached(priority: .background) { [weak self] in
+            // 10 saniye bekle
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            
+            guard let self = self else { return }
+            
+            print("🚀 Bootstrap Phase 4: Starting Atlas/Demeter...")
+            await self.hydrateAtlas()
+            await self.runDemeterAnalysis()
+            
+            // Quota Reset (artık acil değil)
+            await QuotaLedger.shared.reset(provider: "Finnhub")
+            await QuotaLedger.shared.reset(provider: "Yahoo")
+            await QuotaLedger.shared.reset(provider: "Yahoo Finance")
+        }
+        
+        print("🚀 TradingViewModel Bootstrap Queued (Lazy Loading Active)")
     }
     
 
