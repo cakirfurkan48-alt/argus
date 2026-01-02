@@ -240,10 +240,9 @@ class OverreactionEngine {
     
     // MARK: - Helpers
     private func calculateSMA(candles: [Candle], period: Int) -> Double? {
-        guard candles.count >= period else { return nil }
-        let suffix = candles.suffix(period)
-        let sum = suffix.map { $0.close }.reduce(0, +)
-        return sum / Double(period)
+        // SSoT: IndicatorService kullanılıyor
+        let values = candles.map { $0.close }
+        return IndicatorService.lastSMA(values: values, period: period)
     }
     
     private func mapRange(val: Double, inMin: Double, inMax: Double, outMin: Double, outMax: Double) -> Double {
@@ -253,53 +252,12 @@ class OverreactionEngine {
     }
     
     private func calculateRSI(candles: [Candle], period: Int = 14) -> Double? {
-        guard candles.count > period + 1 else { return nil }
-        // Simple RSI last value impl
-        // ... (Skipping full RSI implementation for brevity, relying on standard formula if needed)
-        // Let's do a quick efficient one.
-        var gains = 0.0
-        var losses = 0.0
-        
-        // First avg
-        for i in 1...period {
-            let change = candles[i].close - candles[i-1].close
-            if change > 0 { gains += change } else { losses -= change }
-        }
-        
-        var avgGain = gains / Double(period)
-        var avgLoss = losses / Double(period)
-        
-        // Smoothing
-        for i in (period + 1)..<candles.count {
-            let change = candles[i].close - candles[i-1].close
-            let gain = change > 0 ? change : 0
-            let loss = change < 0 ? -change : 0
-            
-            avgGain = ((avgGain * Double(period - 1)) + gain) / Double(period)
-            avgLoss = ((avgLoss * Double(period - 1)) + loss) / Double(period)
-        }
-        
-        if avgLoss == 0 { return 100.0 }
-        let rs = avgGain / avgLoss
-        return 100.0 - (100.0 / (1.0 + rs))
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastRSI(candles: candles, period: period)
     }
     
     private func calculateATR(candles: [Candle], period: Int) -> Double? {
-        guard candles.count > period else { return nil }
-        
-        var trs: [Double] = []
-        for i in 1..<candles.count {
-            let high = candles[i].high
-            let low = candles[i].low
-            let prevClose = candles[i-1].close
-            
-            let tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
-            trs.append(tr)
-        }
-        
-        // Simple Average of TRs for last period
-        // Wilder's smoothing is standard but Simple is safer for simple helper.
-        let suffix = trs.suffix(period)
-        return suffix.reduce(0, +) / Double(suffix.count)
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastATR(candles: candles, period: period)
     }
 }

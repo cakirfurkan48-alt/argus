@@ -554,83 +554,13 @@ final class OrionAnalysisService: @unchecked Sendable {
     }
     
     private func rsi(_ candles: [Candle], _ period: Int) -> Double? {
-        // Simplified Calc, assume standard
-        // In real app, reuse the AnalysisService one or reimplement robust one
-        // For brevity here, simple call if possible or reimplement logic
-        // Re-implementing simplified Wilder's
-        let closes = candles.map { $0.close }
-        guard closes.count > period + 1 else { return 50.0 }
-        
-        var gains = 0.0
-        var losses = 0.0
-        
-        for i in 1...period {
-            let change = closes[i] - closes[i-1]
-            if change > 0 { gains += change }
-            else { losses -= change }
-        }
-        
-        var avgM = gains / Double(period)
-        var avgL = losses / Double(period)
-        
-        for i in (period + 1)..<closes.count {
-             let change = closes[i] - closes[i-1]
-             let g = change > 0 ? change : 0
-             let l = change < 0 ? -change : 0
-             avgM = (avgM * Double(period - 1) + g) / Double(period)
-             avgL = (avgL * Double(period - 1) + l) / Double(period)
-        }
-        
-        if avgL == 0 { return 100.0 }
-        let rs = avgM / avgL
-        return 100.0 - (100.0 / (1.0 + rs))
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastRSI(candles: candles, period: period)
     }
     
     private func macd(_ candles: [Candle]) -> (Double?, Double?, Double?) {
-        let closes = candles.map { $0.close }
-        guard closes.count >= 35 else { return (nil, nil, nil) }
-        
-        // Constants
-        let k12 = 2.0 / 13.0
-        let k26 = 2.0 / 27.0
-        let k9 = 2.0 / 10.0
-        
-        // 1. EMA 12
-        var ema12 = [Double](repeating: 0, count: closes.count)
-        ema12[11] = closes.prefix(12).reduce(0, +) / 12.0
-        for i in 12..<closes.count {
-            ema12[i] = (closes[i] - ema12[i-1]) * k12 + ema12[i-1]
-        }
-        
-        // 2. EMA 26
-        var ema26 = [Double](repeating: 0, count: closes.count)
-        ema26[25] = closes.prefix(26).reduce(0, +) / 26.0
-        for i in 26..<closes.count {
-            ema26[i] = (closes[i] - ema26[i-1]) * k26 + ema26[i-1]
-        }
-        
-        // 3. MACD Line
-        var macdLine = [Double](repeating: 0, count: closes.count)
-        for i in 26..<closes.count {
-            macdLine[i] = ema12[i] - ema26[i]
-        }
-        
-        // 4. Signal Line (EMA 9 of MACD)
-        // First Signal needs 9 MACD values (indices 26..34)
-        let startIdx = 26
-        let signalSeed = macdLine[startIdx..<(startIdx+9)].reduce(0, +) / 9.0
-        var currentSignal = signalSeed
-        
-        // Calculate rest
-        for i in (startIdx+9)..<closes.count {
-            currentSignal = (macdLine[i] - currentSignal) * k9 + currentSignal
-        }
-        
-        let finalMACD = macdLine.last ?? 0
-        let finalSignal = currentSignal
-        let hist = finalMACD - finalSignal
-        
-        return (finalMACD, finalSignal, hist)
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastMACD(candles: candles)
     }
     
     private func formatMoney(_ val: Double) -> String {

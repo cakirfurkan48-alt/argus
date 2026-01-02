@@ -112,38 +112,11 @@ final class CronosTimeEngine: Sendable {
     // MARK: - Helpers
     
     private func calculateRSIStream(candles: [Candle], period: Int) -> [Double] {
+        // SSoT: IndicatorService kullanılıyor
         let prices = candles.map { $0.close }
-        guard prices.count > period else { return [] }
-        
-        var rsiStream: [Double] = []
-        var gains: [Double] = []
-        var losses: [Double] = []
-        
-        // Initial pass
-        for i in 1...period {
-           let diff = prices[i] - prices[i-1]
-           gains.append(max(diff, 0))
-           losses.append(max(-diff, 0))
-        }
-        
-        var avgGain = gains.reduce(0, +) / Double(period)
-        var avgLoss = losses.reduce(0, +) / Double(period)
-        
-        // Step forward
-        for i in (period + 1)..<prices.count {
-            let diff = prices[i] - prices[i-1]
-            let gain = max(diff, 0)
-            let loss = max(-diff, 0)
-            
-            avgGain = (avgGain * Double(period - 1) + gain) / Double(period)
-            avgLoss = (avgLoss * Double(period - 1) + loss) / Double(period)
-            
-            let rs = avgLoss == 0 ? 100.0 : avgGain / avgLoss
-            let rsi = 100.0 - (100.0 / (1.0 + rs))
-            rsiStream.append(rsi)
-        }
-        
-        return rsiStream
+        let rsiArray = IndicatorService.calculateRSI(values: prices, period: period)
+        // nil değerleri filtrele ve Double dizisi döndür
+        return rsiArray.compactMap { $0 }
     }
     
     private func calculateATR(candles: [Candle], period: Int) -> Double {

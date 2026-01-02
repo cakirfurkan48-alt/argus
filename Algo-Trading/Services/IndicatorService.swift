@@ -5,6 +5,79 @@ import Foundation
 
 struct IndicatorService {
     
+    // MARK: - Convenience Functions (Single Value - Son değer döndürür)
+    // Bu fonksiyonlar, mevcut dizi hesaplamalarını kullanarak son değeri döndürür.
+    
+    /// RSI'ın son değerini döndürür (varsayılan period: 14)
+    static func lastRSI(values: [Double], period: Int = 14) -> Double? {
+        let rsi = calculateRSI(values: values, period: period)
+        return rsi.last ?? nil
+    }
+    
+    /// RSI'ın son değerini döndürür - Candle input için
+    static func lastRSI(candles: [Candle], period: Int = 14) -> Double? {
+        let values = candles.map { $0.close }
+        return lastRSI(values: values, period: period)
+    }
+    
+    /// MACD'nin son değerlerini tuple olarak döndürür (macd, signal, histogram)
+    static func lastMACD(values: [Double], fastPeriod: Int = 12, slowPeriod: Int = 26, signalPeriod: Int = 9) -> (macd: Double?, signal: Double?, histogram: Double?) {
+        let result = calculateMACD(values: values, fastPeriod: fastPeriod, slowPeriod: slowPeriod, signalPeriod: signalPeriod)
+        return (result.macd.last ?? nil, result.signal.last ?? nil, result.histogram.last ?? nil)
+    }
+    
+    /// MACD'nin son değerlerini döndürür - Candle input için
+    static func lastMACD(candles: [Candle], fastPeriod: Int = 12, slowPeriod: Int = 26, signalPeriod: Int = 9) -> (macd: Double?, signal: Double?, histogram: Double?) {
+        let values = candles.map { $0.close }
+        return lastMACD(values: values, fastPeriod: fastPeriod, slowPeriod: slowPeriod, signalPeriod: signalPeriod)
+    }
+    
+    /// SMA'nın son değerini döndürür
+    static func lastSMA(values: [Double], period: Int) -> Double? {
+        let sma = calculateSMA(values: values, period: period)
+        return sma.last ?? nil
+    }
+    
+    /// Bollinger Bands'in son değerlerini döndürür (upper, middle, lower)
+    static func lastBollingerBands(values: [Double], period: Int = 20, stdDevMultiplier: Double = 2.0) -> (upper: Double?, middle: Double?, lower: Double?) {
+        let result = calculateBollingerBands(values: values, period: period, stdDevMultiplier: stdDevMultiplier)
+        return (result.upper.last ?? nil, result.middle.last ?? nil, result.lower.last ?? nil)
+    }
+    
+    /// Stochastic'in son değerlerini döndürür (%K, %D)
+    static func lastStochastic(candles: [Candle], kPeriod: Int = 14, dPeriod: Int = 3) -> (k: Double?, d: Double?) {
+        let result = calculateStochastic(candles: candles, kPeriod: kPeriod, dPeriod: dPeriod)
+        return (result.k.last ?? nil, result.d.last ?? nil)
+    }
+    
+    /// CCI'ın son değerini döndürür
+    static func lastCCI(candles: [Candle], period: Int = 20) -> Double? {
+        let cci = calculateCCI(candles: candles, period: period)
+        return cci.last ?? nil
+    }
+    
+    /// ADX'in son değerini döndürür
+    static func lastADX(candles: [Candle], period: Int = 14) -> Double? {
+        let adx = calculateADX(candles: candles, period: period)
+        return adx.last ?? nil
+    }
+    
+    /// ATR'ın son değerini döndürür
+    static func lastATR(candles: [Candle], period: Int = 14) -> Double? {
+        let atr = calculateATR(candles: candles, period: period)
+        return atr.last ?? nil
+    }
+    
+    /// Williams %R'ın son değerini döndürür
+    static func lastWilliamsR(candles: [Candle], period: Int = 14) -> Double? {
+        guard candles.count >= period else { return nil }
+        let slice = candles.suffix(period)
+        let highestHigh = slice.map { $0.high }.max() ?? 1
+        let lowestLow = slice.map { $0.low }.min() ?? 0
+        let close = slice.last?.close ?? 0
+        return ((highestHigh - close) / (highestHigh - lowestLow)) * -100
+    }
+    
     // MARK: - SMA (Simple Moving Average)
     static func calculateSMA(values: [Double], period: Int) -> [Double?] {
         var smaValues = [Double?](repeating: nil, count: values.count)

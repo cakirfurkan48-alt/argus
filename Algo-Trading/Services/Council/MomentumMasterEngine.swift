@@ -173,51 +173,13 @@ struct MomentumMasterEngine: TechnicalCouncilMember, Sendable {
     // MARK: - Helpers
     
     private func calculateRSI(candles: [Candle], period: Int) -> Double? {
-        guard candles.count >= period + 1 else { return nil }
-        
-        var gains: [Double] = []
-        var losses: [Double] = []
-        
-        for i in 1..<candles.count {
-            let change = candles[i].close - candles[i-1].close
-            if change > 0 {
-                gains.append(change)
-                losses.append(0)
-            } else {
-                gains.append(0)
-                losses.append(abs(change))
-            }
-        }
-        
-        let recentGains = Array(gains.suffix(period))
-        let recentLosses = Array(losses.suffix(period))
-        
-        let avgGain = recentGains.reduce(0, +) / Double(period)
-        let avgLoss = recentLosses.reduce(0, +) / Double(period)
-        
-        if avgLoss == 0 { return 100 }
-        
-        let rs = avgGain / avgLoss
-        return 100 - (100 / (1 + rs))
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastRSI(candles: candles, period: period)
     }
     
     private func calculateMACD(candles: [Candle]) -> (Double?, Double?, Double?) {
-        let closes = candles.map { $0.close }
-        guard closes.count >= 26 else { return (nil, nil, nil) }
-        
-        let ema12 = ema(Array(closes.suffix(26)), 12)
-        let ema26 = ema(Array(closes.suffix(26)), 26)
-        
-        guard let e12 = ema12, let e26 = ema26 else { return (nil, nil, nil) }
-        
-        let macdLine = e12 - e26
-        
-        // Simplified signal line (9-period EMA of MACD)
-        // For simplicity, use last MACD value
-        let signalLine = macdLine * 0.9 // Approximate
-        let histogram = macdLine - signalLine
-        
-        return (macdLine, signalLine, histogram)
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastMACD(candles: candles)
     }
     
     private func ema(_ values: [Double], _ period: Int) -> Double? {
@@ -234,31 +196,13 @@ struct MomentumMasterEngine: TechnicalCouncilMember, Sendable {
     }
     
     private func calculateStochastic(candles: [Candle], period: Int) -> Double? {
-        guard candles.count >= period else { return nil }
-        
-        let recentCandles = Array(candles.suffix(period))
-        let currentClose = recentCandles.last?.close ?? 0
-        let highestHigh = recentCandles.map { $0.high }.max() ?? 0
-        let lowestLow = recentCandles.map { $0.low }.min() ?? 0
-        
-        let range = highestHigh - lowestLow
-        guard range > 0 else { return 50 }
-        
-        return ((currentClose - lowestLow) / range) * 100
+        // SSoT: IndicatorService kullanılıyor
+        let result = IndicatorService.lastStochastic(candles: candles, kPeriod: period)
+        return result.k
     }
     
     private func calculateATR(candles: [Candle], period: Int = 14) -> Double {
-        guard candles.count >= period + 1 else { return 0.0 }
-        
-        var trs: [Double] = []
-        for i in 1..<candles.count {
-            let h = candles[i].high
-            let l = candles[i].low
-            let cp = candles[i-1].close
-            let tr = max(h - l, max(abs(h - cp), abs(l - cp)))
-            trs.append(tr)
-        }
-        
-        return trs.suffix(period).reduce(0, +) / Double(period)
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastATR(candles: candles, period: period) ?? 0.0
     }
 }

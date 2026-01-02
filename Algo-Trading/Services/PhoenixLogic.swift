@@ -237,39 +237,11 @@ struct PhoenixLogic {
     }
     
     static func calculateRSI(candles: [Candle], period: Int) -> [Double] {
-        guard candles.count > period + 1 else { return [] }
-        
-        var rsis: [Double] = []
-        let closes = candles.map { $0.close }
-        
-        var gains: [Double] = []
-        var losses: [Double] = []
-        
-        for i in 1..<closes.count {
-            let diff = closes[i] - closes[i-1]
-            gains.append(max(diff, 0))
-            losses.append(max(-diff, 0))
-        }
-        
-        var avgGain = gains.prefix(period).reduce(0, +) / Double(period)
-        var avgLoss = losses.prefix(period).reduce(0, +) / Double(period)
-        
-        // First RSI (optional to append or just use as seed)
-        // We start appending from index `period`
-        
-        for i in period..<gains.count {
-            let g = gains[i]
-            let l = losses[i]
-            
-            avgGain = ((avgGain * Double(period - 1)) + g) / Double(period)
-            avgLoss = ((avgLoss * Double(period - 1)) + l) / Double(period)
-            
-            let rs = avgLoss == 0 ? 100 : avgGain / avgLoss
-            let rsi = 100 - (100 / (1 + rs))
-            rsis.append(rsi)
-        }
-        
-        return rsis
+        // SSoT: IndicatorService kullanılıyor
+        let values = candles.map { $0.close }
+        let rsiArray = IndicatorService.calculateRSI(values: values, period: period)
+        // nil değerleri 50.0 ile değiştir (nötr)
+        return rsiArray.map { $0 ?? 50.0 }
     }
     
     static func checkBullishDivergence(candles: [Candle], rsi: [Double], lookback: Int) -> Bool {

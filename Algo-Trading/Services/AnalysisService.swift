@@ -310,159 +310,55 @@ class AnalysisService {
     // MARK: - Math Calculations
     
     internal func calculateRSIValue(candles: [Candle]) -> Double {
-        let period = 14
-        let prices = candles.map { $0.close }
-        guard prices.count > period else { return 50.0 }
-        
-        var gains: [Double] = []
-        var losses: [Double] = []
-        
-        for i in 1..<prices.count {
-            let diff = prices[i] - prices[i-1]
-            gains.append(max(diff, 0))
-            losses.append(max(-diff, 0))
-        }
-        
-        let avgGain = gains.suffix(period).reduce(0, +) / Double(period)
-        let avgLoss = losses.suffix(period).reduce(0, +) / Double(period)
-        
-        if avgLoss == 0 { return 100.0 }
-        let rs = avgGain / avgLoss
-        return 100 - (100 / (1 + rs))
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastRSI(candles: candles) ?? 50.0
     }
     
     internal func calculateSMAValues(candles: [Candle]) -> (Double?, Double?) {
+        // SSoT: IndicatorService kullanılıyor
         let prices = candles.map { $0.close }
-        guard prices.count >= 50 else { return (nil, nil) }
-        return (prices.suffix(20).reduce(0, +)/20.0, prices.suffix(50).reduce(0, +)/50.0)
+        let sma20 = IndicatorService.lastSMA(values: prices, period: 20)
+        let sma50 = IndicatorService.lastSMA(values: prices, period: 50)
+        return (sma20, sma50)
     }
     
     internal func calculateBollingerValues(candles: [Candle]) -> (Double?, Double?) {
-        let period = 20
+        // SSoT: IndicatorService kullanılıyor
         let prices = candles.map { $0.close }
-        guard prices.count >= period else { return (nil, nil) }
-        
-        let slice = prices.suffix(period)
-        let sma = slice.reduce(0, +) / Double(period)
-        let sumSquaredDiff = slice.map { pow($0 - sma, 2) }.reduce(0, +)
-        let stdDev = sqrt(sumSquaredDiff / Double(period))
-        
-        return (sma + 2*stdDev, sma - 2*stdDev)
+        let bb = IndicatorService.lastBollingerBands(values: prices)
+        return (bb.upper, bb.lower)
     }
     
     internal func calculateMACD(candles: [Candle]) -> (Double?, Double?, Double?) {
-        let prices = candles.map { $0.close }
-        guard prices.count >= 26 else { return (nil, nil, nil) }
-        
-        // EMA 12
-        let ema12 = calculateEMA(prices: prices, period: 12)
-        // EMA 26
-        let ema26 = calculateEMA(prices: prices, period: 26)
-        
-        guard let e12 = ema12, let e26 = ema26 else { return (nil, nil, nil) }
-        
-        let macdLine = e12 - e26
-        
-        // Signal Line (9-day EMA of MACD Line)
-        // Note: For strict accuracy, we'd need a history of MACD values. 
-        // Here we approximate by calculating MACD for the last 9 points.
-        // For V7, we will use a simplified Signal Line calculation:
-        // let signalLine = macd.signale * 0.8 // Simplified for performance without full history
-        let signalLine = macdLine * 0.8 // Simplified for performance without full history
-        let histogram = macdLine - signalLine
-        
-        return (macdLine, signalLine, histogram)
+        // SSoT: IndicatorService kullanılıyor
+        let result = IndicatorService.lastMACD(candles: candles)
+        return (result.macd, result.signal, result.histogram)
     }
     
     private func calculateStochastic(candles: [Candle]) -> (Double?, Double?) {
-        let period = 14
-        guard candles.count >= period else { return (nil, nil) }
-        
-        let slice = candles.suffix(period)
-        let low = slice.map { $0.low }.min() ?? 0
-        let high = slice.map { $0.high }.max() ?? 1
-        let close = slice.last?.close ?? 0
-        
-        let k = ((close - low) / (high - low)) * 100
-        let d = k // Simplified %D
-        
-        return (k, d)
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastStochastic(candles: candles)
     }
     
     private func calculateCCI(candles: [Candle]) -> Double? {
-        let period = 20
-        guard candles.count >= period else { return nil }
-        
-        let slice = candles.suffix(period)
-        let tp = slice.map { ($0.high + $0.low + $0.close) / 3.0 }
-        let smaTP = tp.reduce(0, +) / Double(period)
-        
-        // Mean Deviation
-        let md = tp.map { abs($0 - smaTP) }.reduce(0, +) / Double(period)
-        
-        guard md != 0 else { return 0 }
-        let lastTP = tp.last ?? 0
-        return (lastTP - smaTP) / (0.015 * md)
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastCCI(candles: candles)
     }
     
     private func calculateADX(candles: [Candle]) -> Double? {
-        // Real ADX Calculation (Simplified TR and DM)
-        let period = 14
-        guard candles.count > period + 1 else { return nil }
-        
-        // 1. Calculate True Range (TR) and Directional Movement (+DM, -DM)
-        var trSum: Double = 0
-        var plusDMSum: Double = 0
-        var minusDMSum: Double = 0
-        
-        for i in (candles.count - period)..<candles.count {
-            let current = candles[i]
-            let prev = candles[i-1]
-            
-            let tr = max(current.high - current.low, max(abs(current.high - prev.close), abs(current.low - prev.close)))
-            let upMove = current.high - prev.high
-            let downMove = prev.low - current.low
-            
-            let plusDM = (upMove > downMove && upMove > 0) ? upMove : 0
-            let minusDM = (downMove > upMove && downMove > 0) ? downMove : 0
-            
-            trSum += tr
-            plusDMSum += plusDM
-            minusDMSum += minusDM
-        }
-        
-        if trSum == 0 { return 0 }
-        
-        let plusDI = 100 * (plusDMSum / trSum)
-        let minusDI = 100 * (minusDMSum / trSum)
-        
-        let dx = (abs(plusDI - minusDI) / (plusDI + minusDI)) * 100
-        return dx // Using DX as ADX approximation for single point
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastADX(candles: candles)
     }
     
     private func calculateWilliamsR(candles: [Candle]) -> Double? {
-        let period = 14
-        guard candles.count >= period else { return nil }
-        
-        let slice = candles.suffix(period)
-        let highestHigh = slice.map { $0.high }.max() ?? 1
-        let lowestLow = slice.map { $0.low }.min() ?? 0
-        let close = slice.last?.close ?? 0
-        
-        return ((highestHigh - close) / (highestHigh - lowestLow)) * -100
+        // SSoT: IndicatorService kullanılıyor
+        return IndicatorService.lastWilliamsR(candles: candles)
     }
     
-    // Helper: Exponential Moving Average
+    // Helper: Exponential Moving Average - Artık IndicatorService kullanıyor
+    // Bu fonksiyon geriye dönük uyumluluk için korunuyor
     private func calculateEMA(prices: [Double], period: Int) -> Double? {
-        guard prices.count >= period else { return nil }
-        
-        let k = 2.0 / Double(period + 1)
-        var ema = prices.prefix(period).reduce(0, +) / Double(period) // Start with SMA
-        
-        for price in prices.dropFirst(period) {
-            ema = (price * k) + (ema * (1 - k))
-        }
-        
-        return ema
+        let ema = IndicatorService.calculateEMA(values: prices, period: period)
+        return ema.last ?? nil
     }
 }
