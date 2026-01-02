@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MarketView: View {
+    @EnvironmentObject var appState: AppStateCoordinator // Yeni navigation
     @EnvironmentObject var viewModel: TradingViewModel // Legacy (Geçiş döneminde korunuyor)
     @EnvironmentObject var watchlistVM: WatchlistViewModel // FAZ 2: Yeni modüler sistem
     @ObservedObject var notificationStore = NotificationStore.shared
@@ -11,7 +12,7 @@ struct MarketView: View {
     @Namespace private var animation // For sliding tab effect
     
     // UI State
-    @State private var showAddSymbolSheet = false
+    @State private var showSearch = false // showAddSymbolSheet idi, showSearch yaptık
     @State private var showNotifications = false
     @State private var showAetherDetail = false
     
@@ -38,87 +39,95 @@ struct MarketView: View {
                     }
                     .padding()
                     .background(Theme.secondaryBackground.opacity(0.5))
-                    
-                    // 2. MAIN SCROLL CONTENT
-                    ScrollView {
-                        VStack(spacing: 20) {
-                            if selectedMarket == .global {
-                                GlobalCockpitView(
-                                    viewModel: viewModel,
-                                    watchlist: filteredWatchlist,
-                                    showAetherDetail: $showAetherDetail,
-                                    deleteAction: deleteSymbol
-                                )
-                                .transition(.move(edge: .leading))
-                            } else {
-                                BistCockpitView(
-                                    viewModel: viewModel,
-                                    watchlist: filteredWatchlist,
-                                    deleteAction: deleteSymbol
-                                )
-                                .transition(.move(edge: .trailing))
+                    // Custom Header
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Piyasa")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                            
+                            // Tarih
+                            Text(Date().formatted(date: .abbreviated, time: .omitted))
+                                .font(.caption)
+                                .foregroundColor(Theme.textSecondary)
+                        }
+                        
+                        Spacer()
+                        
+                        // Action Buttons
+                        HStack(spacing: 16) {
+                            Button(action: { showSearch = true }) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(Theme.tint)
                             }
                             
-                            Spacer(minLength: 100)
-                        }
-                        .padding(.top)
-                    }
-                }
-                .animation(.spring(), value: selectedMarket)
-                
-                // MARK: - Overlays (FAB & Notifications)
-                VStack {
-                    // Notifications (Ghost Top Right)
-                    HStack {
-                        Spacer()
-                        Button(action: { showNotifications = true }) {
-                            ZStack(alignment: .topTrailing) {
+                            NavigationLink(destination: NotificationsView(viewModel: viewModel)) {
                                 Image(systemName: "bell.fill")
-                                    .font(.system(size: 20)).foregroundColor(Theme.textPrimary)
-                                    .padding(10).background(.ultraThinMaterial).clipShape(Circle()).shadow(radius: 5)
-                                if notificationStore.unreadCount > 0 {
-                                    Circle().fill(Color.red).frame(width: 10, height: 10).offset(x: 2, y: -2)
-                                }
+                                    .font(.title3)
+                                    .foregroundColor(Theme.textSecondary)
                             }
                         }
                     }
                     .padding()
                     
-                    Spacer()
-                    
-                    // FAB (Add Symbol)
-                    HStack {
-                        Spacer()
-                        Button(action: { showAddSymbolSheet = true }) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 24, weight: .semibold))
-                                .foregroundColor(.black)
-                                .frame(width: 56, height: 56)
-                                .background(selectedMarket == .global ? Theme.primary : Color.cyan)
-                                .clipShape(Circle())
-                                .shadow(color: (selectedMarket == .global ? Theme.primary : Color.cyan).opacity(0.4), radius: 10, x: 0, y: 5)
+                    // Main Content
+                    ScrollView {
+                        LazyVStack(spacing: 24) {
+                            
+                            // 1. Global Markets
+                            GlobalCockpitView(
+                                viewModel: viewModel, // Pass Environment Object explicitly if needed by struct
+                                watchlist: filteredWatchlist.filter { !SymbolResolver.shared.isBistSymbol($0) },
+                                showAetherDetail: $showAetherDetail,
+                                deleteAction: { symbol in
+                                    deleteSymbol(symbol)
+                                }
+                            )
+                            
+                            // 2. Borsa Istanbul
+                            BistCockpitView(
+                                viewModel: viewModel, // Pass Environment Object
+                                watchlist: filteredWatchlist.filter { SymbolResolver.shared.isBistSymbol($0) },
+                                deleteAction: { symbol in
+                                   deleteSymbol(symbol)
+                                }
+                            )
+                            
+                            Spacer(minLength: 100)
                         }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 20)
                     }
                 }
-            }
-            .navigationBarHidden(true)
-            .background(
+                
+                // Navigation Link for Programmatic Navigation (State'i AppState'e taşıdık)
                 NavigationLink(
-                    destination: StockDetailView(symbol: viewModel.selectedSymbolForDetail ?? "", viewModel: viewModel),
+                    destination: StockDetailView(
+                        symbol: appState.selectedSymbol ?? "", 
+                        viewModel: viewModel
+                    ),
                     isActive: Binding(
-                        get: { viewModel.selectedSymbolForDetail != nil },
-                        set: { if !$0 { viewModel.selectedSymbolForDetail = nil } }
+                        get: { appState.selectedSymbol != nil },
+                        set: { if !$0 { appState.selectedSymbol = nil } }
                     )
                 ) { EmptyView() }
-            )
-            .sheet(isPresented: $showAddSymbolSheet) { AddSymbolSheet() } // Environment'tan VM alıyor
+            }
+            .navigationBarHidden(true)
+            .sheet(isPresented: $showSearch) {
+                AddSymbolSheet() // Environment'tan alıyor
+            }
             .sheet(isPresented: $showAetherDetail) {
                 if let macro = viewModel.macroRating { ArgusAetherDetailView(rating: macro) }
-                else { Text("Aether Verisi Yükleniyor...").presentationDetents([.medium]) }
             }
-            .sheet(isPresented: $showNotifications) { NotificationsView(viewModel: viewModel) }
+            .frame(maxWidth: .infinity)
+        }
+    }
+    
+    private func deleteSymbol(_ symbol: String) {
+        // HER İKİ SİSTEMDEN DE SİL (Geçiş dönemi senkronizasyonu)
+        watchlistVM.removeSymbol(symbol)
+        if let index = viewModel.watchlist.firstIndex(of: symbol) {
+            viewModel.deleteFromWatchlist(at: IndexSet(integer: index))
         }
     }
     
@@ -141,16 +150,8 @@ struct MarketView: View {
                     Rectangle().fill(Color.clear).frame(height: 2)
                 }
             }
-            .frame(maxWidth: .infinity)
         }
-    }
-    
-    private func deleteSymbol(_ symbol: String) {
-        // HER İKİ SİSTEMDEN DE SİL (Geçiş dönemi senkronizasyonu)
-        watchlistVM.removeSymbol(symbol)
-        if let index = viewModel.watchlist.firstIndex(of: symbol) {
-            viewModel.deleteFromWatchlist(at: IndexSet(integer: index))
-        }
+        .frame(maxWidth: .infinity)
     }
 }
 
