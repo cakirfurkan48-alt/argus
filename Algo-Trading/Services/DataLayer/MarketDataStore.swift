@@ -37,6 +37,18 @@ final class MarketDataStore: ObservableObject {
     func getQuoteProvenance(for symbol: String) -> DataProvenance? {
         return quotes[symbol]?.provenance
     }
+    
+    /// Live Quotes Dictionary - TradingViewModel uyumlu format
+    /// DataValue wrapper'ı unwrap ederek [String: Quote] döndürür
+    var liveQuotes: [String: Quote] {
+        var result: [String: Quote] = [:]
+        for (symbol, dataValue) in quotes {
+            if let quote = dataValue.value {
+                result[symbol] = quote
+            }
+        }
+        return result
+    }
 
     /// Injection for Streaming Engine (MarketDataProvider)
     func injectLiveQuote(_ quote: Quote, source: String) {
