@@ -21,6 +21,7 @@ final class HeimdallOrchestrator {
         // Unified path -> Yahoo Finance (which has correct BIST data)
         // if symbol.uppercased().hasSuffix(".IS") ... { ... }
         
+        await RateLimiter.shared.waitIfNeeded()
         print("🏛️ Yahoo Direct: Quote for \(symbol)")
         return try await yahoo.fetchQuote(symbol: symbol)
     }
@@ -28,6 +29,7 @@ final class HeimdallOrchestrator {
     // MARK: - Fundamentals
     
     func requestFundamentals(symbol: String, context: UsageContext = .interactive) async throws -> FinancialsData {
+        await RateLimiter.shared.waitIfNeeded()
         print("🏛️ Yahoo Direct: Fundamentals for \(symbol)")
         return try await yahoo.fetchFundamentals(symbol: symbol)
     }
@@ -47,6 +49,7 @@ final class HeimdallOrchestrator {
         // BorsaPy candles are OK but we want unified provider.
         // if (symbol.uppercased().hasSuffix(".IS") ... { ... }
         
+        await RateLimiter.shared.waitIfNeeded()
         print("🏛️ Yahoo Direct: Candles for \(symbol) (\(timeframe), \(limit) bars)")
         return try await yahoo.fetchCandles(symbol: symbol, timeframe: timeframe, limit: limit)
     }
@@ -54,14 +57,15 @@ final class HeimdallOrchestrator {
     // MARK: - News
     
     func requestNews(symbol: String, limit: Int = 10, context: UsageContext = .interactive) async throws -> [NewsArticle] {
+        await RateLimiter.shared.waitIfNeeded()
         print("🏛️ Yahoo Direct: News for \(symbol)")
-        // Yahoo news is limited, return placeholder
         return try await yahoo.fetchNews(symbol: symbol)
     }
     
     // MARK: - Screener (Phoenix)
     
     func requestScreener(type: ScreenerType, limit: Int = 10) async throws -> [Quote] {
+        await RateLimiter.shared.waitIfNeeded()
         print("🏛️ Yahoo Direct: Screener \(type)")
         return try await yahoo.fetchScreener(type: type, limit: limit)
     }
