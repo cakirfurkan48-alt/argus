@@ -16,6 +16,11 @@ final class HeimdallOrchestrator {
     // MARK: - Quote
     
     func requestQuote(symbol: String, context: UsageContext = .interactive) async throws -> Quote {
+        // BIST Routing (BorsaPy)
+        // BIST Routing REMOVED: BorsaPy returns incorrect data.
+        // Unified path -> Yahoo Finance (which has correct BIST data)
+        // if symbol.uppercased().hasSuffix(".IS") ... { ... }
+        
         print("🏛️ Yahoo Direct: Quote for \(symbol)")
         return try await yahoo.fetchQuote(symbol: symbol)
     }
@@ -37,6 +42,11 @@ final class HeimdallOrchestrator {
         provider: ProviderTag? = nil,
         instrument: CanonicalInstrument? = nil
     ) async throws -> [Candle] {
+        // BIST Routing (BorsaPy)
+        // BIST Routing REMOVED for Data Consistency
+        // BorsaPy candles are OK but we want unified provider.
+        // if (symbol.uppercased().hasSuffix(".IS") ... { ... }
+        
         print("🏛️ Yahoo Direct: Candles for \(symbol) (\(timeframe), \(limit) bars)")
         return try await yahoo.fetchCandles(symbol: symbol, timeframe: timeframe, limit: limit)
     }

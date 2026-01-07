@@ -87,7 +87,9 @@ struct ArgusEtfDetailView: View {
                                     showMACD: false,
                                     showVolume: true,
                                     showRSI: false,
-                                    showStochastic: false
+                                    showStochastic: false,
+                                    showSAR: true,
+                                    showTSI: true
                                 )
                                     .padding()
                             }

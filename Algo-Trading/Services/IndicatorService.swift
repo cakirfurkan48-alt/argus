@@ -491,4 +491,53 @@ struct IndicatorService {
         
         return IchimokuResult(tenkanSen: tenkan, kijunSen: kijun, senkouSpanA: spanA, senkouSpanB: spanB, chikouSpan: chikou)
     }
+    
+    // MARK: - TSI (True Strength Index)
+    /// Calculates TSI values for the given close prices
+    /// Returns an array of TSI values (-100 to +100 range)
+    static func calculateTSI(values: [Double], longPeriod: Int = 9, shortPeriod: Int = 3) -> [Double?] {
+        var tsiValues = [Double?](repeating: nil, count: values.count)
+        guard values.count > longPeriod + shortPeriod else { return tsiValues }
+        
+        // 1. Calculate price changes
+        var pc: [Double] = []
+        for i in 1..<values.count {
+            pc.append(values[i] - values[i-1])
+        }
+        
+        // 2. Double smooth the price changes
+        let pcSmooth1 = emaRaw(data: pc, period: longPeriod)
+        let pcSmooth2 = emaRaw(data: pcSmooth1, period: shortPeriod)
+        
+        // 3. Double smooth the absolute price changes
+        let apc = pc.map { abs($0) }
+        let apcSmooth1 = emaRaw(data: apc, period: longPeriod)
+        let apcSmooth2 = emaRaw(data: apcSmooth1, period: shortPeriod)
+        
+        // 4. Calculate TSI
+        let offset = longPeriod + shortPeriod - 1
+        for i in 0..<pcSmooth2.count {
+            if apcSmooth2[i] != 0 {
+                let tsi = 100.0 * (pcSmooth2[i] / apcSmooth2[i])
+                // Map back to original index (accounting for the offset from price changes + double EMA)
+                let originalIndex = i + offset
+                if originalIndex < values.count {
+                    tsiValues[originalIndex] = tsi
+                }
+            }
+        }
+        
+        return tsiValues
+    }
+    
+    /// Raw EMA helper (returns non-optional array for chaining)
+    private static func emaRaw(data: [Double], period: Int) -> [Double] {
+        guard !data.isEmpty else { return [] }
+        let k = 2.0 / Double(period + 1)
+        var result: [Double] = [data[0]]
+        for i in 1..<data.count {
+            result.append((data[i] * k) + (result.last! * (1.0 - k)))
+        }
+        return result
+    }
 }

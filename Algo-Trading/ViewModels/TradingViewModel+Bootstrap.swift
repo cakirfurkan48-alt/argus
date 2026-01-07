@@ -33,6 +33,12 @@ extension TradingViewModel {
         loadPortfolio()
         loadTransactions()
         loadBalance()
+        loadBistBalance()
+        
+        // BIST Bakiye Tutarlılık Kontrolü (Gerekirse düzelt, sıfırlama YAPMA)
+        // Not: resetBistPortfolio() KALDIRILDI - bu debug koduydu ve her açılışta 
+        // tüm BIST portföyünü sıfırlıyordu!
+        // recalculateBistBalance() // Sadece tutarsızlık varsa bunu etkinleştir
         
         // Setup SSoT Bindings (Memory - hızlı)
         setupStoreBindings()

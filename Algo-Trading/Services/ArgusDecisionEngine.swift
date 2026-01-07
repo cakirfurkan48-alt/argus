@@ -628,6 +628,7 @@ struct ArgusDecisionEngine {
          if let s = scores.cronos { stdOutputs["Cronos"] = StandardModuleOutput(direction: s > 50 ? "AL" : "SAT", strength: s, confidence: 100, timeframe: "CYCLE", reasons: []) }
          
          return ArgusDecisionResult(
+            id: UUID(),
             symbol: symbol,
             assetType: assetType ?? .stock,
             atlasScore: scores.atlas ?? 0,
@@ -639,6 +640,7 @@ struct ArgusDecisionEngine {
             orionDetails: nil,
             chironResult: nil,
             phoenixAdvice: phoenixAdvice,
+            bistDetails: nil,
             standardizedOutputs: stdOutputs,
             moduleWeights: moduleWeights,
             finalScoreCore: score,

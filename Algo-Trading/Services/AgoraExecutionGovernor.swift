@@ -31,6 +31,17 @@ class AgoraExecutionGovernor {
         lastActionPrice: Double?
     ) -> DecisionSnapshot {
         
+        // --- BIST DELEGATION (YERLİ VALİ) ---
+        if let bistData = decision.bistDetails {
+            return BistExecutionGovernor.shared.audit(
+                decision: bistData,
+                grandDecisionID: decision.id,
+                currentPrice: currentPrice,
+                portfolio: portfolio,
+                lastTradeTime: lastTradeTime
+            )
+        }
+        
         let symbol = decision.symbol
         let proposedAction = decision.finalActionCore // Base your audit on the Core action
         
@@ -197,6 +208,94 @@ class AgoraExecutionGovernor {
             standardizedOutputs: decision.standardizedOutputs,
             dominantSignals: [],
             conflicts: conflicts
+        )
+    }
+}
+
+// MARK: - BIST EXECUTION GOVERNOR (YERLİ VALİ)
+class BistExecutionGovernor {
+    static let shared = BistExecutionGovernor()
+    private let config = TradingGuardsConfig.shared
+    
+    private init() {}
+    
+    func audit(
+        decision: BistDecisionResult,
+        grandDecisionID: UUID,
+        currentPrice: Double,
+        portfolio: [Trade],
+        lastTradeTime: Date?
+    ) -> DecisionSnapshot {
+        // 1. Evidence Building (Data Storytelling map)
+        var evidence: [SnapshotEvidence] = []
+        
+        let modules = [decision.grafik, decision.bilanco, decision.rejim, decision.faktor, decision.sektor, decision.akis, decision.kulis]
+        
+        for mod in modules {
+            let direction = mod.supportLevel > 0.1 ? "POSITIVE" : (mod.supportLevel < -0.1 ? "NEGATIVE" : "NEUTRAL")
+            evidence.append(SnapshotEvidence(
+                module: mod.name,
+                claim: mod.commentary,
+                confidence: abs(mod.supportLevel), // 0-1 range approx
+                direction: direction
+            ))
+        }
+        
+        // 2. BIST Specific Rules (The "Vali" Logic)
+        var rejectionReason: String? = nil
+        var locks = AgoraLocksSnapshot(isLocked: false, reasons: [], cooldownUntil: nil, minHoldUntil: nil)
+        
+        // Rule 1: Akış Veto (Yabancı kaçıyorsa alma)
+        // Eğer aggressive buy ise ve akış < -0.5 ise durdur.
+        if decision.action == .aggressiveBuy || decision.action == .accumulate {
+            if decision.akis.supportLevel < -0.5 {
+                rejectionReason = "Yabancı çıkışı var (Akış negatif), alım durduruldu."
+            }
+        }
+        
+        // Rule 2: Cooldown (BIST specific cooldown might be longer to prevent micro-trading)
+        if let lastTime = lastTradeTime {
+             let timeSince = Date().timeIntervalSince(lastTime)
+             // BIST Cooldown: 15 mins (900s) default
+             if timeSince < 900 {
+                 let unlockDate = lastTime.addingTimeInterval(900)
+                 locks = AgoraLocksSnapshot(isLocked: true, reasons: ["BistCooldown"], cooldownUntil: unlockDate, minHoldUntil: nil)
+                 rejectionReason = "BIST Emir Soğuması (Kalan: \(Int(900 - timeSince))s)"
+             }
+        }
+        
+        // Rule 3: Konsey Güveni Yetersiz
+        if decision.confidence < 25.0 && decision.action != .liquidate && decision.action != .neutral {
+            rejectionReason = "Konsey güvenoyu yeterli değil (Güven: %\(Int(decision.confidence)))"
+        }
+
+        // Return Snapshot
+        let oneLiner = rejectionReason ?? decision.reasoning.components(separatedBy: "\n").first ?? "İşlem onaylandı."
+        
+        // Map ArgusAction to SignalAction
+        var mappedAction: SignalAction = .hold
+        switch decision.action {
+        case .aggressiveBuy, .accumulate:
+            mappedAction = .buy
+        case .liquidate, .trim:
+            mappedAction = .sell
+        default:
+            mappedAction = .hold
+        }
+        
+        let finalAction = rejectionReason != nil ? .hold : mappedAction
+        
+        return DecisionSnapshot(
+            symbol: decision.symbol,
+            action: finalAction, // Override to Hold if rejected
+            reason: rejectionReason != nil ? "VALİ VETOSU: \(rejectionReason!)" : oneLiner,
+            evidence: evidence,
+            riskContext: SnapshotRiskContext(regime: decision.rejim.commentary, aetherScore: decision.rejim.score, chironState: "BIST Active"),
+            locks: locks,
+            phoenix: nil,
+            standardizedOutputs: [:],
+            dominantSignals: [],
+            conflicts: rejectionReason != nil ? [DecisionConflict(moduleA: "BistCouncil", moduleB: "BistGovernor", topic: "Veto", severity: 1.0)] : []
         )
     }
 }

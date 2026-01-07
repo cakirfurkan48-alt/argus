@@ -183,6 +183,40 @@ extension TradingViewModel {
         }
     }
     
+    // MARK: - BIST Bakiye Düzeltme
+    /// Bakiyeyi mevcut pozisyonların alış maliyetlerine göre yeniden hesaplar
+    /// Formül: Nakit = Başlangıç (1M) - Σ(Adet × Alış Fiyatı)
+    func recalculateBistBalance() {
+        let startingBalance = 1_000_000.0
+        
+        // Açık BIST pozisyonlarının toplam alış maliyetini hesapla
+        var totalCost: Double = 0.0
+        for trade in portfolio where trade.isOpen {
+            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
+            if isBist {
+                totalCost += trade.entryPrice * trade.quantity
+            }
+        }
+        
+        // Eğer maliyet başlangıç bakiyesinden fazlaysa (imkansız durum)
+        // En azından 0 olarak ayarla ve uyarı ver
+        let correctedBalance = max(0, startingBalance - totalCost)
+        
+        let oldBalance = bistBalance
+        bistBalance = correctedBalance
+        saveBistBalance()
+        
+        print("🔧 BIST Bakiye Düzeltildi:")
+        print("   Eski: ₺\(String(format: "%.2f", oldBalance))")
+        print("   Yeni: ₺\(String(format: "%.2f", correctedBalance))")
+        print("   Aktif Pozisyon Maliyeti: ₺\(String(format: "%.2f", totalCost))")
+    }
+    
+    // MARK: - BIST Tam Reset (Portföy + Bakiye)
+    // Moved to main TradingViewModel.swift for visibility
+
+
+    
     // MARK: - Reset (Debug)
     func resetAllData() {
         UserDefaults.standard.removeObject(forKey: "watchlist_v2")

@@ -58,6 +58,9 @@ struct ArgusGrandDecision: Sendable, Equatable, Codable {
     let orionDetails: OrionScoreResult?
     let financialDetails: FinancialSnapshot?
     
+    // NEW: BIST V2 Result
+    let bistDetails: BistDecisionResult?
+    
     let timestamp: Date
     
     var shouldTrade: Bool {
@@ -202,7 +205,84 @@ actor ArgusGrandCouncil {
         // 2.5 Get Weights (Non-blocking now)
         let weights = ChironCouncilLearningService.shared.getCouncilWeights(symbol: symbol, engine: engine)
         
-        // 3. Calculate grand decision
+        // --- BIST V2 REFORM ---
+        if isBist {
+            // Re-fetch True Macro (Rejim) because 'aetherDecision' holds Sirkiye (Flow) result for BIST currently
+            let trueMacroDecision = await AetherCouncil.shared.convene(macro: macro)
+            let flowDecision = aetherDecision // Currently SirkiyeEngine output
+            
+            let bistRes = await BistGrandCouncil.shared.convene(
+                symbol: symbol,
+                faktorScore: athena,
+                sektorScore: demeter,
+                akisResult: flowDecision,
+                kulisData: hermesDecision,
+                grafikData: orionDecision,
+                bilancoData: atlasDecision,
+                rejimData: trueMacroDecision
+            )
+            
+            let finalDecision = ArgusGrandDecision(
+                id: bistRes.id,
+                symbol: symbol,
+                action: bistRes.action,
+                strength: .normal, // Strength is calculated inside BistResult but mapped simply here
+                confidence: bistRes.confidence / 100.0,
+                reasoning: bistRes.reasoning,
+                contributors: [], // Contributors logic is inside BistResult.modules now
+                vetoes: [],
+                advisors: [],
+                orionDecision: orionDecision,
+                atlasDecision: atlasDecision,
+                aetherDecision: trueMacroDecision,
+                hermesDecision: hermesDecision,
+                // Pass rich details
+                orionDetails: OrionAnalysisService.shared.calculateOrionScore(symbol: symbol, candles: candles, spyCandles: nil),
+                financialDetails: atlasDecision != nil ? FinancialSnapshot(
+                    symbol: symbol,
+                    marketCap: financials?.marketCap,
+                    price: candles.last?.close ?? 0.0,
+                    peRatio: financials?.peRatio,
+                    forwardPE: financials?.forwardPERatio,
+                    pbRatio: financials?.priceToBook,
+                    psRatio: financials?.priceToSales,
+                    evToEbitda: financials?.evToEbitda,
+                    revenueGrowth: financials?.revenueGrowth,
+                    earningsGrowth: financials?.earningsGrowth,
+                    epsGrowth: nil,
+                    roe: financials?.returnOnEquity,
+                    roa: financials?.returnOnAssets,
+                    debtToEquity: financials?.debtToEquity,
+                    currentRatio: financials?.currentRatio,
+                    grossMargin: financials?.grossMargin,
+                    operatingMargin: financials?.operatingMargin,
+                    netMargin: financials?.profitMargin,
+                    dividendYield: financials?.dividendYield,
+                    payoutRatio: nil,
+                    dividendGrowth: nil,
+                    beta: nil,
+                    sharesOutstanding: nil,
+                    floatShares: nil,
+                    insiderOwnership: nil,
+                    institutionalOwnership: nil,
+                    sectorPE: nil,
+                    sectorPB: nil,
+                    targetMeanPrice: nil,
+                    targetHighPrice: nil,
+                    targetLowPrice: nil,
+                    recommendationMean: nil,
+                    analystCount: nil
+                ) : nil,
+                bistDetails: bistRes, // <--- BIST V2 RESULT
+                timestamp: Date()
+            )
+            
+            // Update Cache & Return Early
+            decisionCache[symbol] = (finalDecision, Date())
+            return finalDecision
+        }
+        
+        // 3. Calculate grand decision (GLOBAL LEGACY)
         let grandDecision = calculateGrandDecision(
             symbol: symbol,
             orion: orionDecision,
@@ -469,6 +549,7 @@ actor ArgusGrandCouncil {
             hermesDecision: hermes,
             orionDetails: orionDetails,
             financialDetails: financialDetails,
+            bistDetails: nil,
             timestamp: Date()
         )
     }
@@ -492,4 +573,266 @@ struct InformationWeights: Codable, Sendable {
     let orion: Double
     let atlas: Double
     let aether: Double
+}
+
+// MARK: - BIST V2 Decision Structure
+struct BistDecisionResult: Sendable, Equatable, Codable {
+    let id: UUID
+    let symbol: String
+    let action: ArgusAction
+    let confidence: Double
+    let reasoning: String
+    
+    // 8 BIST Modules
+    let faktor: BistModuleResult // Smart Beta (Athena)
+    let sektor: BistModuleResult // Rotation (Demeter)
+    let akis: BistModuleResult   // Money Flow (Sirkiye-Legacy/MoneyFlow)
+    let kulis: BistModuleResult  // Analyst/News (Hermes)
+    let grafik: BistModuleResult // Technical (Orion)
+    let bilanco: BistModuleResult // Fundamental (Atlas)
+    let rejim: BistModuleResult  // Macro (Aether)
+    let sirkulasyon: BistModuleResult // Float/Depth (Yeni)
+    
+    let timestamp: Date
+    
+    var shouldTrade: Bool {
+        return action == .aggressiveBuy || action == .accumulate || action == .trim || action == .liquidate
+    }
+}
+
+// MARK: - BIST Module Result (Data Storytelling)
+struct BistModuleResult: Sendable, Equatable, Codable {
+    let name: String
+    let score: Double // 0-100
+    let action: ProposedAction
+    let commentary: String // "Neden?" sorusunun cevabı
+    let supportLevel: Double // -1.0 (Veto) to 1.0 (Strong Support)
+}
+
+extension BistModuleResult {
+    static func neutral(name: String) -> BistModuleResult {
+        return BistModuleResult(name: name, score: 50, action: .hold, commentary: "Veri yetersiz.", supportLevel: 0)
+    }
+}
+
+// MARK: - BIST Grand Council (Yerli Konsey)
+actor BistGrandCouncil {
+    static let shared = BistGrandCouncil()
+    
+    private init() {}
+    
+    func convene(
+        symbol: String,
+        // Engines Inputs
+        faktorScore: AthenaFactorResult? = nil,
+        sektorScore: DemeterScore? = nil,
+        akisResult: AetherDecision? = nil, // MoneyFlow (SirkiyeEngine returns AetherDecision for now)
+        kulisData: HermesDecision? = nil, // News/Analyst
+        grafikData: CouncilDecision, // Orion
+        bilancoData: AtlasDecision?, // Atlas
+        rejimData: AetherDecision // Macro (Global Aether)
+    ) async -> BistDecisionResult {
+        
+        print("🇹🇷 BIST KONSEYİ TOPLANIYOR: \(symbol) 🇹🇷")
+        
+        // 1. Module Analysis & Data Storytelling Generation
+        
+        // --- GRAFİK (Orion) ---
+        let grafikRes = analyzeGrafik(grafikData)
+        
+        // --- BİLANÇO (Atlas) ---
+        let bilancoRes = analyzeBilanco(bilancoData)
+        
+        // --- REJİM (Aether) ---
+        let rejimRes = analyzeRejim(rejimData)
+        
+        // --- FAKTÖR (Athena) ---
+        let faktorRes = analyzeFaktor(faktorScore)
+        
+        // --- SEKTÖR (Demeter) ---
+        let sektorRes = analyzeSektor(sektorScore)
+        
+        // --- AKIŞ (MoneyFlow/Sirkiye) ---
+        let akisRes = analyzeAkis(akisResult)
+        
+        // --- KULİS (Hermes) ---
+        let kulisRes = analyzeKulis(kulisData)
+        
+        // --- SİRKÜLASYON (Placeholder for now) ---
+        let sirkulasyonRes = BistModuleResult(name: "Sirkülasyon", score: 50, action: .hold, commentary: "Takas verisi nötr.", supportLevel: 0)
+        
+        
+        // 2. Final Verdict Logic (The "Brain")
+        
+        var totalSupport: Double = 0
+        var vetoCount = 0
+        var reasons: [String] = []
+        
+        let modules = [grafikRes, bilancoRes, rejimRes, faktorRes, sektorRes, akisRes, kulisRes]
+        
+        for mod in modules {
+            totalSupport += mod.supportLevel
+            if mod.supportLevel < -0.5 { // Soft Veto
+                reasons.append("⚠️ \(mod.name): \(mod.commentary)")
+            }
+            if mod.action == .sell && mod.supportLevel < -0.8 {
+                vetoCount += 1
+            }
+        }
+        
+        // Decision Matrix
+        var finalAction: ArgusAction = .neutral
+        var confidence: Double = 50.0
+        var mainReason = "Veriler nötr."
+        
+        if vetoCount > 0 {
+            finalAction = .neutral // Or trim?
+            confidence = 20.0
+            mainReason = "Konseyde \(vetoCount) üye veto etti. (Riskli)"
+            if grafikRes.action == .sell { finalAction = .liquidate } // Teknik sat ise çık
+        } else if totalSupport > 3.0 { // High Conviction
+            finalAction = .aggressiveBuy
+            confidence = 90.0
+            mainReason = "Tam saha pres! Tüm modüller destekliyor."
+        } else if totalSupport > 1.5 {
+            finalAction = .accumulate
+            confidence = 75.0
+            mainReason = "Pozitif görünüm, kademeli alım uygun."
+        } else if totalSupport < -2.0 {
+            finalAction = .trim
+            confidence = 70.0
+            mainReason = "Görünüm negatife döndü, azaltım önerilir."
+        } else {
+            // Neutral / Hold
+            finalAction = .neutral // Gözle
+            confidence = 50.0
+            mainReason = "Yön net değil, izlemede kalın."
+        }
+        
+        // Rejim Override (Makro Korku varsa agresif olma)
+        if rejimRes.action == .hold && finalAction == .aggressiveBuy {
+            finalAction = .accumulate
+            mainReason += " (Makro belirsizlik nedeniyle agresif olunmadı)"
+        }
+        
+        return BistDecisionResult(
+            id: UUID(),
+            symbol: symbol,
+            action: finalAction,
+            confidence: confidence,
+            reasoning: mainReason + "\n" + reasons.joined(separator: "\n"),
+            faktor: faktorRes,
+            sektor: sektorRes,
+            akis: akisRes,
+            kulis: kulisRes,
+            grafik: grafikRes,
+            bilanco: bilancoRes,
+            rejim: rejimRes,
+            sirkulasyon: sirkulasyonRes,
+            timestamp: Date()
+        )
+    }
+    
+    // MARK: - Module Analyzers (Storytellers)
+    
+    private func analyzeGrafik(_ data: CouncilDecision) -> BistModuleResult {
+        let score = data.netSupport * 100
+
+        let commentary: String
+        if data.action == .buy {
+             commentary = "Fiyat 20, 50 ve 200 günlük hareketli ortalamaların üzerinde. Trend ve momentum alıcıları destekliyor."
+        } else if data.action == .sell {
+             commentary = "Kritik destek seviyeleri aşağı kırıldı. Hacimli satış baskısı ve negatif trend hakim."
+        } else {
+             commentary = "Fiyat sıkışma bölgesinde (konsolidasyon). Yön kararsız, destek-direnç bandında dalgalanıyor."
+        }
+        return BistModuleResult(name: "Grafik", score: score, action: data.action, commentary: commentary, supportLevel: data.netSupport)
+    }
+    
+    private func analyzeBilanco(_ data: AtlasDecision?) -> BistModuleResult {
+        guard let data = data else {
+            return BistModuleResult(name: "Bilanço", score: 50, action: .hold, commentary: "Bilanço verisi bekleniyor.", supportLevel: 0)
+        }
+        let score = data.netSupport * 100
+
+        let commentary: String
+        if data.action == .buy {
+            commentary = "Hisse iskontolu işlem görüyor. FK ve PD/DD rasyoları tarihsel ortalamaların altında, büyüme beklentisi pozitif."
+        } else if data.action == .sell {
+            commentary = "Değerleme primli seviyelerde. Kârlılık marjlarında daralma ve yüksek borçluluk riski var."
+        } else {
+            commentary = "Temel veriler dengeli. Bilanço beklentilere paralel geldi, ekstrem bir ucuzluk veya pahalılık yok."
+        }
+        return BistModuleResult(name: "Bilanço", score: score, action: data.action, commentary: commentary, supportLevel: data.netSupport)
+    }
+    
+    private func analyzeRejim(_ data: AetherDecision) -> BistModuleResult {
+        let score = data.netSupport * 100
+        var comm = "Makro ortam: \(data.marketMode.rawValue)."
+        var support = data.netSupport
+        
+        if data.stance == .riskOff {
+            comm = "Piyasa riskten kaçınıyor (Risk-Off)."
+            support = -1.0 // Strong Veto potential
+        }
+        
+        let action: ProposedAction = data.stance == .riskOn ? .buy : (data.stance == .riskOff ? .sell : .hold)
+        
+        return BistModuleResult(name: "Rejim", score: score, action: action, commentary: comm, supportLevel: support)
+    }
+    
+    private func analyzeFaktor(_ data: AthenaFactorResult?) -> BistModuleResult {
+        guard let data = data else { return .neutral(name: "Faktör") }
+        let score = data.factorScore
+        
+        // Storytelling
+        var comm = ""
+        if score > 70 {
+            comm = "Kalite ve değer faktörleri güçlü sinyal veriyor."
+        } else if score < 30 {
+            comm = "Momentum ve volatilite faktörleri zayıf."
+        } else {
+            comm = "Faktörler karışık, net bir yön yok."
+        }
+        
+        let support = (score - 50) / 50.0
+        let action: ProposedAction = score > 60 ? .buy : (score < 40 ? .sell : .hold)
+        
+        return BistModuleResult(name: "Faktör", score: score, action: action, commentary: comm, supportLevel: support)
+    }
+    
+    private func analyzeSektor(_ data: DemeterScore?) -> BistModuleResult {
+        guard let data = data else { return .neutral(name: "Sektör") }
+        let score = data.totalScore
+        let commentary: String
+        if score > 60 {
+             commentary = "Sektör endekse göre pozitif ayrışıyor. Para girişi sektör geneline yayılmış durumda."
+        } else if score < 40 {
+             commentary = "Sektör genelinde satış baskısı var. Endeksin altında performans gösteriyor."
+        } else {
+             commentary = "Sektör performansı endeksle paralel. Ne öne çıkıyor ne de geride kalıyor."
+        }
+        let support = (score - 50) / 50.0
+        let action: ProposedAction = score > 60 ? .buy : (score < 40 ? .sell : .hold)
+        return BistModuleResult(name: "Sektör", score: score, action: action, commentary: commentary, supportLevel: support)
+    }
+    
+    // UPDATED: Now accepting AetherDecision (from SirkiyeEngine)
+    private func analyzeAkis(_ data: AetherDecision?) -> BistModuleResult {
+        guard let data = data else { return .neutral(name: "Akış") }
+        let score = data.netSupport * 100 
+        // SirkiyeEngine uses riskOn for High Inflow, riskOff for Outflow
+        let comm = data.stance == .riskOn ? "Güçlü para girişi var (Bank of America alımda)." : (data.stance == .riskOff ? "Para çıkışı var (Yabancı satışı)." : "Para girişi nötr.")
+        let support = data.netSupport
+        let action: ProposedAction = data.stance == .riskOn ? .buy : (data.stance == .riskOff ? .sell : .hold)
+        return BistModuleResult(name: "Akış", score: score, action: action, commentary: comm, supportLevel: support)
+    }
+    
+    private func analyzeKulis(_ data: HermesDecision?) -> BistModuleResult {
+        guard let data = data else { return .neutral(name: "Kulis") }
+        let support = data.netSupport
+        let comm = "Haber akışı \(data.sentiment)."
+        let action = data.actionBias
+        return BistModuleResult(name: "Kulis", score: 50 + (support * 50), action: action, commentary: comm, supportLevel: support)
+    }
 }

@@ -11,6 +11,8 @@ struct InteractiveCandleChart: View {
     let showVolume: Bool
     let showRSI: Bool
     let showStochastic: Bool
+    let showSAR: Bool // NEW: Parabolic SAR overlay
+    let showTSI: Bool // NEW: True Strength Index sub-chart
     
     @State private var selectedDate: Date?
     @State private var selectedCandle: Candle?
@@ -154,6 +156,20 @@ struct InteractiveCandleChart: View {
                                 }
                             }
                             
+                            // SAR Overlay (Parabolic Stop & Reverse)
+                            if showSAR {
+                                let sarData = IndicatorService.calculateSAR(candles: sortedCandles)
+                                ForEach(sortedCandles.indices, id: \.self) { i in
+                                    if let sarValue = sarData[i] {
+                                        let close = sortedCandles[i].close
+                                        let isAbovePrice = sarValue > close
+                                        PointMark(x: .value("Date", sortedCandles[i].date), y: .value("SAR", sarValue))
+                                            .foregroundStyle(isAbovePrice ? Color.red : Color.green)
+                                            .symbolSize(20)
+                                    }
+                                }
+                            }
+                            
                             // Trades (Dots)
                             if let trades = trades {
                                 ForEach(trades) { trade in
@@ -233,6 +249,12 @@ struct InteractiveCandleChart: View {
                 
                 if showMACD {
                     MACDChart(candles: sortedCandles)
+                        .frame(height: 100)
+                }
+                
+                // TSI Chart (True Strength Index)
+                if showTSI {
+                    TSIChart(candles: sortedCandles)
                         .frame(height: 100)
                 }
             }
@@ -331,6 +353,30 @@ struct MACDChart: View {
                  }
              }
         }
+        .padding(4)
+        .background(Theme.cardBackground.opacity(0.5))
+    }
+}
+
+struct TSIChart: View {
+    let candles: [Candle]
+    var body: some View {
+        Chart {
+            let tsiData = IndicatorService.calculateTSI(values: candles.map { $0.close })
+            ForEach(candles.indices, id: \.self) { i in
+                if let val = tsiData[i] {
+                    LineMark(x: .value("Date", candles[i].date), y: .value("TSI", val))
+                        .foregroundStyle(val >= 0 ? Color.green : Color.red)
+                }
+            }
+            
+            // Zero line
+            RuleMark(y: .value("Zero", 0)).foregroundStyle(.gray.opacity(0.5)).lineStyle(StrokeStyle(dash: [4]))
+            // Overbought/Oversold
+            RuleMark(y: .value("Overbought", 25)).foregroundStyle(.red.opacity(0.3)).lineStyle(StrokeStyle(dash: [2]))
+            RuleMark(y: .value("Oversold", -25)).foregroundStyle(.green.opacity(0.3)).lineStyle(StrokeStyle(dash: [2]))
+        }
+        .chartYScale(domain: -50...50)
         .padding(4)
         .background(Theme.cardBackground.opacity(0.5))
     }

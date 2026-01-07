@@ -14,6 +14,21 @@ actor SirkiyeEngine {
         let brentOil: Double?       // Energy Cost
         let globalVix: Double?      // Global Fear
         let newsSnapshot: HermesNewsSnapshot? // For Political Cortex
+        
+        // V2 Fields
+        let currentInflation: Double? // Yıllık TÜFE (%)
+        let xu100Change: Double?      // XU100 günlük değişim (%)
+        let xu100Value: Double?       // XU100 değeri
+        let goldPrice: Double?        // Gram Altın TL
+    }
+    
+    // V2: Reel Getiri Analizi sonucu
+    struct RealReturnAnalysis: Sendable {
+        let nominalReturn: Double    // Yıllık nominal getiri (XU100 1Y)
+        let inflation: Double        // Yıllık enflasyon
+        let realReturn: Double       // Reel getiri = Nominal - Enflasyon
+        let verdict: String          // "Pozitif Reel Getiri" veya "Negatif Reel Getiri"
+        let isPositive: Bool
     }
     
     // MARK: - Public API

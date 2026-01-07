@@ -56,6 +56,10 @@ class TradingViewModel: ObservableObject {
     @Published var bistDailyReport: String?
     @Published var bistWeeklyReport: String?
     
+    // Sirkiye Engine State (BIST Politik Atmosfer)
+    @Published var bistAtmosphere: AetherDecision?
+    @Published var bistAtmosphereLastUpdated: Date?
+    
     // Auto-Pilot State
     @AppStorage("isAutoPilotEnabled") var isAutoPilotEnabled: Bool = false
     var autoPilotTimer: Timer?
@@ -600,9 +604,49 @@ class TradingViewModel: ObservableObject {
     }
     
     // MARK: - Trading Logic
+    
+    /// BIST Piyasa Açıklık Kontrolü (Hafta içi 10:00 - 18:10)
+    func isBistMarketOpen() -> Bool {
+        // Eğer manuel override varsa (test için) buraya eklenebilir.
+        let calendar = Calendar.current
+        var now = Date()
+        
+        // TimeZone ayarı (Türkiye Saati - GMT+3)
+        // Eğer sunucu saati zaten doğruysa gerek yok, ama garanti olsun
+        // Basitlik için yerel saat kullanıyoruz (Kullanıcı TR'de varsayılıyor)
+        
+        // 1. Gün Kontrolü (Pazar=1, Cmt=7)
+        let weekday = calendar.component(.weekday, from: now)
+        if weekday == 1 || weekday == 7 {
+            // print("🛑 BIST Kapalı: Haftasonu")
+            return false
+        }
+        
+        // 2. Saat Kontrolü (10:00 - 18:10)
+        let hour = calendar.component(.hour, from: now)
+        let minute = calendar.component(.minute, from: now)
+        let totalMinutes = hour * 60 + minute
+        
+        let startMinutes = 10 * 60 // 10:00
+        let endMinutes = 18 * 60 + 10 // 18:10
+        
+        if totalMinutes >= startMinutes && totalMinutes < endMinutes {
+            return true
+        } else {
+            // print("🛑 BIST Kapalı: Seans Dışı (\(hour):\(minute))")
+            return false
+        }
+    }
         
     @MainActor
     func buy(symbol: String, quantity: Double, source: TradeSource = .user, engine: AutoPilotEngine? = nil, stopLoss: Double? = nil, takeProfit: Double? = nil, rationale: String? = nil, decisionTrace: DecisionTraceSnapshot? = nil, marketSnapshot: MarketSnapshot? = nil) {
+        
+        // BIST MARKET HOUR CHECK
+        if symbol.uppercased().hasSuffix(".IS") && !isBistMarketOpen() {
+            print("🛑 İŞLEM REDDEDİLDİ: BIST Piyasası Kapalı (\(symbol))")
+            self.lastAction = "🛑 Piyasa Kapalı: İşlem Reddedildi"
+            return
+        }
         
         // AGORA GUARDRAIL (Decision V2)
         // ----------------------------------------------------------------
@@ -758,6 +802,13 @@ class TradingViewModel: ObservableObject {
     
     @MainActor
     func sell(symbol: String, quantity: Double, source: TradeSource = .user, engine: AutoPilotEngine? = nil, decisionTrace: DecisionTraceSnapshot? = nil, marketSnapshot: MarketSnapshot? = nil, reason: String? = nil) {
+        
+        // BIST MARKET HOUR CHECK
+        if symbol.uppercased().hasSuffix(".IS") && !isBistMarketOpen() {
+            print("🛑 SATIŞ REDDEDİLDİ: BIST Piyasası Kapalı (\(symbol))")
+            self.lastAction = "🛑 Piyasa Kapalı: Satış Reddedildi"
+            return
+        }
         
         // AGORA GUARDRAIL (Decision V2)
         // ----------------------------------------------------------------
@@ -987,20 +1038,58 @@ class TradingViewModel: ObservableObject {
     
     // MARK: - Portfolio Calculations
     
+    /// Global (USD) portfolio değerini hesaplar - BIST hisseleri hariç
     func getTotalPortfolioValue() -> Double {
         var total: Double = 0.0
         for trade in portfolio where trade.isOpen {
+            // BIST hisselerini atla - bunlar TL cinsinden
+            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
+            if isBist { continue }
+            
             if let quote = quotes[trade.symbol] {
-                // Value = Current Price * Quantity (USD)
                 total += quote.currentPrice * trade.quantity
             }
         }
         return total
     }
     
+    /// BIST (TL) portfolio değerini hesaplar
+    func getBistPortfolioValue() -> Double {
+        var total: Double = 0.0
+        for trade in portfolio where trade.isOpen {
+            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
+            if !isBist { continue }
+            
+            if let quote = quotes[trade.symbol] {
+                total += quote.currentPrice * trade.quantity
+            }
+        }
+        return total
+    }
+    
+    /// Global (USD) henüz gerçekleşmemiş kar/zarar
     func getUnrealizedPnL() -> Double {
         var totalPnL = 0.0
         for trade in portfolio where trade.isOpen {
+            // BIST hisselerini atla
+            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
+            if isBist { continue }
+            
+            if let currentPrice = quotes[trade.symbol]?.currentPrice {
+                let diff = currentPrice - trade.entryPrice
+                totalPnL += diff * trade.quantity
+            }
+        }
+        return totalPnL
+    }
+    
+    /// BIST (TL) henüz gerçekleşmemiş kar/zarar
+    func getBistUnrealizedPnL() -> Double {
+        var totalPnL = 0.0
+        for trade in portfolio where trade.isOpen {
+            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
+            if !isBist { continue }
+            
             if let currentPrice = quotes[trade.symbol]?.currentPrice {
                 let diff = currentPrice - trade.entryPrice
                 totalPnL += diff * trade.quantity
@@ -1030,8 +1119,14 @@ class TradingViewModel: ObservableObject {
     
     // MARK: - Advanced Portfolio Metrics
     
+    /// Global (USD) toplam varlık = USD bakiye + USD portfolio değeri
     func getEquity() -> Double {
         return balance + getTotalPortfolioValue()
+    }
+    
+    /// BIST (TL) toplam varlık = TL bakiye + TL portfolio değeri
+    func getBistEquity() -> Double {
+        return bistBalance + getBistPortfolioValue()
     }
     
     // Margin helpers removed as per user request for "Spot Trading" only.
@@ -1422,5 +1517,29 @@ extension TradingViewModel {
         transactionHistory.append(attempt)
         saveTransactions() // Persist immediately
     }    
+
+    // MARK: - BIST Tam Reset Functions
+    func resetBistPortfolio() {
+        print("🚨 BIST PORTFÖYÜ SIFIRLANIYOR...")
+        
+        // 1. BIST Pozisyonlarını Sil
+        portfolio.removeAll { trade in
+            trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
+        }
+        savePortfolio()
+        print("✅ BIST pozisyonları silindi.")
+        
+        // 2. BIST İşlem Geçmişini Sil
+        transactionHistory.removeAll { tx in
+            tx.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(tx.symbol)
+        }
+        saveTransactions()
+        print("✅ BIST işlem geçmişi silindi.")
+        
+        // 3. Bakiyeyi Sıfırla (1M TL)
+        bistBalance = 1_000_000.0
+        saveBistBalance()
+        print("✅ Bakiye 1.000.000 TL olarak ayarlandı.")
+    }
 
 }

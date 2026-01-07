@@ -7,6 +7,7 @@ struct SettingsView: View {
     @FocusState private var isInputFocused: Bool
     @ObservedObject private var safeService = SafeUniverseService.shared
     @State private var showRoadmap = false // Added state
+
     
     var body: some View {
         NavigationView {
@@ -215,6 +216,9 @@ struct SettingsView: View {
                             .clipped()
                         }
                         
+                        // 6. Danger Zone
+
+                        
                         // Footer
                         VStack(spacing: 4) {
                             Text("Argus Terminal v2.1")
@@ -245,7 +249,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showRoadmap) {
             RoadmapView()
         }
+
     }
+
 }
 
 // MARK: - Helper Components

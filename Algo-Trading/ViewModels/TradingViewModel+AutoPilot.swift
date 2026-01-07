@@ -80,6 +80,15 @@ extension TradingViewModel {
                         // Skip if we already have a decision for this symbol
                         guard self.grandDecisions[signal.symbol] == nil else { continue }
                         
+                        // BIST Market Check
+                        if signal.symbol.uppercased().hasSuffix(".IS") {
+                            let isOpen = await MainActor.run { self.isBistMarketOpen() }
+                            if !isOpen {
+                                print("🛑 AutoPilot: BIST Market Closed - Skipping \(signal.symbol)")
+                                continue
+                            }
+                        }
+                        
                         // Get candles for Grand Council
                         guard let candles = self.candles[signal.symbol], candles.count >= 50 else { continue }
                         
@@ -102,10 +111,14 @@ extension TradingViewModel {
                                 sirkiyeInput = SirkiyeEngine.SirkiyeInput(
                                     usdTry: q.currentPrice,
                                     usdTryPrevious: q.previousClose ?? q.currentPrice,
-                                    dxy: 104.0, // Fallback/Global
+                                    dxy: 104.0,
                                     brentOil: 80.0,
                                     globalVix: macro.vix,
-                                    newsSnapshot: nil // AutoPilot uses neutral politics for now
+                                    newsSnapshot: nil,
+                                    currentInflation: 45.0,
+                                    xu100Change: nil,
+                                    xu100Value: nil,
+                                    goldPrice: nil
                                 )
                             }
                         }
@@ -190,14 +203,44 @@ extension TradingViewModel {
                                 trimPercentage: nil
                             )
                             
-                            let decision = await ExecutionGovernor.shared.review(
-                                signal: apSignal,
-                                symbol: signal.symbol,
-                                quantity: proposedQuantity,
-                                portfolio: self.portfolio, // Fresh ref
-                                equity: self.getEquity(),
-                                scores: (scores.atlas, scores.orion, scores.aether, nil)
-                            )
+                            // BIST vs GLOBAL - Different Governors
+                            let decision: ExecutionDecision
+                            
+                            if isBist {
+                                // BIST: Use Yerli Vali (BistExecutionGovernor)
+                                if let bistDecision = self.grandDecisions[signal.symbol]?.bistDetails {
+                                    let snapshot = BistExecutionGovernor.shared.audit(
+                                        decision: bistDecision,
+                                        grandDecisionID: bistDecision.id,
+                                        currentPrice: currentPrice,
+                                        portfolio: self.portfolio,
+                                        lastTradeTime: nil
+                                    )
+                                    
+                                    // Convert Snapshot to GovernorDecision
+                                    if snapshot.action == .buy {
+                                        decision = .approved(signal: apSignal, adjustedQuantity: proposedQuantity)
+                                        print("🇹🇷 BIST Vali ONAY: \(signal.symbol)")
+                                    } else {
+                                        decision = .rejected(reason: snapshot.reason)
+                                        print("🇹🇷 BIST Vali VETO: \(signal.symbol) -> \(snapshot.reason)")
+                                    }
+                                } else {
+                                    // No BIST Decision yet - skip
+                                    print("⚠️ BIST: \(signal.symbol) için Grand Council kararı bekleniyor...")
+                                    continue
+                                }
+                            } else {
+                                // Global: Use Original Governor
+                                decision = await ExecutionGovernor.shared.review(
+                                    signal: apSignal,
+                                    symbol: signal.symbol,
+                                    quantity: proposedQuantity,
+                                    portfolio: self.portfolio,
+                                    equity: self.getEquity(),
+                                    scores: (scores.atlas, scores.orion, scores.aether, nil)
+                                )
+                            }
                             
                             switch decision {
                             case .approved(let finalSignal, let adjustedQty):
@@ -207,6 +250,7 @@ extension TradingViewModel {
                                 let pAdvice = await PhoenixScenarioEngine.shared.analyze(symbol: signal.symbol, timeframe: .h1)
 
                                 let freshDecision = ArgusDecisionResult(
+                                    id: UUID(),
                                     symbol: signal.symbol,
                                     assetType: .stock,
                                     atlasScore: scores.atlas ?? 0,
@@ -218,6 +262,7 @@ extension TradingViewModel {
                                     orionDetails: nil,
                                     chironResult: nil,
                                     phoenixAdvice: pAdvice,
+                                    bistDetails: nil,
                                     standardizedOutputs: [:],
                                     moduleWeights: nil, // UI Weights
                                     finalScoreCore: 85.0, // Forced High Score for Approved AutoPilot
@@ -275,6 +320,7 @@ extension TradingViewModel {
                                     hermesDecision: nil,
                                     orionDetails: nil,
                                     financialDetails: nil,
+                                    bistDetails: nil,
                                     timestamp: Date()
                                 )
                                 self.grandDecisions[signal.symbol] = grandDecision
@@ -581,6 +627,10 @@ extension TradingViewModel {
     
     // Helper to run the engine (Common logic)
     func triggerAutoPilotEvaluation(symbol: String, quote: Quote, score: Double, isSwap: Bool) async {
+         // BIST için TL bakiyesi, Global için USD bakiyesi kullan
+         let isBist = symbol.uppercased().hasSuffix(".IS")
+         let effectiveBuyingPower = isBist ? self.bistBalance : self.balance
+         
          let candidatesCandles = candles[symbol]
          let aetherRating = MacroRegimeService.shared.getCachedRating()
          let atlasScore = FundamentalScoreStore.shared.getScore(for: symbol)?.totalScore
@@ -591,7 +641,7 @@ extension TradingViewModel {
              symbol: symbol,
              currentPrice: quote.currentPrice,
              equity: self.getEquity(),
-             buyingPower: self.balance,
+             buyingPower: effectiveBuyingPower,
              portfolioState: self.buildPortfolioState(),
              candles: candidatesCandles,
              atlasScore: atlasScore,

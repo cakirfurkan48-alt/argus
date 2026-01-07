@@ -35,6 +35,7 @@ enum ChurnReason: String, Codable {
 
 /// The final computed output of the system, acting as the "Brain".
 struct ArgusDecisionResult: Codable {
+    let id: UUID
     let symbol: String
     
     // Asset Context
@@ -53,6 +54,7 @@ struct ArgusDecisionResult: Codable {
     let orionDetails: OrionScoreResult?
     let chironResult: ChironResult? // NEW: Chiron Engine Output
     let phoenixAdvice: PhoenixAdvice? // NEW: Phoenix Level Engine Output
+    let bistDetails: BistDecisionResult? // NEW: BIST V2 Output
     let standardizedOutputs: [String: StandardModuleOutput]? // Export V2
     let moduleWeights: [String: Double]? // NEW: Information Quality Weights for UI
     

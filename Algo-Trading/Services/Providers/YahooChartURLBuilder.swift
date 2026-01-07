@@ -57,18 +57,36 @@ struct YahooChartURLBuilder: Sendable {
     
     nonisolated static func mapTimeframe(_ tf: String) -> (String, String) {
         switch tf {
-        // Daily / Long Term
+        // Daily / Long Term (English)
         case "1day", "1d": return ("1d", "2y")
         case "1week", "1wk": return ("1wk", "5y")
         case "1month", "1mo": return ("1mo", "10y")
         case "3month", "3mo": return ("3mo", "10y")
         
-        // Intraday (Strict Range to avoid nulls)
+        // Intraday (Strict Range to avoid nulls) (English)
         case "1min", "1m": return ("1m", "1d")   // Risk: 7d limit
         case "5min", "5m": return ("5m", "5d")   // Risk: 60d limit
         case "15min": return ("15m", "5d")
         case "30min": return ("30m", "1mo")
         case "60min", "1hour", "1h": return ("60m", "3mo") // 2y limit
+
+        // =====================================================
+        // TURKISH UI MAPPINGS (Türkçe Kısaltmalar)
+        // =====================================================
+        // 1S = 1 Saat (Hour)
+        case "1S": return ("60m", "3mo")
+        // 4S = 4 Saat (4 Hours) - Yahoo doesn't have 4h native, use 60m with more range
+        case "4S": return ("60m", "6mo")
+        // 5D = 5 Dakika (5 Minutes)
+        case "5D": return ("5m", "5d")
+        // 15D = 15 Dakika (15 Minutes)
+        case "15D": return ("15m", "5d")
+        // 1G = 1 Gün (1 Day)
+        case "1G", "GUNLUK": return ("1d", "2y")
+        // 1H = 1 Hafta (1 Week)
+        case "1H": return ("1wk", "5y")
+        // 1A = 1 Ay (1 Month)
+        case "1A": return ("1mo", "10y")
         
         default: return ("1d", "1y")
         }

@@ -24,6 +24,7 @@ struct ArgusSanctumView: View {
     
     // State
     @State private var selectedModule: ModuleType? = nil
+    @State private var selectedBistModule: BistModuleType? = nil
     @State private var pulseAnimation = false
     @State private var rotateOrbit = false
     @State private var showDecision = false
@@ -76,6 +77,58 @@ struct ArgusSanctumView: View {
         }
     }
     
+    // BIST Özel Modüller
+    enum BistModuleType: String, CaseIterable {
+        case bilanço = "BİLANÇO"   // Atlas karşılığı - Temel Analiz
+        case grafik = "GRAFİK"     // Orion karşılığı - Teknik
+        case sirkiye = "SİRKİYE"   // Aether karşılığı - Makro/Politik
+        case kulis = "KULİS"       // Hermes karşılığı - Haberler
+        case faktor = "FAKTÖR"     // Athena karşılığı - Smart Beta
+        case sektor = "SEKTÖR"     // Demeter karşılığı - Sektör Rotasyonu
+        case rejim = "REJİM"       // Yeni - Piyasa Modu
+        case moneyflow = "AKIŞ"    // Yeni - Para Akışı
+        
+        var icon: String {
+            switch self {
+            case .bilanço: return "turkishlirasign.circle.fill"
+            case .grafik: return "chart.xyaxis.line"
+            case .sirkiye: return "flag.fill"
+            case .kulis: return "text.bubble.fill"
+            case .faktor: return "chart.bar.doc.horizontal.fill"
+            case .sektor: return "chart.pie.fill"
+            case .rejim: return "gauge.with.needle.fill"
+            case .moneyflow: return "arrow.left.arrow.right.circle.fill"
+            }
+        }
+        
+        var color: Color {
+            switch self {
+            case .bilanço: return Color(hex: "D4AF37")     // Altın
+            case .grafik: return Color(hex: "00E676")      // Yeşil
+            case .sirkiye: return Color(hex: "C41E3A")     // Bayrak Kırmızı
+            case .kulis: return Color(hex: "FF8C00")       // Turuncu
+            case .faktor: return Color(hex: "1E90FF")      // Mavi
+            case .sektor: return Color(hex: "E63946")      // Kırmızı
+            case .rejim: return Color(hex: "9B59B6")       // Mor
+            case .moneyflow: return Color(hex: "20B2AA")   // Teal
+            }
+        }
+        
+        var description: String {
+            switch self {
+            case .bilanço: return "BIST Temel Analiz & Mali Tablolar"
+            case .grafik: return "Teknik Analiz & Fiyat Hareketi"
+            case .sirkiye: return "Politik Ortam & Makro Analiz"
+            case .kulis: return "Analist Konsensüsü & Haberler"
+            case .faktor: return "Value, Momentum, Quality Faktörleri"
+            case .sektor: return "Sektör Rotasyonu & Güç Analizi"
+            case .rejim: return "Piyasa Rejimi (Boğa/Ayı/Nötr)"
+            case .moneyflow: return "Hacim & Para Akışı Analizi"
+            }
+        }
+    }
+    
+
     // MARK: - Computed Views
     
     private var orbitingModulesView: some View {
@@ -96,6 +149,27 @@ struct ArgusSanctumView: View {
                 }
         }
     }
+    
+    // BIST Özel Orbit Görünümü
+    private var bistOrbitingModulesView: some View {
+        let orbitRadius: CGFloat = 130
+        let moduleCount = Double(BistModuleType.allCases.count)
+        
+        return ForEach(Array(BistModuleType.allCases.enumerated()), id: \.element) { index, module in
+            let angle = (2.0 * .pi / moduleCount) * Double(index) - .pi / 2.0
+            let xOffset = orbitRadius * CGFloat(cos(angle))
+            let yOffset = orbitRadius * CGFloat(sin(angle))
+            
+            BistOrbView(module: module)
+                .offset(x: xOffset, y: yOffset)
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                        selectedBistModule = module
+                    }
+                }
+        }
+    }
+    
     
     var body: some View {
         ZStack {
@@ -173,19 +247,26 @@ struct ArgusSanctumView: View {
                 // 2. THE CONVERGENCE (Main Council)
                 ZStack {
                     // Central Core (Decision) - Tap to see debate
+                    let isBist = symbol.uppercased().hasSuffix(".IS")
+                    let anyModuleSelected = selectedModule != nil || selectedBistModule != nil
+                    
                     CenterCoreView(symbol: symbol, viewModel: viewModel, showDecision: $showDecision)
-                        .scaleEffect(selectedModule == nil ? 1.0 : 0.6)
-                        .blur(radius: selectedModule == nil ? 0 : 5)
-                        .animation(.spring(), value: selectedModule)
+                        .scaleEffect(anyModuleSelected ? 0.6 : 1.0)
+                        .blur(radius: anyModuleSelected ? 5 : 0)
+                        .animation(.spring(), value: anyModuleSelected)
                         .onTapGesture {
                             if viewModel.grandDecisions[symbol] != nil {
                                 showDebateSheet = true
                             }
                         }
                     
-                    // Orbiting Modules
-                    if selectedModule == nil {
-                        orbitingModulesView
+                    // Orbiting Modules - BIST veya Global
+                    if !anyModuleSelected {
+                        if isBist {
+                            bistOrbitingModulesView
+                        } else {
+                            orbitingModulesView
+                        }
                     }
                 }
                 .frame(height: 350)
@@ -247,10 +328,19 @@ struct ArgusSanctumView: View {
                 }
             }
             
-            // 3. HOLO PANEL (Full Screen Overlay)
+            // 3. HOLO PANEL (Full Screen Overlay) - Global
             if let module = selectedModule {
                 HoloPanelView(module: module, viewModel: viewModel, symbol: symbol, onClose: {
                     withAnimation { selectedModule = nil }
+                })
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(100)
+            }
+            
+            // 4. BIST HOLO PANEL (Full Screen Overlay) - BIST Modülleri
+            if let bistModule = selectedBistModule {
+                BistHoloPanelView(module: bistModule, viewModel: viewModel, symbol: symbol, onClose: {
+                    withAnimation { selectedBistModule = nil }
                 })
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(100)
@@ -278,7 +368,13 @@ struct ArgusSanctumView: View {
         }
         .sheet(isPresented: $showDebateSheet) {
             if let decision = viewModel.grandDecisions[symbol] {
-                AgoraDebateSheet(decision: decision)
+                if symbol.uppercased().hasSuffix(".IS"), let bistData = decision.bistDetails {
+                    // YERLİ KONSEY TARTIŞMASI 🇹🇷
+                    BistDebateSheet(decision: bistData, isPresented: $showDebateSheet)
+                } else {
+                    // GLOBAL KONSEY TARTIŞMASI 🇺🇸
+                    AgoraDebateSheet(decision: decision)
+                }
             }
         }
     }
@@ -332,6 +428,49 @@ struct OrbView: View {
             }()
             
             Text(label)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(module.color)
+                .shadow(color: module.color, radius: 3)
+        }
+    }
+}
+
+// BIST Özel Orb Görünümü
+struct BistOrbView: View {
+    let module: ArgusSanctumView.BistModuleType
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                // Glow - Türkiye renkleri
+                Circle()
+                    .fill(module.color.opacity(0.3))
+                    .frame(width: 50, height: 50)
+                    .blur(radius: 10)
+                
+                // Core - Gradient
+                Circle()
+                    .fill(
+                        LinearGradient(colors: [module.color.opacity(0.9), module.color.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .frame(width: 50, height: 50)
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                LinearGradient(colors: [.white.opacity(0.6), module.color.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                lineWidth: 1.5
+                            )
+                    )
+                
+                // Icon
+                Image(systemName: module.icon)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.white)
+            }
+            .shadow(color: module.color, radius: 8)
+            
+            // Modül İsmi
+            Text(module.rawValue)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(module.color)
                 .shadow(color: module.color, radius: 3)
@@ -455,6 +594,7 @@ struct HoloPanelView: View {
     @State private var chironCorseWeights: ChironModuleWeights?
     @State private var showBacktestSheet = false
     @State private var showInfoCard = false
+    @State private var showImmersiveChart = false // NEW: Full Screen Charts
     
     var body: some View {
         ZStack { // Wrap in ZStack for Info Card Overlay
@@ -491,6 +631,16 @@ struct HoloPanelView: View {
                         Image(systemName: "info.circle")
                             .font(.system(size: 16))
                             .foregroundColor(module.color.opacity(0.8))
+                    }
+                    
+                    // NEW: Expand Chart Button (Only if candles exist)
+                    if viewModel.candles[symbol] != nil && (module == .orion || module == .atlas || module == .aether) {
+                        Button(action: { showImmersiveChart = true }) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 16))
+                                .foregroundColor(module.color.opacity(0.8))
+                        }
+                        .padding(.leading, 8)
                     }
                     
                     Spacer()
@@ -535,6 +685,12 @@ struct HoloPanelView: View {
                     .zIndex(200)
             }
         }
+        .fullScreenCover(isPresented: $showImmersiveChart) {
+            ArgusImmersiveChartView(
+                viewModel: viewModel,
+                symbol: symbol
+            )
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SanctumTheme.glassMaterial)
         .cornerRadius(0)
@@ -562,85 +718,57 @@ struct HoloPanelView: View {
         switch module {
         case .atlas:
             VStack(alignment: .leading, spacing: 16) {
-                // Council Debate for Atlas - Shows full discussion
+                // BIST Specific: Yeni Öğretici Puanlama Kartı
+                if symbol.uppercased().hasSuffix(".IS") {
+                    AtlasBistScoreCard(symbol: symbol)
+                    BistDividendCard(symbol: symbol)
+                    BistCapitalIncreaseCard(symbol: symbol)
+                }
+
+                // NEW: Global Module Detail Card
                 if let grandDecision = viewModel.grandDecisions[symbol],
                    let atlasDecision = grandDecision.atlasDecision {
-                    AtlasDebateCard(decision: atlasDecision)
-                }
-                
-                // Fundamental Score
-                if let result = viewModel.getFundamentalScore(for: symbol) {
-                    let score = Int(result.totalScore)
-                    VStack(alignment: .leading, spacing: 12) {
-                        // Main Score
-                        HStack {
-                            Text("Temel Puan")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                            Spacer()
-                            Text("\(score)")
-                                .font(.system(size: 36, weight: .black))
-                                .foregroundColor(score > 60 ? .green : (score > 40 ? .yellow : .red))
-                        }
-                        
-                        // Quality Band
-                        HStack {
-                            Text("Kalite Bandı:")
-                                .foregroundColor(.gray)
-                            Spacer()
-                            Text(result.qualityBand)
-                                .bold()
-                                .foregroundColor(.yellow)
-                        }
-                        .font(.caption)
-                        
-                        Divider().background(Color.white.opacity(0.2))
-                        
-                        // Highlights
-                        if !result.highlights.isEmpty {
-                            Text("Öne Çıkanlar")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                            
-                            ForEach(result.highlights.prefix(4), id: \.self) { highlight in
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.caption2)
-                                        .foregroundColor(.green)
-                                    Text(highlight)
-                                        .font(.caption2)
-                                        .foregroundColor(.white.opacity(0.8))
-                                }
-                            }
-                        }
-                        
-                        // Score Breakdown
-                        Divider().background(Color.white.opacity(0.2))
-                        Text("Puan Dağılımı")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let profit = result.profitabilityScore {
-                                scoreBreakdownRow("Karlılık", score: profit, max: 25)
-                            }
-                            if let growth = result.growthScore {
-                                scoreBreakdownRow("Büyüme", score: growth, max: 25)
-                            }
-                            if let leverage = result.leverageScore {
-                                scoreBreakdownRow("Kaldıraç", score: leverage, max: 25)
-                            }
-                            if let cashQ = result.cashQualityScore {
-                                scoreBreakdownRow("Nakit Kalitesi", score: cashQ, max: 25)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
-                    .padding()
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
+                    // Convert AtlasDecision to CouncilDecision for the common view
+                    let councilDecision = CouncilDecision(
+                        symbol: atlasDecision.symbol,
+                        action: atlasDecision.action,
+                        netSupport: atlasDecision.netSupport,
+                        approveWeight: 0, // Atlas uses different weighting, simplified for UI
+                        vetoWeight: 0,
+                        isStrongSignal: atlasDecision.isStrongSignal,
+                        isWeakSignal: !atlasDecision.isStrongSignal && atlasDecision.netSupport > 0.1,
+                        winningProposal: atlasDecision.winningProposal.map { prop in
+                            CouncilProposal(
+                                proposer: prop.proposer,
+                                proposerName: prop.proposerName,
+                                action: prop.action,
+                                confidence: prop.confidence,
+                                reasoning: prop.reasoning,
+                                entryPrice: nil,
+                                stopLoss: nil,
+                                target: prop.targetPrice
+                            )
+                        },
+                        allProposals: [], // Not needed for card view
+                        votes: atlasDecision.votes.map { vote in
+                            CouncilVote(
+                                voter: vote.voter,
+                                voterName: vote.voterName,
+                                decision: vote.decision,
+                                reasoning: vote.reasoning,
+                                weight: vote.weight
+                            )
+                        },
+                        vetoReasons: atlasDecision.vetoReasons,
+                        timestamp: atlasDecision.timestamp
+                    )
+                    
+                    GlobalModuleDetailCard(
+                        moduleName: "Atlas",
+                        decision: councilDecision,
+                        moduleColor: SanctumTheme.atlasColor,
+                        moduleIcon: "building.columns.fill"
+                    )
                 } else if viewModel.failedFundamentals.contains(symbol) {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -661,8 +789,8 @@ struct HoloPanelView: View {
                 } else {
                     VStack(spacing: 12) {
                         ProgressView()
-                            .tint(.yellow)
-                        Text("Temel veriler yükleniyor...")
+                            .tint(SanctumTheme.atlasColor)
+                        Text("Atlas Konseyi toplanıyor...")
                             .font(.caption)
                             .foregroundColor(.gray)
                     }
@@ -673,100 +801,49 @@ struct HoloPanelView: View {
             
         case .orion:
             VStack(alignment: .leading, spacing: 16) {
-                // Council Debate for Orion - Shows full discussion
+                // BIST: Rölatif Güç Analizi (Endekse Göre Performans)
+                if symbol.uppercased().hasSuffix(".IS") {
+                    OrionRelativeStrengthCard(symbol: symbol)
+                }
+                
+                // NEW: Global Module Detail Card
                 if let grandDecision = viewModel.grandDecisions[symbol] {
-                    OrionDebateCard(decision: grandDecision.orionDecision)
+                    GlobalModuleDetailCard(
+                        moduleName: "Orion",
+                        decision: grandDecision.orionDecision,
+                        moduleColor: SanctumTheme.orionColor,
+                        moduleIcon: "chart.xyaxis.line"
+                    )
                 }
                 
                 // Technical Score
-                if let orionResult = viewModel.orionScores[symbol] {
-                    VStack(alignment: .leading, spacing: 12) {
-                        // Main Score with Ring
+                // Backtest Button (Only visible if data exists)
+                if viewModel.orionScores[symbol] != nil {
+                    Button(action: {
+                        showBacktestSheet = true
+                    }) {
                         HStack {
-                            Text("Teknik Puan")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                            Spacer()
-                            
-                            ZStack {
-                                Circle()
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 8)
-                                    .frame(width: 70, height: 70)
-                                
-                                Circle()
-                                    .trim(from: 0, to: CGFloat(orionResult.score / 100))
-                                    .stroke(orionResult.score > 60 ? Color.green : (orionResult.score > 40 ? Color.yellow : Color.red), style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                                    .frame(width: 70, height: 70)
-                                    .rotationEffect(.degrees(-90))
-                                
-                                Text("\(Int(orionResult.score))")
-                                    .font(.title2)
-                                    .bold()
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        
-                        Divider().background(Color.white.opacity(0.2))
-                        
-                        // Component Scores with Progress Bars
-                        Text("Bileşen Skorları (V2)")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                        
-                        let components = orionResult.components
-                        componentProgressRow("Yapı (Structure)", score: components.structure, max: 35, color: .cyan)
-                        componentProgressRow("Trend", score: components.trend, max: 25, color: .green)
-                        componentProgressRow("Momentum", score: components.momentum, max: 25, color: .orange)
-                        componentProgressRow("Pattern", score: components.pattern, max: 15, color: .purple)
-                        
-                        Divider().background(Color.white.opacity(0.2))
-                        
-                        // Verdict
-                        HStack {
-                            Text("Karar:")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                            Spacer()
-                            Text(orionResult.verdict)
+                            Image(systemName: "chart.bar.xaxis")
+                            Text("Backtest Çalıştır")
                                 .font(.caption)
                                 .bold()
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(orionResult.verdict.contains("Buy") ? Color.green.opacity(0.3) : (orionResult.verdict.contains("Sell") ? Color.red.opacity(0.3) : Color.yellow.opacity(0.3)))
-                                .cornerRadius(8)
-                                .foregroundColor(.white)
                         }
-                        
-                        Divider().background(Color.white.opacity(0.2))
-                        
-                        // Backtest Button
-                        Button(action: {
-                            showBacktestSheet = true
-                        }) {
-                            HStack {
-                                Image(systemName: "chart.bar.xaxis")
-                                Text("Backtest Çalıştır")
-                                    .font(.caption)
-                                    .bold()
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.cyan.opacity(0.3))
-                            .cornerRadius(10)
-                            .foregroundColor(.white)
-                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(SanctumTheme.orionColor.opacity(0.3))
+                        .cornerRadius(10)
+                        .foregroundColor(.white)
                     }
-                    .padding()
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
+                    .padding(.horizontal, 4)
                     .sheet(isPresented: $showBacktestSheet) {
                         OrionBacktestView(symbol: symbol, candles: viewModel.candles[symbol] ?? [])
                     }
                 } else {
+                    // Loading State
                     VStack(spacing: 12) {
                         ProgressView()
-                            .tint(.cyan)
-                        Text("Teknik veriler yükleniyor...")
+                            .tint(SanctumTheme.orionColor)
+                        Text("Orion Konseyi toplanıyor...")
                             .font(.caption)
                             .foregroundColor(.gray)
                     }
@@ -783,37 +860,51 @@ struct HoloPanelView: View {
             } else {
                 // AETHER (Global)
                 VStack(alignment: .leading, spacing: 16) {
-                    // Council Decision for Aether
+                    // NEW: Global Module Detail Card
                     if let grandDecision = viewModel.grandDecisions[symbol] {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "gavel.fill")
-                                    .foregroundColor(.purple)
-                                Text("Konsey Kararı")
-                                    .font(.caption)
-                                    .bold()
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Text(grandDecision.aetherDecision.stance.rawValue)
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(grandDecision.aetherDecision.stance == .riskOn ? Color.green.opacity(0.3) : (grandDecision.aetherDecision.stance == .riskOff ? Color.red.opacity(0.3) : Color.gray.opacity(0.3)))
-                                    .cornerRadius(8)
-                                    .foregroundColor(.white)
-                            }
-                            
-                            HStack {
-                                Text("Rejim: \(grandDecision.aetherDecision.marketMode.rawValue)")
-                                Spacer()
-                                Text("Net Destek: \(Int(grandDecision.aetherDecision.netSupport * 100))%")
-                            }
-                            .font(.caption2)
-                            .foregroundColor(.gray)
+                        let aetherDecision = grandDecision.aetherDecision
+                        // Convert AetherDecision to CouncilDecision
+                        let councilDecision = CouncilDecision(
+                            symbol: symbol,
+                            action: .hold, // Aether uses Stance (riskOn/Off), mapping to Hold for generic UI or update logic later
+                            netSupport: aetherDecision.netSupport,
+                            approveWeight: 0,
+                            vetoWeight: 0,
+                            isStrongSignal: abs(aetherDecision.netSupport) > 0.5,
+                            isWeakSignal: abs(aetherDecision.netSupport) > 0.2,
+                            winningProposal: CouncilProposal(
+                                proposer: "Aether",
+                                proposerName: "Aether Konseyi",
+                                action: .hold,
+                                confidence: 1.0,
+                                reasoning: "Piyasa Rejimi: \(aetherDecision.marketMode.rawValue)\nDuruş: \(aetherDecision.stance.rawValue)",
+                                entryPrice: nil,
+                                stopLoss: nil,
+                                target: nil
+                            ),
+                            allProposals: [],
+                            votes: [],
+                            vetoReasons: [],
+                            timestamp: Date()
+                        )
+                        
+                        GlobalModuleDetailCard(
+                            moduleName: "Aether",
+                            decision: councilDecision,
+                            moduleColor: SanctumTheme.aetherColor,
+                            moduleIcon: "globe.europe.africa.fill"
+                        )
+                    } else {
+                        // Loading State
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .tint(SanctumTheme.aetherColor)
+                            Text("Aether Konseyi toplanıyor...")
+                                .font(.caption)
+                                .foregroundColor(.gray)
                         }
+                        .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.purple.opacity(0.1))
-                        .cornerRadius(12)
                     }
                     
                     // NEW: Aether v5 Dashboard Card (Compact)
@@ -835,43 +926,56 @@ struct HoloPanelView: View {
             
         case .hermes:
             VStack(alignment: .leading, spacing: 16) {
-                // Council Decision for Hermes
+                // BIST: Analist Konsensüsü
+                if symbol.uppercased().hasSuffix(".IS") {
+                    HermesAnalystCard(symbol: symbol, currentPrice: viewModel.quotes[symbol]?.currentPrice ?? 0)
+                }
+                
+                // NEW: Global Module Detail Card
                 if let grandDecision = viewModel.grandDecisions[symbol],
                    let hermesDecision = grandDecision.hermesDecision {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "gavel.fill")
-                                .foregroundColor(.orange)
-                            Text("Konsey Kararı")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(.white)
-                            Spacer()
-                            Text(hermesDecision.sentiment.rawValue)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background((hermesDecision.sentiment == .strongPositive || hermesDecision.sentiment == .weakPositive) ? Color.green.opacity(0.3) : ((hermesDecision.sentiment == .strongNegative || hermesDecision.sentiment == .weakNegative) ? Color.red.opacity(0.3) : Color.gray.opacity(0.3)))
-                                .cornerRadius(8)
-                                .foregroundColor(.white)
-                        }
-                        
-                        HStack {
-                            Text("Net Destek: \(Int(hermesDecision.netSupport * 100))%")
-                            Spacer()
-                            if hermesDecision.isHighImpact {
-                                Text("YÜKSEK ETKİ")
-                                    .font(.caption2)
-                                    .bold()
-                                    .foregroundColor(.orange)
-                            }
-                        }
-                        .font(.caption2)
-                        .foregroundColor(.gray)
+                    // Convert HermesDecision to CouncilDecision
+                    let councilDecision = CouncilDecision(
+                        symbol: symbol,
+                        action: .hold, // Hermes is sentiment based
+                        netSupport: hermesDecision.netSupport,
+                        approveWeight: 0,
+                        vetoWeight: 0,
+                        isStrongSignal: hermesDecision.isHighImpact,
+                        isWeakSignal: !hermesDecision.isHighImpact && hermesDecision.netSupport > 0.3,
+                        winningProposal: CouncilProposal(
+                            proposer: "Hermes",
+                            proposerName: "Hermes Habercisi",
+                            action: .hold,
+                            confidence: 1.0,
+                            reasoning: "Duygu Durumu: \(hermesDecision.sentiment.rawValue)\nEtki: \(hermesDecision.isHighImpact ? "YÜKSEK" : "Normal")",
+                            entryPrice: nil,
+                            stopLoss: nil,
+                            target: nil
+                        ),
+                        allProposals: [],
+                        votes: [],
+                        vetoReasons: [],
+                        timestamp: Date()
+                    )
+                    
+                    GlobalModuleDetailCard(
+                        moduleName: "Hermes",
+                        decision: councilDecision,
+                        moduleColor: SanctumTheme.hermesColor,
+                        moduleIcon: "gavel.fill"
+                    )
+                } else {
+                    // Loading State
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .tint(SanctumTheme.hermesColor)
+                        Text("Hermes Konseyi toplanıyor...")
+                            .font(.caption)
+                            .foregroundColor(.gray)
                     }
+                    .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.orange.opacity(0.1))
-                    .cornerRadius(12)
                 }
                 
                 // Manual Analysis Button
@@ -1477,4 +1581,255 @@ struct SanctumMiniChart: View {
 
 // Color Hex Helper
 
-
+// MARK: - BIST Holo Panel View
+struct BistHoloPanelView: View {
+    let module: ArgusSanctumView.BistModuleType
+    @ObservedObject var viewModel: TradingViewModel
+    let symbol: String
+    let onClose: () -> Void
+    
+    // Immersive Chart State
+    @State private var showImmersiveChart = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Holo Header
+            HStack {
+                Image(systemName: module.icon)
+                    .foregroundColor(module.color)
+                
+                Text(module.rawValue)
+                    .font(.headline)
+                    .bold()
+                    .tracking(2)
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                // Expand Chart Button (Only for Grafik module)
+                if module == .grafik, viewModel.candles[symbol] != nil {
+                    Button(action: { showImmersiveChart = true }) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .foregroundColor(module.color)
+                            .padding(8)
+                            .background(Circle().fill(Color.white.opacity(0.1)))
+                    }
+                }
+                
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .foregroundColor(.white.opacity(0.6))
+                        .padding(8)
+                        .background(Circle().fill(Color.white.opacity(0.1)))
+                }
+            }
+            .padding()
+            .background(module.color.opacity(0.2))
+            
+            Divider().background(module.color)
+            
+            // Holo Content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(module.description)
+                        .font(.caption)
+                        .italic()
+                        .foregroundColor(.gray)
+                    
+                    // DYNAMIC CONTENT BASED ON BIST MODULE
+                    bistContentForModule(module)
+                }
+                .padding()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            LinearGradient(
+                colors: [Color(red: 0.12, green: 0.08, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 0)
+                .stroke(LinearGradient(colors: [module.color, .clear], startPoint: .top, endPoint: .bottom), lineWidth: 1)
+        )
+        .onAppear {
+            // On-demand BIST karar verisi çekimi
+            if viewModel.grandDecisions[symbol]?.bistDetails == nil {
+                Task {
+                    await fetchBistDecisionIfNeeded()
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showImmersiveChart) {
+            ArgusImmersiveChartView(
+                viewModel: viewModel,
+                symbol: symbol
+            )
+        }
+    }
+    
+    // MARK: - On-Demand BIST Decision Fetcher
+    private func fetchBistDecisionIfNeeded() async {
+        // ONE-OFF FIX: BIST Portföyünü ve Bakiyesini Düzelt (16 TL Hatası için)
+        if !UserDefaults.standard.bool(forKey: "bist_fix_applied_v1") {
+            print("🔧 Applying BIST Price Fix v1...")
+            await MainActor.run {
+                viewModel.resetBistPortfolio()
+            }
+            UserDefaults.standard.set(true, forKey: "bist_fix_applied_v1")
+        }
+        
+        // 1. Candle verisi al (HeimdallOrchestrator - Yahoo Fallback)
+        // BorsaPy yetersiz kalırsa Yahoo devreye girer. Tutarlılık için Grafik kartıyla aynı kaynağı kullanıyoruz.
+        guard let candles = try? await HeimdallOrchestrator.shared.requestCandles(
+            symbol: symbol,
+            timeframe: "1D",
+            limit: 60
+        ) else {
+            print("⚠️ BistHoloPanel: \(symbol) için candle verisi alınamadı (Tüm kaynaklar başarısız)")
+            return
+        }
+        
+        guard candles.count >= 50 else {
+            print("⚠️ BistHoloPanel: \(symbol) için yetersiz veri (\(candles.count) mum)")
+            return
+        }
+        
+        // 2. Sirkiye Input hazırla
+        let usdTryQuote = await MainActor.run { viewModel.quotes["USD/TRY"] }
+        let sirkiyeInput = SirkiyeEngine.SirkiyeInput(
+            usdTry: usdTryQuote?.currentPrice ?? 35.0,
+            usdTryPrevious: usdTryQuote?.previousClose ?? 35.0,
+            dxy: 104.0,
+            brentOil: 80.0,
+            globalVix: 15.0,
+            newsSnapshot: nil,
+            currentInflation: 45.0,
+            xu100Change: nil,
+            xu100Value: nil,
+            goldPrice: nil
+        )
+        
+        // 3. ArgusGrandCouncil.convene() çağır
+        let macro = MacroSnapshot.fromCached()
+        let decision = await ArgusGrandCouncil.shared.convene(
+            symbol: symbol,
+            candles: candles,
+            financials: nil,
+            macro: macro,
+            news: nil,
+            engine: .pulse,
+            sirkiyeInput: sirkiyeInput
+        )
+        
+        // 4. grandDecisions'a yaz
+        await MainActor.run {
+            viewModel.grandDecisions[symbol] = decision
+            print("✅ BistHoloPanel: \(symbol) için BIST kararı alındı (\(decision.action.rawValue))")
+        }
+    }
+    
+    @ViewBuilder
+    private func bistContentForModule(_ module: ArgusSanctumView.BistModuleType) -> some View {
+        // Backend'den BIST karar verilerini al
+        let bistDetails = viewModel.grandDecisions[symbol]?.bistDetails
+        
+        switch module {
+        case .grafik:
+            if let detail = bistDetails?.grafik {
+                BistModuleDetailCard(
+                    moduleResult: detail,
+                    moduleColor: module.color,
+                    moduleIcon: module.icon
+                )
+            }
+            // Teknik göstergeler (SAR, TSI, RSI)
+            GrafikEducationalCard(symbol: symbol)
+            
+        case .bilanço:
+            if let detail = bistDetails?.bilanco {
+                BistModuleDetailCard(
+                    moduleResult: detail,
+                    moduleColor: module.color,
+                    moduleIcon: module.icon
+                )
+            } else {
+                AtlasBistScoreCard(symbol: symbol)
+            }
+            
+        case .faktor:
+            if let detail = bistDetails?.faktor {
+                BistModuleDetailCard(
+                    moduleResult: detail,
+                    moduleColor: module.color,
+                    moduleIcon: module.icon,
+                    extraInfo: [
+                        ExtraInfoItem(icon: "chart.bar.fill", label: "Value Skoru", value: "Hesaplandı", color: .blue),
+                        ExtraInfoItem(icon: "bolt.fill", label: "Momentum", value: "Aktif", color: .orange),
+                        ExtraInfoItem(icon: "checkmark.seal.fill", label: "Quality", value: "Yüksek", color: .green)
+                    ]
+                )
+            } else {
+                BistFaktorCard(symbol: symbol)
+            }
+            
+        case .sektor:
+            if let detail = bistDetails?.sektor {
+                BistModuleDetailCard(
+                    moduleResult: detail,
+                    moduleColor: module.color,
+                    moduleIcon: module.icon
+                )
+            } else {
+                BistSektorCard()
+            }
+            
+        case .rejim:
+            if let detail = bistDetails?.rejim {
+                BistModuleDetailCard(
+                    moduleResult: detail,
+                    moduleColor: module.color,
+                    moduleIcon: module.icon,
+                    extraInfo: [
+                        ExtraInfoItem(icon: "globe", label: "Global Rejim", value: "Risk-On", color: .green),
+                        ExtraInfoItem(icon: "turkishlirasign.circle", label: "TL Durumu", value: "Stabil", color: .yellow)
+                    ]
+                )
+            } else {
+                BistRejimCard()
+            }
+            
+        case .moneyflow:
+            if let detail = bistDetails?.akis {
+                BistModuleDetailCard(
+                    moduleResult: detail,
+                    moduleColor: module.color,
+                    moduleIcon: module.icon,
+                    extraInfo: [
+                        ExtraInfoItem(icon: "arrow.up.right", label: "Para Girişi", value: "Pozitif", color: .green),
+                        ExtraInfoItem(icon: "person.3.fill", label: "Yabancı Akışı", value: "Nötr", color: .yellow)
+                    ]
+                )
+            } else {
+                BistMoneyFlowCard(symbol: symbol)
+            }
+            
+        case .kulis:
+            if let detail = bistDetails?.kulis {
+                BistModuleDetailCard(
+                    moduleResult: detail,
+                    moduleColor: module.color,
+                    moduleIcon: module.icon
+                )
+            }
+            // Analist kartları (Hermes)
+            HermesAnalystCard(symbol: symbol, currentPrice: viewModel.quotes[symbol]?.currentPrice ?? 0)
+            
+        case .sirkiye:
+            // Sirkiye Dashboard (Makro Görünüm)
+            SirkiyeDashboardView(viewModel: viewModel)
+        }
+    }
+}

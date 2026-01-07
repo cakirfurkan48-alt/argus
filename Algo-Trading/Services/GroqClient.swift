@@ -16,9 +16,9 @@ final class GroqClient: Sendable {
     private let fallbackModel = "llama-3.1-8b-instant" // Fast Fallback
     private let deepSeekModel = "deepseek-chat" // DeepSeek V3
     
-    // Rate Limit: 12,000 TPM is ~6 requests/min if avg result is large.
-    // Setting strictly to ~10 RPM to be safe.
-    private let rateLimiter = GroqTokenBucket(capacity: 5, tokensPerInterval: 1, interval: 10.0)
+    // Rate Limit: Groq free tier ~30 RPM, ~6000 TPM
+    // Capacity: 15 burst, refill: 3 tokens per 10 seconds (~18 RPM avg)
+    private let rateLimiter = GroqTokenBucket(capacity: 15, tokensPerInterval: 3, interval: 10.0)
     
     struct ChatMessage: Codable {
         let role: String

@@ -13,9 +13,12 @@ extension TradingViewModel {
         // Store handles coalescing
         let dataValue = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: timeframe)
         
+        // KEY FIX: Timeframe bazlı anahtar kullan (ör: "AAPL_1G", "AAPL_1S")
+        let cacheKey = "\(symbol)_\(timeframe)"
+        
         await MainActor.run {
             if let data = dataValue.value {
-                self.candles[symbol] = data
+                self.candles[cacheKey] = data
             }
             self.isLoading = false
                             
@@ -159,28 +162,45 @@ extension TradingViewModel {
         
         print("📡 ArgusDataService: fetchCandles() called for \(watchlist.count) symbols")
         
+        // 1. Collect Data in Background (No UI Updates yet)
+        var collectedData: [String: [Candle]] = [:]
+        
         for symbol in watchlist {
-            // Smart Fetching: Candles change even less frequently if day hasn't closed, 
-            // but for intraday we want updates.
+            // Smart Fetching Check
             if !shouldFetchData(for: symbol, type: "candle", isMarketOpen: isMarketOpen) {
                 continue
             }
             
-                // Rate Limit Protection: 0.5s delay between calls
-                try? await Task.sleep(nanoseconds: 500_000_000)
+            // Rate Limit Protection
+            try? await Task.sleep(nanoseconds: 200_000_000) // Reduced 500ms -> 200ms
+            
+            // Request 400 candles
+            do {
+                let candleData = try await ArgusDataService.shared.fetchCandles(symbol: symbol, timeframe: "1D", limit: 400)
+                // Thread-safe append to local variable
+                collectedData[symbol] = candleData
                 
-                // Request 400 candles for proper backtest support
-                print("📡 Candles: \(symbol)")
-                do {
-                    let candleData = try await ArgusDataService.shared.fetchCandles(symbol: symbol, timeframe: "1D", limit: 400)
-                    print("📡 Received \(candleData.count) candles for \(symbol)")
-                    await MainActor.run {
-                        self.candles[symbol] = candleData
-                        self.lastFetchTime["\(symbol)_candle"] = Date()
-                    }
-                } catch {
-                    print("⚠️ Candle fetch failed for \(symbol): \(error)")
-                }
+                // Track fetch time locally
+                // We'll update main Dictionary later
+            } catch {
+                print("⚠️ Candle fetch failed for \(symbol): \(error)")
+            }
+        }
+        
+        guard !collectedData.isEmpty else { return }
+        
+        // 2. Batch Update on Main Thread (SINGLE RENDER)
+        await MainActor.run {
+            // Copy current dict to minimize mutation cost
+            var newCandles = self.candles
+            
+            for (symbol, data) in collectedData {
+                newCandles[symbol] = data
+                self.lastFetchTime["\(symbol)_candle"] = Date()
+            }
+            
+            self.candles = newCandles // Trigger ONE view update
+            print("📡 ArgusDataService: Batch updated candles for \(collectedData.count) symbols")
         }
     }
     

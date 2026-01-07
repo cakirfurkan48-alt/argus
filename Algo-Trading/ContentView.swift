@@ -14,9 +14,13 @@ struct ContentView: View {
                 .zIndex(0)
             
             if !isAppReady {
-                SplashScreenView(isAppReady: $isAppReady)
-                    .zIndex(2)
-                    .transition(.opacity)
+                ArgusCinematicIntro(onFinished: {
+                    withAnimation {
+                        isAppReady = true
+                    }
+                })
+                .zIndex(2)
+                .transition(.opacity)
             } else {
                 ZStack(alignment: .bottom) {
                     // Main Content

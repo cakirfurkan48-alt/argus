@@ -411,10 +411,14 @@ extension TradingViewModel {
                      sirkiyeInput = SirkiyeEngine.SirkiyeInput(
                          usdTry: q.currentPrice,
                          usdTryPrevious: q.previousClose ?? q.currentPrice,
-                         dxy: 104.0, // Fallback/Global
+                         dxy: 104.0,
                          brentOil: 80.0,
                          globalVix: 20.0,
-                         newsSnapshot: hermesSnapshot // Passing Real News data for Political Cortex
+                         newsSnapshot: hermesSnapshot,
+                         currentInflation: 45.0,
+                         xu100Change: nil,
+                         xu100Value: nil,
+                         goldPrice: nil
                      )
                  }
              }

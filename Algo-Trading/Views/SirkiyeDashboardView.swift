@@ -4,15 +4,45 @@ struct SirkiyeDashboardView: View {
     @ObservedObject var viewModel: TradingViewModel
     @State private var rotateOrbit = false
     @State private var showDetails = false
+    @State private var xu100Value: Double = 0
+    @State private var xu100Change: Double = 0
     
-    // Derived from ViewModel or Mock for now if not computed globally
-    // Ideally this should come from SirkiyeEngine via ViewModel
+    // Gerçek veriyi ViewModel'den al
     var atmosphere: (score: Double, mode: MarketMode, reason: String) {
-        // Quick fallback or get from ViewModel if implemented
-        // For now, assume neutral if no data, but we want it to be real.
-        // We will assume ViewModel exposes a 'bistAtmosphere' or similar later.
-        // For now, we visualize a placeholder that invites the user to tap for details.
-        return (55.0, .neutral, "Analiz Bekleniyor")
+        if let decision = viewModel.bistAtmosphere {
+            let score = decision.netSupport * 100.0
+            let reason = decision.winningProposal?.reasoning ?? "Analiz tamamlandı"
+            return (score, decision.marketMode, reason)
+        } else {
+            return (50.0, .neutral, "Veri bekleniyor...")
+        }
+    }
+    
+    var statusIndicator: (color: Color, text: String) {
+        if viewModel.bistAtmosphere != nil {
+            return (.green, "Canlı Veri")
+        } else {
+            return (.orange, "Güncelleniyor...")
+        }
+    }
+    
+    var xu100DisplayValue: String {
+        if xu100Value > 0 {
+            return String(format: "%.0f", xu100Value)
+        }
+        return "---"
+    }
+    
+    var xu100ChangeText: String {
+        if xu100Value > 0 {
+            let sign = xu100Change >= 0 ? "+" : ""
+            return "\(sign)\(String(format: "%.1f", xu100Change))%"
+        }
+        return ""
+    }
+    
+    var xu100ChangeColor: Color {
+        return xu100Change >= 0 ? Theme.positive : Theme.negative
     }
     
     var body: some View {
@@ -25,18 +55,18 @@ struct SirkiyeDashboardView: View {
                         .frame(width: 50, height: 50)
                     
                     Circle()
-                        .trim(from: 0, to: 0.7)
+                        .trim(from: 0, to: CGFloat(atmosphere.score / 100.0))
                         .stroke(
-                            AngularGradient(gradient: Gradient(colors: [.cyan, .purple, .red]), center: .center),
+                            AngularGradient(gradient: Gradient(colors: modeColors), center: .center),
                             style: StrokeStyle(lineWidth: 4, lineCap: .round)
                         )
                         .frame(width: 50, height: 50)
-                        .rotationEffect(.degrees(rotateOrbit ? 360 : 0))
-                        .animation(Animation.linear(duration: 8).repeatForever(autoreverses: false), value: rotateOrbit)
+                        .rotationEffect(.degrees(-90))
                     
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 20))
-                        .foregroundColor(.cyan)
+                    // Skor göstergesi
+                    Text("\(Int(atmosphere.score))")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(scoreColor)
                 }
                 .padding(.leading, 16)
                 .padding(.vertical, 16)
@@ -49,14 +79,14 @@ struct SirkiyeDashboardView: View {
                         .foregroundColor(.gray)
                         .tracking(1)
                     
-                    Text("Politik Atmosfer")
+                    Text(modeDisplayText)
                         .font(.headline)
                         .bold()
                         .foregroundColor(.white)
                     
                     HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 6, height: 6)
-                        Text("Veri Akışı Aktif")
+                        Circle().fill(statusIndicator.color).frame(width: 6, height: 6)
+                        Text(statusIndicator.text)
                             .font(.caption2)
                             .foregroundColor(.gray)
                     }
@@ -65,14 +95,20 @@ struct SirkiyeDashboardView: View {
                 
                 Spacer()
                 
-                // Right: Value/Action
-                VStack(alignment: .trailing) {
+                // Right: XU100 Endeks Değeri (Gerçek Veri)
+                VStack(alignment: .trailing, spacing: 4) {
                     Text("BIST 100")
-                        .font(.caption).bold().foregroundColor(.secondary)
+                        .font(.caption2).bold().foregroundColor(.secondary)
                     
-                    Text("RİSK ANALİZİ")
-                        .font(.caption2).bold()
-                        .paddingbadge(Color.purple)
+                    Text(xu100DisplayValue)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    if !xu100ChangeText.isEmpty {
+                        Text(xu100ChangeText)
+                            .font(.caption2).bold()
+                            .foregroundColor(xu100ChangeColor)
+                    }
                 }
                 .padding(.trailing, 16)
             }
@@ -83,9 +119,84 @@ struct SirkiyeDashboardView: View {
             )
             .padding(.horizontal, 16)
         }
-        .onAppear { rotateOrbit = true }
+        .onAppear { 
+            rotateOrbit = true
+            // İlk yüklemede atmosferi ve XU100'ü güncelle
+            Task {
+                if viewModel.bistAtmosphere == nil {
+                    await viewModel.refreshBistAtmosphere()
+                }
+                await loadXU100()
+            }
+        }
         .sheet(isPresented: $showDetails) {
             SirkiyeDetailsSheet(viewModel: viewModel)
+        }
+    }
+    
+    // MARK: - XU100 Loader
+    private func loadXU100() async {
+        do {
+            let quote = try await BorsaPyProvider.shared.getXU100()
+            await MainActor.run {
+                xu100Value = quote.last
+                xu100Change = quote.changePercent
+            }
+        } catch {
+            print("⚠️ XU100 yüklenemedi: \(error)")
+        }
+    }
+    
+    // MARK: - Helper Properties
+    
+    private var modeColors: [Color] {
+        switch atmosphere.mode {
+        case .panic: return [.red, .orange]
+        case .extremeFear: return [.red, .pink]
+        case .fear: return [.orange, .yellow]
+        case .neutral: return [.cyan, .purple]
+        case .greed: return [.green, .cyan]
+        case .extremeGreed: return [.green, .yellow]
+        case .complacency: return [.purple, .gray]
+        }
+    }
+    
+    private var scoreColor: Color {
+        if atmosphere.score >= 70 { return .green }
+        else if atmosphere.score >= 50 { return .cyan }
+        else if atmosphere.score >= 30 { return .orange }
+        else { return .red }
+    }
+    
+    private var modeDisplayText: String {
+        switch atmosphere.mode {
+        case .panic: return "🚨 PANİK MOD"
+        case .extremeFear: return "🔴 AŞIRI KORKU"
+        case .fear: return "⚠️ KORKU MOD"
+        case .neutral: return "Politik Atmosfer"
+        case .greed: return "✅ AÇGÖZLÜ MOD"
+        case .extremeGreed: return "🟢 AŞIRI AÇGÖZLÜLÜK"
+        case .complacency: return "😴 REHAVET"
+        }
+    }
+    
+    private var stanceText: String {
+        guard let decision = viewModel.bistAtmosphere else { return "BEKLENİYOR" }
+        switch decision.stance {
+        case .riskOff: return "RİSK KAPALI"
+        case .defensive: return "DEFANSİF"
+        case .cautious: return "TEDBİRLİ"
+        case .riskOn: return "RİSK AÇIK"
+        }
+    }
+    
+    private var stanceColor: Color {
+        guard let decision = viewModel.bistAtmosphere else { return .gray }
+        switch decision.stance {
+        case .riskOff: return .red
+        case .defensive: return .orange
+        case .cautious: return .yellow
+        case .riskOn: return .green
         }
     }
 }
@@ -147,12 +258,124 @@ struct SirkiyeDetailsSheet: View {
                                 .font(.caption).foregroundColor(.gray)
                         }
                         
-                        // Score Cards
+                        // Score Cards - Gerçek Verilerle
                         HStack(spacing: 16) {
-                            ScoreCard(title: "POLİTİK", value: "NÖTR", color: .yellow, icon: "building.columns.fill")
-                            ScoreCard(title: "JEOPOLİTİK", value: "SAKİN", color: .green, icon: "globe.europe.africa.fill")
+                            ScoreCard(
+                                title: "POLİTİK RİSK",
+                                value: politicalRiskValue,
+                                color: politicalRiskColor,
+                                icon: "building.columns.fill"
+                            )
+                            ScoreCard(
+                                title: "GENEL DURUŞ", 
+                                value: stanceValue,
+                                color: stanceColor,
+                                icon: "shield.fill"
+                            )
                         }
                         .padding(.horizontal)
+                        
+                        // Sirkiye Detay Kartı
+                        if let decision = viewModel.bistAtmosphere {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("SİRKİYE ANALİZİ")
+                                        .font(.caption).bold().foregroundColor(.gray)
+                                    Spacer()
+                                    if let updated = viewModel.bistAtmosphereLastUpdated {
+                                        Text(timeAgo(updated))
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                
+                                // Skor göstergesi
+                                HStack {
+                                    Text("Atmosfer Skoru:")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(Int(decision.netSupport * 100))/100")
+                                        .font(.title2).bold()
+                                        .foregroundColor(scoreColor(decision.netSupport * 100))
+                                }
+                                
+                                // V2: USD/TRY ve Reel Getiri Göstergeleri
+                                HStack(spacing: 12) {
+                                    // USD/TRY Mini Card
+                                    VStack(spacing: 4) {
+                                        Text("USD/TRY")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                        Text(String(format: "%.2f", viewModel.usdTryRate))
+                                            .font(.title3).bold()
+                                            .foregroundColor(.white)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(8)
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(8)
+                                    
+                                    // Enflasyon Mini Card
+                                    VStack(spacing: 4) {
+                                        Text("ENFLASYON")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                        Text("~%45")
+                                            .font(.title3).bold()
+                                            .foregroundColor(.orange)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(8)
+                                    .background(Color.orange.opacity(0.1))
+                                    .cornerRadius(8)
+                                    
+                                    // Reel Getiri Mini Card
+                                    VStack(spacing: 4) {
+                                        Text("REEL GETİRİ")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                        // XU100 1Y - Enflasyon (tahmini)
+                                        Text("-%12")
+                                            .font(.title3).bold()
+                                            .foregroundColor(.red)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(8)
+                                    .background(Color.red.opacity(0.1))
+                                    .cornerRadius(8)
+                                }
+                                
+                                Divider().background(Color.gray.opacity(0.3))
+                                
+                                // Reasoning
+                                if let proposal = decision.winningProposal {
+                                    Text(proposal.reasoning)
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                        .padding(8)
+                                        .background(Color.black.opacity(0.3))
+                                        .cornerRadius(8)
+                                }
+                                
+                                // Uyarılar
+                                if !decision.warnings.isEmpty {
+                                    ForEach(decision.warnings, id: \.self) { warning in
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundColor(.orange)
+                                            Text(warning)
+                                                .font(.caption)
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding()
+                            .background(Theme.secondaryBackground)
+                            .cornerRadius(12)
+                            .padding(.horizontal)
+                        }
                         
                         // News Feed Placeholder
                         VStack(alignment: .leading, spacing: 12) {
@@ -217,6 +440,61 @@ struct SirkiyeDetailsSheet: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+    
+    // MARK: - Computed Properties for Real Data
+    
+    private var politicalRiskValue: String {
+        guard let decision = viewModel.bistAtmosphere else { return "BEKLENİYOR" }
+        switch decision.marketMode {
+        case .panic: return "KRİTİK"
+        case .extremeFear: return "KRİTİK"
+        case .fear: return "YÜKSEK"
+        case .neutral: return "NÖTR"
+        case .greed: return "DÜŞÜK"
+        case .extremeGreed: return "ÇOK DÜŞÜK"
+        case .complacency: return "REHAVET"
+        }
+    }
+    
+    private var politicalRiskColor: Color {
+        guard let decision = viewModel.bistAtmosphere else { return .gray }
+        switch decision.marketMode {
+        case .panic: return .red
+        case .extremeFear: return .red
+        case .fear: return .orange
+        case .neutral: return .yellow
+        case .greed: return .green
+        case .extremeGreed: return .green
+        case .complacency: return .purple
+        }
+    }
+    
+    private var stanceValue: String {
+        guard let decision = viewModel.bistAtmosphere else { return "BEKLENİYOR" }
+        switch decision.stance {
+        case .riskOff: return "KAPALI"
+        case .defensive: return "DEFANSİF"
+        case .cautious: return "TEDBİRLİ"
+        case .riskOn: return "AÇIK"
+        }
+    }
+    
+    private var stanceColor: Color {
+        guard let decision = viewModel.bistAtmosphere else { return .gray }
+        switch decision.stance {
+        case .riskOff: return .red
+        case .defensive: return .orange
+        case .cautious: return .yellow
+        case .riskOn: return .green
+        }
+    }
+    
+    private func scoreColor(_ score: Double) -> Color {
+        if score >= 70 { return .green }
+        else if score >= 50 { return .cyan }
+        else if score >= 30 { return .orange }
+        else { return .red }
     }
 }
 

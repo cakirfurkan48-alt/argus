@@ -56,31 +56,20 @@ struct HolographicBalanceCard: View {
         return mode == .global ? "ARGUS PORTFOLIO" : "BIST PORTFÖY"
     }
     
-    // BIST Helpers
+    // BIST Helpers - Artık ViewModel fonksiyonlarını kullanıyoruz
     private func calculateBistEquity() -> Double {
-        let portfolioValue = viewModel.portfolio
-            .filter { ($0.symbol.hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) && $0.isOpen }
-            .reduce(0.0) { sum, trade in
-                let price = viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
-                return sum + (price * trade.quantity)
-            }
-        return viewModel.bistBalance + portfolioValue
+        return viewModel.getBistEquity()
     }
     
     private func calculateBistRealized() -> Double {
-        // BIST realized calculation (Approximation for UI)
-        return viewModel.transactionHistory
-            .filter { $0.type == .sell && ($0.symbol.hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) }
-            .reduce(0.0) { $0 + ($1.pnl ?? 0) }
+        // BIST realized calculation (Tüm kapalı BIST işlemlerinden)
+        return viewModel.portfolio
+            .filter { !$0.isOpen && ($0.symbol.hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) }
+            .reduce(0.0) { $0 + $1.profit }
     }
     
     private func calculateBistUnrealized() -> Double {
-        return viewModel.portfolio
-            .filter { ($0.symbol.hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) && $0.isOpen }
-            .reduce(0.0) { sum, trade in
-                let currentPrice = viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
-                return sum + ((currentPrice - trade.entryPrice) * trade.quantity)
-            }
+        return viewModel.getBistUnrealizedPnL()
     }
     
     var body: some View {

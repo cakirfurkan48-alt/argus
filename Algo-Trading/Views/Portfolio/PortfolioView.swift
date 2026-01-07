@@ -79,11 +79,17 @@ struct PortfolioView: View {
                         // 3. Trade List
                         ScrollView {
                             LazyVStack(spacing: 16) {
+                                // Global Portföy - BIST hisseleri HARİÇ
+                                let globalPortfolio = viewModel.portfolio.filter { trade in
+                                    let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
+                                    return !isBist // Sadece Global hisseleri göster
+                                }
+                                
                                 if selectedEngine == .all {
                                     // Combined View
-                                    if !viewModel.portfolio.isEmpty {
+                                    if !globalPortfolio.isEmpty {
                                         // Active Section
-                                        ForEach(viewModel.portfolio.filter { $0.isOpen }) { trade in
+                                        ForEach(globalPortfolio.filter { $0.isOpen }) { trade in
                                             PortfolioCard(
                                                 trade: trade,
                                                 selectedTrade: $selectedTrade,
@@ -130,7 +136,7 @@ struct PortfolioView: View {
                                 } else {
                                     // Filtered View
                                     let targetEngine: AutoPilotEngine? = (selectedEngine == .corse) ? .corse : .pulse
-                                    let filtered = viewModel.portfolio.filter { $0.engine == targetEngine && $0.isOpen }
+                                    let filtered = globalPortfolio.filter { $0.engine == targetEngine && $0.isOpen }
                                     
                                     if !filtered.isEmpty {
                                         ForEach(filtered) { trade in

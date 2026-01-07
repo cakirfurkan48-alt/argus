@@ -76,24 +76,29 @@ struct MarketView: View {
                     ScrollView {
                         LazyVStack(spacing: 24) {
                             
-                            // 1. Global Markets
-                            GlobalCockpitView(
-                                viewModel: viewModel, // Pass Environment Object explicitly if needed by struct
-                                watchlist: filteredWatchlist.filter { !SymbolResolver.shared.isBistSymbol($0) },
-                                showAetherDetail: $showAetherDetail,
-                                deleteAction: { symbol in
-                                    deleteSymbol(symbol)
-                                }
-                            )
-                            
-                            // 2. Borsa Istanbul
-                            BistCockpitView(
-                                viewModel: viewModel, // Pass Environment Object
-                                watchlist: filteredWatchlist.filter { SymbolResolver.shared.isBistSymbol($0) },
-                                deleteAction: { symbol in
-                                   deleteSymbol(symbol)
-                                }
-                            )
+                            // Market Tab'a göre ilgili Cockpit'i göster
+                            switch selectedMarket {
+                            case .global:
+                                // 1. Global Markets
+                                GlobalCockpitView(
+                                    viewModel: viewModel,
+                                    watchlist: filteredWatchlist, // Zaten global filtrelenmiş
+                                    showAetherDetail: $showAetherDetail,
+                                    deleteAction: { symbol in
+                                        deleteSymbol(symbol)
+                                    }
+                                )
+                                
+                            case .bist:
+                                // 2. Borsa Istanbul (Sirkiye en üstte)
+                                BistCockpitView(
+                                    viewModel: viewModel,
+                                    watchlist: filteredWatchlist, // Zaten BIST filtrelenmiş
+                                    deleteAction: { symbol in
+                                       deleteSymbol(symbol)
+                                    }
+                                )
+                            }
                             
                             Spacer(minLength: 100)
                         }

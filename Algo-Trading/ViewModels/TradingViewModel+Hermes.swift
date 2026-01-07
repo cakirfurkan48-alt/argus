@@ -243,6 +243,109 @@ extension TradingViewModel {
     func loadGeneralFeed() {
         isLoadingNews = true
         loadNewsAndInsights(for: "GENERAL", isGeneral: true)
+        
+        // BIST haberleri yüklenirken Sirkiye Atmosferini de güncelle
+        Task {
+            await refreshBistAtmosphere()
+        }
+    }
+    
+    // MARK: - Sirkiye Engine Integration (BIST Politik Atmosfer)
+    
+    /// Sirkiye Engine'i çağırarak BIST için politik atmosferi hesaplar
+    /// BorsaPyProvider'dan gerçek USD/TRY, Brent ve haber verilerini kullanır
+    @MainActor
+    func refreshBistAtmosphere() async {
+        // 1. USD/TRY Kuru (BorsaPyProvider - Doviz.com'dan)
+        var usdTry: Double = self.usdTryRate
+        var usdTryPrevious: Double = self.usdTryRate
+        
+        do {
+            let fxRate = try await BorsaPyProvider.shared.getFXRate(asset: "USD")
+            usdTry = fxRate.last
+            usdTryPrevious = fxRate.open
+            self.usdTryRate = usdTry
+            print("💱 BorsaPy: USD/TRY = \(String(format: "%.4f", usdTry))")
+        } catch {
+            // Fallback: Mevcut quote'ları kullan
+            if let usdTryQuote = self.quotes["USD/TRY"] ?? self.quotes["USDTRY=X"] {
+                usdTry = usdTryQuote.currentPrice
+                usdTryPrevious = usdTryQuote.previousClose ?? usdTryQuote.currentPrice
+            }
+        }
+        
+        // 2. Global VIX (Gerçek Veri)
+        var globalVix: Double? = nil
+        if let vixQuote = self.quotes["^VIX"] {
+            globalVix = vixQuote.currentPrice
+        } else if let macro = self.macroRating {
+            globalVix = macro.volatilityScore // VIX yerine volatilityScore kullan
+        }
+        
+        // 3. Brent Petrol (BorsaPyProvider - Doviz.com'dan)
+        var brentOil: Double? = nil
+        do {
+            let brentRate = try await BorsaPyProvider.shared.getBrentPrice()
+            brentOil = brentRate.last
+            print("🛢️ BorsaPy: Brent = $\(String(format: "%.2f", brentRate.last))")
+        } catch {
+            // Fallback: Mevcut quote'ları kullan
+            if let brentQuote = self.quotes["BZ=F"] ?? self.quotes["BRENT"] {
+                brentOil = brentQuote.currentPrice
+            }
+        }
+        
+        // 4. DXY (Dolar Endeksi) - Sadece quote'tan al
+        var dxy: Double? = nil
+        if let dxyQuote = self.quotes["DX-Y.NYB"] ?? self.quotes["DXY"] {
+            dxy = dxyQuote.currentPrice
+        }
+        
+        // 5. Haber Verisi (Sirkiye için Türkiye haberleri)
+        // generalNewsInsights veya BIST hissesi haberlerinden derle
+        let turkeyRelatedInsights = self.generalNewsInsights.filter { insight in
+            let text = insight.headline.lowercased()
+            return text.contains("türk") || text.contains("turk") || 
+                   text.contains("erdoğan") || text.contains("erdogan") ||
+                   text.contains("tcmb") || text.contains("merkez bankası") ||
+                   text.contains("borsa istanbul") || text.contains("bist") ||
+                   text.contains("tl") || text.contains("lira")
+        }
+        
+        // HermesNewsSnapshot oluştur (doğru parametrelerle)
+        var hermesSnapshot: HermesNewsSnapshot? = nil
+        if !turkeyRelatedInsights.isEmpty {
+            // HermesNewsSnapshot yapıcısı: symbol, timestamp, insights, articles gerekli
+            hermesSnapshot = HermesNewsSnapshot(
+                symbol: "BIST",
+                timestamp: Date(),
+                insights: turkeyRelatedInsights,
+                articles: [] // Sirkiye için raw article gerekmez, insights yeterli
+            )
+        }
+        
+        // 6. Sirkiye Engine'i çağır
+        let input = SirkiyeEngine.SirkiyeInput(
+            usdTry: usdTry,
+            usdTryPrevious: usdTryPrevious,
+            dxy: dxy,
+            brentOil: brentOil,
+            globalVix: globalVix,
+            newsSnapshot: hermesSnapshot,
+            // V2 Fields
+            currentInflation: 45.0, // TCMB'den çekilecek, şimdilik tahmini
+            xu100Change: nil,       // XU100 günlük değişim
+            xu100Value: nil,        // XU100 değeri
+            goldPrice: nil          // Gram Altın TL
+        )
+        
+        let decision = await SirkiyeEngine.shared.analyze(input: input)
+        
+        // 7. Sonucu kaydet
+        self.bistAtmosphere = decision
+        self.bistAtmosphereLastUpdated = Date()
+        
+        print("🇹🇷 Sirkiye: Atmosfer güncellendi - Skor: \(Int(decision.netSupport * 100)), Mod: \(decision.marketMode)")
     }
     
     func getHermesHighlights() -> [NewsInsight] {
