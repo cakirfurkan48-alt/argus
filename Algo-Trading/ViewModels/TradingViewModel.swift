@@ -354,7 +354,15 @@ class TradingViewModel: ObservableObject {
     }
     
     deinit {
+        // Timer cleanup - memory leak prevention
         stopAutoPilotTimer()
+        scoutTimer?.invalidate()
+        scoutTimer = nil
+        
+        // Combine subscriptions cleanup
+        cancellables.removeAll()
+        
+        print("🧹 TradingViewModel deinit - all resources cleaned up")
     }
     
 
