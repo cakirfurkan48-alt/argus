@@ -2,11 +2,11 @@ import Foundation
 
 // MARK: - Argus V3 Action Types
 enum ArgusAction: String, Sendable, Codable {
-    case aggressiveBuy = "🚀 HÜCUM"             // Güçlü Alım
-    case accumulate = "📈 BİRİKTİR"             // Kademeli Alım
-    case neutral = "⏸️ GÖZLE"                   // Bekle / Tut
-    case trim = "📉 AZALT"                      // Satış (Kâr Al)
-    case liquidate = "⛔ ÇIK"                   // Tam Çıkış (Stop)
+    case aggressiveBuy = "HÜCUM"                // Güçlü Alım
+    case accumulate = "BİRİKTİR"                // Kademeli Alım
+    case neutral = "GÖZLE"                      // Bekle / Tut
+    case trim = "AZALT"                         // Satış (Kâr Al)
+    case liquidate = "ÇIK"                      // Tam Çıkış (Stop)
     
     var colorName: String {
         switch self {
@@ -60,6 +60,9 @@ struct ArgusGrandDecision: Sendable, Equatable, Codable {
     
     // NEW: BIST V2 Result
     let bistDetails: BistDecisionResult?
+    
+    // NEW: Orion V3 Patterns
+    let patterns: [OrionChartPattern]?
     
     let timestamp: Date
     
@@ -129,6 +132,12 @@ actor ArgusGrandCouncil {
         print("=".padding(toLength: 50, withPad: "=", startingAt: 0))
         
         let isBist = symbol.uppercased().hasSuffix(".IS")
+        
+        // 1.5 Orion V3 Pattern Detection (Synchronous calculation for decision input)
+        let detectedPatterns = OrionPatternEngine.shared.detectPatterns(candles: candles)
+        if !detectedPatterns.isEmpty {
+            print("📐 Orion V3: \(detectedPatterns.count) formasyon tespit edildi.")
+        }
         
         // 2. Gather all council decisions (Parallel execution could be optimized here)
         let orionDecision: CouncilDecision
@@ -274,6 +283,7 @@ actor ArgusGrandCouncil {
                     analystCount: nil
                 ) : nil,
                 bistDetails: bistRes, // <--- BIST V2 RESULT
+                patterns: detectedPatterns,
                 timestamp: Date()
             )
             
@@ -289,6 +299,7 @@ actor ArgusGrandCouncil {
             atlas: atlasDecision,
             aether: aetherDecision,
             hermes: hermesDecision,
+            patterns: detectedPatterns,
             engine: engine,
             weights: weights,
             // Rich Data context
@@ -368,6 +379,7 @@ actor ArgusGrandCouncil {
         atlas: AtlasDecision?,
         aether: AetherDecision,
         hermes: HermesDecision?,
+        patterns: [OrionChartPattern],
         engine: AutoPilotEngine,
         weights: CouncilMemberWeights,
         // Details
@@ -402,6 +414,24 @@ actor ArgusGrandCouncil {
             confidence: orion.netSupport,
             reasoning: "Teknik: \(orion.action.rawValue)"
         ))
+        
+        // --- 1.1 ORION V3 PATTERN VETO ---
+        // Bearish formasyonlar, Alım işlemlerini VETO eder
+        if let bestPattern = patterns.sorted(by: { $0.confidence > $1.confidence }).first, bestPattern.confidence > 60 {
+            if bestPattern.type.isBearish && (orion.action == .buy || orion.action == .hold) {
+                vetoes.append(ModuleVeto(
+                    module: "Orion Patterns",
+                    reason: "\(bestPattern.type.rawValue) Formasyonu Tespit Edildi (Güven: %\(Int(bestPattern.confidence)))"
+                ))
+            } else if bestPattern.type.isBullish {
+                contributors.append(ModuleContribution(
+                    module: "Orion Patterns",
+                    action: .buy,
+                    confidence: bestPattern.confidence / 100.0,
+                    reasoning: "\(bestPattern.type.rawValue) Formasyonu"
+                ))
+            }
+        }
         
         if isOrionSell {
             // Can be treated as advice, not strict veto unless we are buying
@@ -453,6 +483,9 @@ actor ArgusGrandCouncil {
         }
         
         // --- 4. HERMES (News) ---
+        // Hermes V2 Boost/Drag Logic
+        var hermesMultiplier: Double = 1.0
+        
         if let hermes = hermes {
             // Determine action based on sentiment
             let hermesAction: ProposedAction
@@ -462,10 +495,13 @@ actor ArgusGrandCouncil {
             
             if isPositive {
                 hermesAction = .buy
+                hermesMultiplier = 1.15 // %15 Boost
             } else if isNegative {
                 hermesAction = .sell
+                hermesMultiplier = 0.85 // %15 Drag
             } else {
                 hermesAction = .hold
+                hermesMultiplier = 1.0
             }
             
             // Hermes ALWAYS contributes when data exists
@@ -473,7 +509,7 @@ actor ArgusGrandCouncil {
                 module: "Hermes",
                 action: hermesAction,
                 confidence: hermes.netSupport,
-                reasoning: "Haber: \(hermes.sentiment.rawValue)"
+                reasoning: "Haber: \(hermes.sentiment.rawValue) (Etki: x\(String(format: "%.2f", hermesMultiplier)))"
             ))
             
             // Still veto on high-impact negative
@@ -497,7 +533,7 @@ actor ArgusGrandCouncil {
             } else {
                 finalAction = .neutral
                 strength = .vetoed
-                reasoning = "Alım sinyali Konsey tarafından veto edildi: \(vetoes.first?.reason ?? "")"
+                reasoning = "Konsey VETOSU: \(vetoes.map{ $0.reason }.joined(separator: ", "))"
             }
         } else {
             // No Vetoes - Clean Path
@@ -517,6 +553,13 @@ actor ArgusGrandCouncil {
                     reasoning = "Teknik olumlu, kademeli giriş."
                 }
                 
+                // HERMES MOMENTUM BOOST
+                // Eğer haberler çok iyiyse ve Aether engellemiyorsa, Accumulate -> Aggressive Buy olabilir
+                if hermesMultiplier > 1.1 && finalAction == .accumulate && aether.stance != .defensive {
+                     finalAction = .aggressiveBuy
+                     reasoning += " + Hermes Momentum Desteği"
+                }
+                
             case .hold:
                 finalAction = .neutral
                 reasoning = "Mevcut pozisyon korunmalı."
@@ -533,12 +576,15 @@ actor ArgusGrandCouncil {
             reasoning += " (Makro korku nedeniyle baskılandı)"
         }
         
+        // Apply Confidence Calculation with Boost
+        let finalConfidence = min(orion.netSupport * hermesMultiplier, 1.0)
+        
         return ArgusGrandDecision(
             id: UUID(),
             symbol: symbol,
             action: finalAction,
             strength: strength,
-            confidence: orion.netSupport, // Base confidence on technicals
+            confidence: finalConfidence,
             reasoning: reasoning,
             contributors: contributors,
             vetoes: vetoes,
@@ -550,6 +596,7 @@ actor ArgusGrandCouncil {
             orionDetails: orionDetails,
             financialDetails: financialDetails,
             bistDetails: nil,
+            patterns: patterns,
             timestamp: Date()
         )
     }
@@ -673,7 +720,7 @@ actor BistGrandCouncil {
         for mod in modules {
             totalSupport += mod.supportLevel
             if mod.supportLevel < -0.5 { // Soft Veto
-                reasons.append("⚠️ \(mod.name): \(mod.commentary)")
+                reasons.append("\(mod.name): \(mod.commentary)")
             }
             if mod.action == .sell && mod.supportLevel < -0.8 {
                 vetoCount += 1
@@ -831,7 +878,11 @@ actor BistGrandCouncil {
     private func analyzeKulis(_ data: HermesDecision?) -> BistModuleResult {
         guard let data = data else { return .neutral(name: "Kulis") }
         let support = data.netSupport
-        let comm = "Haber akışı \(data.sentiment)."
+        
+        // Sentiment metnini düzelt
+        let sentimentText = data.sentiment.displayTitle // "Olumlu", "Nötr" vb.
+        let comm = "Haber akışı: \(sentimentText). Piyasa algısı \(data.isHighImpact ? "yüksek" : "normal") seviyede."
+        
         let action = data.actionBias
         return BistModuleResult(name: "Kulis", score: 50 + (support * 50), action: action, commentary: comm, supportLevel: support)
     }
