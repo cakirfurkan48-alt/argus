@@ -192,8 +192,14 @@ struct BISTSentimentPulseCard: View {
             }
         }
         .padding(16)
-        .background(Theme.cardBackground)
-        .cornerRadius(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(hex: "1C1C1E"))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                )
+        )
         .onAppear { loadData() }
     }
     
