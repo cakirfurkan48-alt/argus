@@ -93,15 +93,40 @@ actor BISTSentimentEngine {
         }
         
         // 2. Sembolle ilgili haberleri filtrele
-        let relevantArticles = filterRelevantArticles(articles, for: cleanSymbol)
+        var relevantArticles = filterRelevantArticles(articles, for: cleanSymbol)
+        var isGeneralMarket = false
+        
+        // FALLBACK: Eğer hisse özelinde haber yoksa, genel piyasa sentimentini kullan
+        if relevantArticles.count < 2 {
+            print("⚠️ BISTSentiment: \(cleanSymbol) için yeterli haber yok. Genel piyasa analizi yapılıyor.")
+            relevantArticles = articles // Tüm BIST haberlerini kullan (zaten RSSNewsProvider BIST kategorisini getirdi)
+            isGeneralMarket = true
+        }
         
         // 3. Sentiment analizi yap
-        let result = calculateSentiment(articles: relevantArticles, symbol: cleanSymbol)
+        var result = calculateSentiment(articles: relevantArticles, symbol: cleanSymbol)
+        
+        // Genel piyasa bayrağını işaretle
+        if isGeneralMarket {
+            result = BISTSentimentResult(
+                symbol: symbol,
+                overallScore: result.overallScore,
+                bullishPercent: result.bullishPercent,
+                bearishPercent: result.bearishPercent,
+                neutralPercent: result.neutralPercent,
+                newsVolume: result.newsVolume,
+                relevantNewsCount: result.relevantNewsCount,
+                keyHeadlines: result.keyHeadlines,
+                mentionTrend: result.mentionTrend,
+                lastUpdated: result.lastUpdated,
+                isGeneralMarketSentiment: true
+            )
+        }
         
         // 4. Cache'e kaydet
         cache[cleanSymbol] = (result, Date())
         
-        print("✅ BISTSentiment: \(cleanSymbol) için \(relevantArticles.count) ilgili haber analiz edildi. Skor: \(Int(result.overallScore))")
+        print("✅ BISTSentiment: \(cleanSymbol) analizi tamamlandı (Genel Piyasa: \(isGeneralMarket)). Skor: \(Int(result.overallScore))")
         
         return result
     }
@@ -164,6 +189,11 @@ actor BISTSentimentEngine {
             }
         }
         
+        // Eğer hiç headline seçilmediyse rastgele 5 tane al (Haber akışı dolu görünsün)
+        if keyHeadlines.isEmpty {
+            keyHeadlines = articles.prefix(5).map { $0.headline }
+        }
+        
         let totalRelevant = positiveCount + negativeCount
         let neutralCount = articles.count - totalRelevant
         
@@ -204,7 +234,8 @@ actor BISTSentimentEngine {
             relevantNewsCount: positiveCount + negativeCount + neutralCount,
             keyHeadlines: Array(keyHeadlines.prefix(5)),
             mentionTrend: trend,
-            lastUpdated: Date()
+            lastUpdated: Date(),
+            isGeneralMarketSentiment: false
         )
     }
     
@@ -236,6 +267,7 @@ struct BISTSentimentResult {
     let keyHeadlines: [String]        // Öne çıkan başlıklar
     let mentionTrend: MentionTrend    // Artan/Azalan/Stabil
     let lastUpdated: Date
+    let isGeneralMarketSentiment: Bool // True ise hisse özelinde haber yok, genel piyasa kullanıldı
     
     /// Sentiment durumu (UI için)
     var sentimentLabel: String {
@@ -258,7 +290,8 @@ struct BISTSentimentResult {
             relevantNewsCount: 0,
             keyHeadlines: [],
             mentionTrend: .stable,
-            lastUpdated: Date()
+            lastUpdated: Date(),
+            isGeneralMarketSentiment: false
         )
     }
 }

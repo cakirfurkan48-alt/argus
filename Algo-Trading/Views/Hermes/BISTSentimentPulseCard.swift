@@ -23,7 +23,7 @@ struct BISTSentimentPulseCard: View {
                             .foregroundColor(.orange)
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Piyasa Nabzı")
+                            Text(result?.isGeneralMarketSentiment == true ? "Piyasa Nabzı (Genel)" : "Piyasa Nabzı")
                                 .font(.headline)
                                 .foregroundColor(.white)
                             
@@ -70,6 +70,22 @@ struct BISTSentimentPulseCard: View {
             if let result = result, result.newsVolume > 0 {
                 // MARK: - Sentiment Gauge
                 VStack(spacing: 12) {
+                    
+                    // GENEL PIYASA UYARISI
+                    if result.isGeneralMarketSentiment {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundColor(.yellow)
+                            Text("Hisseye özel haber yok. Genel piyasa görünümü.")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                        }
+                        .padding(6)
+                        .background(Color.yellow.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                    
                     // Ana Gauge
                     ZStack {
                         // Background Arc
