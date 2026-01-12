@@ -144,8 +144,73 @@ extension TradingViewModel {
         // Experimental Lab (Async) - Does not block Argus
         Task { await loadSarTsiLab(symbol: symbol) }
         
-        // 3. Hermes Score (News) - On Demand Analysis (Grok)
-        let hermesScore = await HermesCoordinator.shared.analyzeOnDemand(symbol: symbol)
+        // 3. Hermes Score Logic (News)
+        var hermesScore: Double? = nil
+        let isBist = symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol)
+        
+        if isBist {
+            // 🆕 BIST Sentient Logic (RSS Tabanlı)
+            print("🇹🇷 BIST Integrasyonu: \(symbol) için Sentiment ve Forecast kontrol ediliyor...")
+            
+            // A. BISTSentimentEngine (Hermes Score)
+            if let sentiment = try? await BISTSentimentEngine.shared.analyzeSentiment(for: symbol) {
+                print("✅ BIST Sentiment Başarılı: \(Int(sentiment.overallScore))")
+                hermesScore = sentiment.overallScore
+                
+                // UI için Insight oluştur (Opsiyonel: Detayları populate etmek)
+                await MainActor.run {
+                    self.newsInsightsBySymbol[symbol] = sentiment.keyHeadlines.map { headline in
+                        NewsInsight(
+                            symbol: symbol,
+                            articleId: UUID().uuidString,
+                            headline: headline,
+                            summaryTRLong: "RSS Kaynağından çekilen haber başlığı.",
+                            impactSentenceTR: sentiment.sentimentLabel,
+                            sentiment: sentiment.overallScore > 60 ? .strongPositive : (sentiment.overallScore < 40 ? .weakNegative : .neutral),
+                            confidence: 0.8,
+                            impactScore: sentiment.overallScore,
+                            createdAt: sentiment.lastUpdated
+                        )
+                    }
+                }
+            }
+            
+            // B. Prometheus (Forecast) Boost for Orion (Technical)
+            if let candles = self.candles[symbol], candles.count >= 30, let orion = orionScore {
+                let forecast = await PrometheusEngine.shared.forecast(symbol: symbol, historicalPrices: candles.map { $0.close })
+                if forecast.isValid {
+                    // Forecast Trend'ine göre Orion skorunu modifiye et
+                    var forecastBoost = 0.0
+                    switch forecast.trend {
+                    case .strongBullish: forecastBoost = 5.0
+                    case .bullish: forecastBoost = 2.5
+                    case .neutral: forecastBoost = 0.0
+                    case .bearish: forecastBoost = -2.5
+                    case .strongBearish: forecastBoost = -5.0
+                    }
+                    print("🔮 Prometheus Forecast: \(symbol) -> \(forecast.trend) (Boost: \(forecastBoost))")
+                    // Orion skorunu geçici olarak artırıp decision engine'e öyle verelim
+                    // Not: self.orionScores[symbol] kalıcı storage olduğu için sadece local 'orionScore' değişkenini etkilemek daha güvenli
+                    // Ancak burada orionScore 'let' olduğu için aşağıda decision tuple oluşturulurken müdahale edeceğiz.
+                    // (Implementation detail: argusDecision çağrılırken bu boost'u ekleyeceğiz)
+                }
+            }
+            
+        } else {
+            // Global Logic (Finnhub)
+            // Try Quick Sentiment first
+            let sentiment = await HermesLLMService.shared.getQuickSentiment(for: symbol)
+            
+            // Eğer haber varsa skoru kullan (Yoksa fallback'e git)
+            if sentiment.newsCount > 0 {
+                hermesScore = sentiment.score
+            }
+            
+            // Fallback to Stored
+            if hermesScore == nil {
+                hermesScore = HermesCoordinator.shared.getStoredWeightedScore(for: symbol)
+            }
+        }
         
         // CORRECTION: Populate ViewModel with insights for UI
         await MainActor.run {
@@ -218,10 +283,11 @@ extension TradingViewModel {
         }
         
         
-        // 5. Cronos Score (Time)
+        
+        // 5. Cronos Score (Time) - REMOVED
         let symbolCandles = self.candles[symbol] ?? []
-        let cronosScore: Double = CronosTimeEngine.shared.calculateTimingScore(candles: symbolCandles)
-        self.cronosScores[symbol] = cronosScore
+        // let cronosScore: Double = CronosTimeEngine.shared.calculateTimingScore(candles: symbolCandles)
+        // self.cronosScores[symbol] = cronosScore
         
         // 6. Poseidon (Big Fish)
         let whaleScore = await PoseidonService.shared.analyzeSmartMoney(symbol: symbol, candles: symbolCandles)
@@ -309,7 +375,6 @@ extension TradingViewModel {
             orionDetails: self.orionScores[symbol],
             aether: aetherScore,
             hermes: hermesScore,
-            cronos: cronosScore,
             athena: athenaScore,
             phoenixAdvice: phoenixAdvice,
             demeterScore: self.getDemeterScore(for: symbol)?.totalScore, // Demeter Integration
@@ -369,7 +434,11 @@ extension TradingViewModel {
             }
         }
         
-        // 7. Run Explanation Service (Voice) via Task to prevent block
+        // 7. EXPLANATION SERVICE (DISABLED TO SAVE LLM QUOTA)
+        // LLM explanation is now generated ON-DEMAND only when user opens detail view and taps "Explain"
+        // This saves approximately 500-1000 tokens per symbol scan.
+        // To re-enable: Uncomment the Task block below.
+        /*
         Task {
             if self.argusExplanations[symbol] == nil || (self.argusExplanations[symbol]?.isOffline ?? false) {
                 do {
@@ -389,6 +458,12 @@ extension TradingViewModel {
                 }
             }
         }
+        */
+        // ALTERNATIVE: Use offline fallback always during Scout
+        if self.argusExplanations[symbol] == nil {
+            let offline = ArgusExplanationService.shared.generateOfflineExplanation(for: decision, reason: nil)
+            self.argusExplanations[symbol] = offline
+        }
         
         self.isLoadingArgus = false
         
@@ -400,8 +475,8 @@ extension TradingViewModel {
              // Advisors
              let athenaScore = self.athenaResults[symbol]
              let demeterScore = self.getDemeterScore(for: symbol)
-             let chronos = ChronosService.shared.analyzeTime(symbol: symbol, candles: dailyCandles)
-             await MainActor.run { self.chronosDetails[symbol] = chronos }
+             // let chronos = ChronosService.shared.analyzeTime(symbol: symbol, candles: dailyCandles)
+             // await MainActor.run { self.chronosDetails[symbol] = chronos }
 
              // Prepare BIST Input (Turquoise - Sirkiye (Politik Korteks))
              var sirkiyeInput: SirkiyeEngine.SirkiyeInput? = nil
@@ -432,7 +507,6 @@ extension TradingViewModel {
                  engine: .pulse, // Defaulting to pulse/standard for now
                  athena: athenaScore,
                  demeter: demeterScore,
-                 chiron: chronos,
                  sirkiyeInput: sirkiyeInput
              )
              
@@ -449,6 +523,16 @@ extension TradingViewModel {
             self.errorMessage = nil
         }
         
+        // BIST Check - BIST için BISTBilancoEngine kullan
+        let isBist = symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol)
+        
+        if isBist {
+            // BIST YOLU: BorsaPy + BISTBilancoEngine
+            await calculateBistFundamentalScore(for: symbol)
+            return
+        }
+        
+        // GLOBAL YOLU: Yahoo Finance + FundamentalScoreEngine
         do {
             // 1. API'den Veri Çek - Yahoo Finance (TwelveData Pro plan gerekli)
             print("⚡️ ATLAS: Fetching Fundamentals from Yahoo for \(symbol)...")
@@ -531,6 +615,117 @@ extension TradingViewModel {
                 self.failedFundamentals.insert(symbol)
             }
         }
+    }
+    
+    // MARK: - BIST Fundamental Score (BorsaPy + BISTBilancoEngine)
+    
+    private func calculateBistFundamentalScore(for symbol: String) async {
+        print("🏛️ BIST ATLAS: Calculating fundamental score for \(symbol) via BorsaPy...")
+        
+        do {
+            // 1. BISTBilancoEngine'den analiz çek
+            let bistSonuc = try await BISTBilancoEngine.shared.analiz(sembol: symbol)
+            
+            print("✅ BIST ATLAS: \(symbol) - Toplam Skor: \(bistSonuc.toplamSkor), F/K: \(bistSonuc.degerlemeVerisi.fk.deger ?? -1)")
+            
+            // 2. BISTBilancoSonuc'u FundamentalScoreResult'a dönüştür
+            // Böylece mevcut Argus altyapısıyla uyumlu olur
+            let result = convertBistToFundamentalResult(bistSonuc: bistSonuc, symbol: symbol)
+            
+            await MainActor.run {
+                // 3. Store'a kaydet
+                self.fundamentalScoreStore.saveScore(result)
+                
+                // 4. DataHealth güncelle
+                let health = DataHealth(
+                    symbol: symbol,
+                    lastUpdated: Date(),
+                    fundamental: CoverageComponent(available: true, quality: 0.6), // BorsaPy sınırlı veri
+                    technical: CoverageComponent(available: true, quality: 0.8),
+                    macro: CoverageComponent.present(quality: 0.7),
+                    news: CoverageComponent.present(quality: 0.5)
+                )
+                self.dataHealthBySymbol[symbol] = health
+                
+                self.objectWillChange.send()
+                self.isLoading = false
+            }
+        } catch {
+            print("❌ BIST ATLAS Failed: \(error)")
+            await MainActor.run {
+                self.failedFundamentals.insert(symbol)
+                self.isLoading = false
+            }
+        }
+    }
+    
+    /// BISTBilancoSonuc -> FundamentalScoreResult dönüşümü
+    private func convertBistToFundamentalResult(bistSonuc: BISTBilancoSonuc, symbol: String) -> FundamentalScoreResult {
+        // Değerleme verilerini FinancialsData'ya çevir
+        let financials = FinancialsData(
+            symbol: symbol,
+            currency: "TRY",
+            lastUpdated: Date(),
+            totalRevenue: nil,
+            netIncome: nil,
+            totalShareholderEquity: nil,
+            marketCap: bistSonuc.profil.piyasaDegeri,
+            revenueHistory: [],
+            netIncomeHistory: [],
+            ebitda: nil,
+            shortTermDebt: nil,
+            longTermDebt: nil,
+            operatingCashflow: nil,
+            capitalExpenditures: nil,
+            cashAndCashEquivalents: nil,
+            peRatio: bistSonuc.degerlemeVerisi.fk.deger,
+            forwardPERatio: nil,
+            priceToBook: bistSonuc.degerlemeVerisi.pddd.deger,
+            evToEbitda: bistSonuc.degerlemeVerisi.fdFavok.deger,
+            dividendYield: nil,
+            forwardGrowthEstimate: nil,
+            isETF: false
+        )
+        
+        // Değerleme grade'i belirle
+        let valuationGrade: String
+        let degerleme = bistSonuc.degerleme
+        if degerleme >= 75 { valuationGrade = "Ucuz" }
+        else if degerleme >= 50 { valuationGrade = "Makul" }
+        else { valuationGrade = "Pahalı" }
+        
+        // Özet ve highlights oluştur
+        let summary = bistSonuc.ozet
+        var highlights: [String] = []
+        if let fk = bistSonuc.degerlemeVerisi.fk.deger {
+            highlights.append("F/K: \(String(format: "%.1f", fk))x")
+        }
+        if let pddd = bistSonuc.degerlemeVerisi.pddd.deger {
+            highlights.append("PD/DD: \(String(format: "%.2f", pddd))x")
+        }
+        highlights.append(contentsOf: bistSonuc.oneCikanlar)
+        
+        // FundamentalScoreResult oluştur (doğru init parametreleri)
+        return FundamentalScoreResult(
+            symbol: symbol,
+            date: Date(),
+            totalScore: bistSonuc.toplamSkor,
+            realizedScore: bistSonuc.degerleme, // Kullanılabilir tek veri: değerleme
+            forwardScore: nil,
+            profitabilityScore: nil, // Veri yok
+            growthScore: nil,        // Veri yok
+            leverageScore: nil,      // Veri yok
+            cashQualityScore: nil,   // Veri yok
+            dataCoverage: 40,        // BorsaPy sınırlı veri sağlıyor
+            summary: summary,
+            highlights: highlights,
+            proInsights: bistSonuc.uyarilar,
+            calculationDetails: "BIST verileri İş Yatırım HTML scraping ile alınmaktadır. Sadece F/K ve PD/DD metrikleri mevcut.",
+            valuationGrade: valuationGrade,
+            riskScore: nil,
+            isETF: false,
+            financials: financials
+        )
     }
     
     // MARK: - Voice & Explanations (Gemini)
