@@ -210,6 +210,8 @@ struct ArgusSanctumView: View {
                             .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
                             .shadow(radius: 5)
                     }
+                    .allowsHitTesting(true) // Sadece buton dokunulabilir olsun
+                    
                     Spacer()
                 }
                 Spacer()
@@ -217,20 +219,13 @@ struct ArgusSanctumView: View {
             .padding(.top, 60) // Dynamic Island Safe Area
             .padding(.leading, 16)
             .zIndex(1000)
-            .allowsHitTesting(true) // Ensure draggable panels don't steal touches
+            .allowsHitTesting(false) // Container dokunmaları engellemesin
             
             VStack {
                 // Header with Price Info
                 HStack(spacing: 12) {
-                    // Back Button Placeholder (Layout koruması için)
-                    Button(action: { }) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.clear) // INVISIBLE
-                            .padding(8)
-                            .background(Circle().fill(Color.clear))
-                    }
-                    .disabled(true)
+                    // Back Button alanı boş bırakıldı (Overlay buton buraya gelecek)
+                    // Layout hizalaması için padding kullanıyoruz
                     
                     CompanyLogoView(symbol: symbol, size: 36)
                     
@@ -289,8 +284,9 @@ struct ArgusSanctumView: View {
                         }
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 65) // FIX: Explicit padding to clear Dynamic Island (Safe Area: ~59pt)
+                .padding(.trailing)
+                .padding(.leading, 70) // Sol tarafta Overlay Geri Butonu için yer aç
+                .padding(.top, 75) // Dynamic Island'dan tamamen kurtar
                 .padding(.bottom, 10)
                 
                 // --- PANTHEON (OVERWATCH DECK) ---
