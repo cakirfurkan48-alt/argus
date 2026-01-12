@@ -7,7 +7,7 @@ extension TradingViewModel {
     
     // MARK: - Chart Data Management
     func loadCandles(for symbol: String, timeframe: String) async {
-        DispatchQueue.main.async { self.isLoading = true }
+        await MainActor.run { self.isLoading = true }
         
         // Heimdall Routing via Store (SSoT)
         // Store handles coalescing
@@ -88,6 +88,7 @@ extension TradingViewModel {
         defer { 
             SignpostLogger.shared.end(log: SignpostLogger.shared.quotes, name: "BatchFetchQuotes", id: spanId)
             let duration = Date().timeIntervalSince(startTime)
+            // Note: defer içinde async kullanılamıyor, DispatchQueue.main.async fire-and-forget için kabul edilebilir
             DispatchQueue.main.async { self.lastBatchFetchDuration = duration }
         }
         let portfolioSymbols = portfolio.filter { $0.isOpen }.map { $0.symbol }
@@ -201,6 +202,29 @@ extension TradingViewModel {
             
             self.candles = newCandles // Trigger ONE view update
             print("📡 ArgusDataService: Batch updated candles for \(collectedData.count) symbols")
+            
+            // 3. Trigger Orion V3 Pattern Analysis
+            Task {
+                var detectedPatterns: [String: [OrionChartPattern]] = [:]
+                let engine = OrionPatternEngine.shared
+                
+                for (symbol, candles) in collectedData {
+                    let patterns = engine.detectPatterns(candles: candles)
+                    if !patterns.isEmpty {
+                        detectedPatterns[symbol] = patterns
+                    }
+                }
+                
+                if !detectedPatterns.isEmpty {
+                    await MainActor.run {
+                        // Merge with existing patterns or replace? Replace simplifies things.
+                        for (symbol, patterns) in detectedPatterns {
+                            self.patterns[symbol] = patterns
+                        }
+                    }
+                    print("📐 Orion V3: Detected patterns for \(detectedPatterns.count) symbols")
+                }
+            }
         }
     }
     
@@ -337,25 +361,6 @@ extension TradingViewModel {
         Task {
             // Run Pulse
             await refreshMarketPulse()
-            
-            // Run Radar Strategies
-            // In a real app, we might run this lazily or here.
-            // For now, imply Radar is computed on-fly in View or here.
-            // Let's populate RadarFeed
-            await MainActor.run {
-                // Populate default radar feed (e.g. High Quality Momentum)
-                let picks = self.getRadarPicks(strategy: .highQualityMomentum)
-                self.radarFeed = picks.map { 
-                    RadarItem(
-                        id: UUID(),
-                        bankName: "Algoritma: Momentum",
-                        summary: "\($0) için güçlü Trend ve Kalite sinyali (Skor: 85+)",
-                        sentiment: .positive,
-                        url: "",
-                        date: Date()
-                    )
-                }
-            }
         }
     }
     

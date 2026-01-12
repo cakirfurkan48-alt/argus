@@ -22,7 +22,7 @@ extension TradingViewModel {
             signpost.end(log: signpost.startup, name: "BOOTSTRAP", id: id) 
             let duration = Date().timeIntervalSince(startTime)
             print("🚀 BOOTSTRAP FINISHED in \(String(format: "%.3f", duration))s")
-            DispatchQueue.main.async { self.bootstrapDuration = duration }
+            Task { @MainActor in self.bootstrapDuration = duration }
         }
         
         // PHASE 1: HIZLI - UI'ı bloklamayan işlemler (~100ms hedef)
