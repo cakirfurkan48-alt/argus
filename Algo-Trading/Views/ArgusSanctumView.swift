@@ -2143,11 +2143,19 @@ struct BistHoloPanelView: View {
                     moduleIcon: module.icon
                 )
             }
-            // Teknik göstergeler (SAR, TSI, RSI)
+            // Teknik gostergeler (SAR, TSI, RSI)
             GrafikEducationalCard(symbol: symbol)
             
+            // Prometheus - 5 Gunluk Fiyat Tahmini (Global ile ayni)
+            if let candles = viewModel.candles[symbol], candles.count >= 30 {
+                ForecastCard(
+                    symbol: symbol,
+                    historicalPrices: candles.map { $0.close }
+                )
+            }
+            
         case .bilanço:
-            // 🆕 Yeni BIST Bilanço Eğitim Görünümü
+            // BIST Bilanco Egitim Gorunumu
             let bistSymbol = symbol.uppercased().hasSuffix(".IS") ? symbol : "\(symbol.uppercased()).IS"
             BISTBilancoDetailView(sembol: bistSymbol)
             
