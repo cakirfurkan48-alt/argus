@@ -196,19 +196,41 @@ struct ArgusSanctumView: View {
         ZStack {
             // 1. SOLID TERMINAL BACKGROUND
             SanctumTheme.bg.ignoresSafeArea()
-            // NeuralNetworkBackground removed for cleaner professional look
+            
+            // GLOBAL BACK BUTTON (Always on Top)
+            // Paneller açılsa bile geri çıkılabilmesi için zIndex 1000 ile en üstte
+            VStack {
+                HStack {
+                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white) // Always bright white
+                            .padding(10)
+                            .background(Circle().fill(Color(hex: "1E293B").opacity(0.8))) // Dark slate bg for contrast
+                            .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
+                            .shadow(radius: 5)
+                    }
+                    Spacer()
+                }
+                Spacer()
+            }
+            .padding(.top, 60) // Dynamic Island Safe Area
+            .padding(.leading, 16)
+            .zIndex(1000)
+            .allowsHitTesting(true) // Ensure draggable panels don't steal touches
             
             VStack {
                 // Header with Price Info
                 HStack(spacing: 12) {
-                    // Back Button
-                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                    // Back Button Placeholder (Layout koruması için)
+                    Button(action: { }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(.clear) // INVISIBLE
                             .padding(8)
-                            .background(Circle().fill(Color.white.opacity(0.1)))
+                            .background(Circle().fill(Color.clear))
                     }
+                    .disabled(true)
                     
                     CompanyLogoView(symbol: symbol, size: 36)
                     
