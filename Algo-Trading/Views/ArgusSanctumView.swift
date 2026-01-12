@@ -2,25 +2,34 @@ import SwiftUI
 
 // MARK: - THEME CONSTANTS
 struct SanctumTheme {
-    static let bg = RadialGradient(colors: [Color(hex: "080b14"), Color(hex: "020205")], center: .center, startRadius: 50, endRadius: 500)
+    // Background: Deep Navy Slate (OLED Friendly)
+    static let bg = Color(hex: "0F172A") // Was Void Black
     
-    // Module Colors (Neon / Holographic)
-    static let orionColor = Color(hex: "00ff9d") // Cyber Green
-    static let atlasColor = Color(hex: "ffd700") // Gold
-    static let aetherColor = Color(hex: "bd00ff") // Deep Purple
-    static let hermesColor = Color(hex: "00d0ff") // Cyan
-    static let athenaColor = Color(hex: "ff0055") // Neon Red
-    static let demeterColor = Color(hex: "8b5a2b") // Earth Brown/Bronze
-    static let chironColor = Color(hex: "ffffff") // Pure White Data
+    // Core Palette (Bloomberg V2)
+    static let hologramBlue = Color(hex: "38BDF8") // Active/Focus
+    static let auroraGreen = Color(hex: "34D399") // Positive
+    static let titanGold = Color(hex: "FBBF24") // Mythic/Accent
+    static let ghostGrey = Color(hex: "94A3B8") // Passive Text
+    static let crimsonRed = Color(hex: "F43F5E") // Negative/Alert
+    
+    // Module Colors (Mapped to V2)
+    static let orionColor = hologramBlue     // Technical -> Hologram Blue
+    static let atlasColor = titanGold        // Fundamental -> Titan Gold
+    static let aetherColor = ghostGrey       // Macro -> Ghost Grey (Neutral base)
+    static let athenaColor = titanGold       // Smart Beta -> Titan Gold (Wisdom)
+    static let hermesColor = Color(hex: "FB923C") // News -> Orange (distinct from gold)
+    static let demeterColor = auroraGreen    // Sectors -> Aurora Green (Growth)
+    static let chironColor = Color.white     // System -> White (Ultimate contrast)
     
     // Glass Effect
-    static let glassMaterial = Material.ultraThinMaterial
+    static let glassMaterial = Material.thickMaterial
 }
 
 // MARK: - ARGUS SANCTUM VIEW
 struct ArgusSanctumView: View {
     let symbol: String
     @ObservedObject var viewModel: TradingViewModel
+    @Environment(\.presentationMode) var presentationMode
     
     // State
     @State private var selectedModule: ModuleType? = nil
@@ -39,6 +48,7 @@ struct ArgusSanctumView: View {
         case athena = "ATHENA"
         case demeter = "DEMETER"
         case chiron = "CHIRON"
+        case prometheus = "PROMETHEUS"
         
         var icon: String {
             switch self {
@@ -49,6 +59,7 @@ struct ArgusSanctumView: View {
             case .athena: return "brain.head.profile"
             case .demeter: return "leaf.fill"
             case .chiron: return "graduationcap.fill"
+            case .prometheus: return "crystal.ball"
             }
         }
         
@@ -61,6 +72,7 @@ struct ArgusSanctumView: View {
             case .athena: return SanctumTheme.athenaColor
             case .demeter: return SanctumTheme.demeterColor
             case .chiron: return SanctumTheme.chironColor
+            case .prometheus: return SanctumTheme.hologramBlue // Prometheus uses Technical color
             }
         }
         
@@ -73,6 +85,7 @@ struct ArgusSanctumView: View {
             case .athena: return "Akıllı Varyans (Smart Beta)"
             case .demeter: return "Sektör & Endüstri Analizi"
             case .chiron: return "Öğrenme & Risk Yönetimi"
+            case .prometheus: return "5 Günlük Fiyat Tahmini"
             }
         }
     }
@@ -103,14 +116,14 @@ struct ArgusSanctumView: View {
         
         var color: Color {
             switch self {
-            case .bilanço: return Color(hex: "D4AF37")     // Altın
-            case .grafik: return Color(hex: "00E676")      // Yeşil
-            case .sirkiye: return Color(hex: "C41E3A")     // Bayrak Kırmızı
-            case .kulis: return Color(hex: "FF8C00")       // Turuncu
-            case .faktor: return Color(hex: "1E90FF")      // Mavi
-            case .sektor: return Color(hex: "E63946")      // Kırmızı
-            case .rejim: return Color(hex: "9B59B6")       // Mor
-            case .moneyflow: return Color(hex: "20B2AA")   // Teal
+            case .bilanço: return SanctumTheme.atlasColor      // Titan Gold
+            case .grafik: return SanctumTheme.orionColor       // Hologram Blue
+            case .sirkiye: return SanctumTheme.aetherColor     // Ghost Grey
+            case .kulis: return SanctumTheme.hermesColor       // Orange
+            case .faktor: return SanctumTheme.athenaColor      // Titan Gold
+            case .sektor: return SanctumTheme.demeterColor     // Aurora Green
+            case .rejim: return SanctumTheme.chironColor       // White
+            case .moneyflow: return SanctumTheme.hologramBlue  // Hologram Blue
             }
         }
         
@@ -133,9 +146,13 @@ struct ArgusSanctumView: View {
     
     private var orbitingModulesView: some View {
         let orbitRadius: CGFloat = 130
-        let moduleCount = Double(ModuleType.allCases.count)
         
-        return ForEach(Array(ModuleType.allCases.enumerated()), id: \.element) { index, module in
+        // Filter out Pantheon Members from Ring
+        let globalModules:[ModuleType] = [.orion, .atlas, .aether, .hermes]
+        
+        let moduleCount = Double(globalModules.count)
+        
+        return ForEach(Array(globalModules.enumerated()), id: \.element) { index, module in
             let angle = (2.0 * .pi / moduleCount) * Double(index) - .pi / 2.0
             let xOffset = orbitRadius * CGFloat(cos(angle))
             let yOffset = orbitRadius * CGFloat(sin(angle))
@@ -153,9 +170,13 @@ struct ArgusSanctumView: View {
     // BIST Özel Orbit Görünümü
     private var bistOrbitingModulesView: some View {
         let orbitRadius: CGFloat = 130
-        let moduleCount = Double(BistModuleType.allCases.count)
         
-        return ForEach(Array(BistModuleType.allCases.enumerated()), id: \.element) { index, module in
+        // Filter out Pantheon Members (Faktor, Sektor)
+        let bistModules: [BistModuleType] = [.grafik, .bilanço, .rejim, .sirkiye, .kulis, .moneyflow]
+        
+        let moduleCount = Double(bistModules.count)
+        
+        return ForEach(Array(bistModules.enumerated()), id: \.element) { index, module in
             let angle = (2.0 * .pi / moduleCount) * Double(index) - .pi / 2.0
             let xOffset = orbitRadius * CGFloat(cos(angle))
             let yOffset = orbitRadius * CGFloat(sin(angle))
@@ -173,14 +194,22 @@ struct ArgusSanctumView: View {
     
     var body: some View {
         ZStack {
-            // 1. NEURAL BACKGROUND
+            // 1. SOLID TERMINAL BACKGROUND
             SanctumTheme.bg.ignoresSafeArea()
-            NeuralNetworkBackground()
-                .opacity(0.3)
+            // NeuralNetworkBackground removed for cleaner professional look
             
             VStack {
                 // Header with Price Info
                 HStack(spacing: 12) {
+                    // Back Button
+                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white.opacity(0.8))
+                            .padding(8)
+                            .background(Circle().fill(Color.white.opacity(0.1)))
+                    }
+                    
                     CompanyLogoView(symbol: symbol, size: 36)
                     
                     VStack(alignment: .leading, spacing: 2) {
@@ -190,11 +219,10 @@ struct ArgusSanctumView: View {
                                 .fontWeight(.black)
                                 .foregroundColor(.white)
                             
-                            // BIST Badge
+                            // BIST Badge (Text Only)
                             if symbol.uppercased().hasSuffix(".IS") {
-                                Text("🇹🇷 BIST")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
+                                Text("BIST")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
@@ -240,7 +268,18 @@ struct ArgusSanctumView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.top, 8)
+                .padding(.top, 65) // FIX: Explicit padding to clear Dynamic Island (Safe Area: ~59pt)
+                .padding(.bottom, 10)
+                
+                // --- PANTHEON (OVERWATCH DECK) ---
+                // --- PANTHEON (OVERWATCH DECK) ---
+                PantheonDeckView(
+                    symbol: symbol, 
+                    viewModel: viewModel, 
+                    isBist: symbol.uppercased().hasSuffix(".IS"),
+                    selectedModule: $selectedModule,
+                    selectedBistModule: $selectedBistModule
+                )
                 
                 Spacer()
                 
@@ -327,6 +366,7 @@ struct ArgusSanctumView: View {
                     }
                 }
             }
+            // .ignoresSafeArea() -- REMOVED: This was causing the header to slide under the notch/island.
             
             // 3. HOLO PANEL (Full Screen Overlay) - Global
             if let module = selectedModule {
@@ -373,9 +413,12 @@ struct ArgusSanctumView: View {
                     BistDebateSheet(decision: bistData, isPresented: $showDebateSheet)
                 } else {
                     // GLOBAL KONSEY TARTIŞMASI 🇺🇸
-                    AgoraDebateSheet(decision: decision)
+                    SymbolDebateView(decision: decision, isPresented: $showDebateSheet)
                 }
             }
+        }
+        .onTapGesture {
+            // FIX: Swallow background taps to prevent system "toggle navigation bar" behavior
         }
     }
 }
@@ -390,28 +433,26 @@ struct OrbView: View {
     var body: some View {
         VStack(spacing: 8) {
             ZStack {
-                // Glow
+                // Background (Deep Navy)
                 Circle()
-                    .fill(module.color.opacity(0.3))
-                    .frame(width: 50, height: 50)
-                    .blur(radius: 10)
+                    .fill(Color(hex: "1E293B")) // Slate 800
+                    .frame(width: 52, height: 52)
+                    .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
                 
-                // Core
+                // Tech Ring (Cleaner V2)
                 Circle()
-                    .fill(
-                        LinearGradient(colors: [module.color.opacity(0.8), module.color.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .frame(width: 50, height: 50)
-                    .overlay(Circle().stroke(Color.white.opacity(0.5), lineWidth: 1))
+                    .stroke(module.color.opacity(0.8), lineWidth: 1.5)
+                    .frame(width: 52, height: 52)
+                
+                // Active Glow (Optional - could add state later)
                 
                 // Icon
                 Image(systemName: module.icon)
-                    .font(.system(size: 20))
-                    .foregroundColor(.white)
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundColor(module.color)
             }
-            .shadow(color: module.color, radius: 8)
             
-            // LOCALIZED ORB LABELS
+            // LOCALIZED LABELS
             let label: String = {
                 if symbol.uppercased().hasSuffix(".IS") {
                     switch module {
@@ -428,9 +469,9 @@ struct OrbView: View {
             }()
             
             Text(label)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(module.color)
-                .shadow(color: module.color, radius: 3)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(SanctumTheme.ghostGrey)
+                .tracking(1)
         }
     }
 }
@@ -442,38 +483,28 @@ struct BistOrbView: View {
     var body: some View {
         VStack(spacing: 8) {
             ZStack {
-                // Glow - Türkiye renkleri
+                // Background
                 Circle()
-                    .fill(module.color.opacity(0.3))
-                    .frame(width: 50, height: 50)
-                    .blur(radius: 10)
+                    .fill(Color(hex: "1E293B"))
+                    .frame(width: 52, height: 52)
+                    .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
                 
-                // Core - Gradient
+                // Tech Ring
                 Circle()
-                    .fill(
-                        LinearGradient(colors: [module.color.opacity(0.9), module.color.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .frame(width: 50, height: 50)
-                    .overlay(
-                        Circle()
-                            .stroke(
-                                LinearGradient(colors: [.white.opacity(0.6), module.color.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                lineWidth: 1.5
-                            )
-                    )
-                
+                    .stroke(module.color.opacity(0.8), lineWidth: 1.5)
+                    .frame(width: 52, height: 52)
+                    
                 // Icon
                 Image(systemName: module.icon)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundColor(module.color)
             }
-            .shadow(color: module.color, radius: 8)
             
             // Modül İsmi
             Text(module.rawValue)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(module.color)
-                .shadow(color: module.color, radius: 3)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(SanctumTheme.ghostGrey)
+                .tracking(1)
         }
     }
 }
@@ -483,103 +514,487 @@ struct CenterCoreView: View {
     @ObservedObject var viewModel: TradingViewModel
     @Binding var showDecision: Bool
     
-    @State private var rotateHulahup = false
+    // Dial Interaction State
+    @State private var knobRotation: Double = 0.0
+    @State private var isDragging: Bool = false
+    @State private var focusedModuleName: String? = nil // Shows module decision instead of main
+    
+    // Haptics
+    private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
     
     var body: some View {
         ZStack {
-            // 1. Base Holo-Table
-            Circle() // Inner Glass
-                .fill(Material.ultraThinMaterial)
+            // 1. Base Compass Ring (Static)
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    .frame(width: 220, height: 220)
+                
+                // Ticks (Static)
+                ForEach(0..<12) { i in
+                    Rectangle()
+                        .fill(Color.white.opacity(0.1))
+                        .frame(width: 1, height: 8)
+                        .offset(y: -110)
+                        .rotationEffect(.degrees(Double(i) * 30))
+                }
+            }
+            
+            // 2. Interactive Dial Ring (The Knob)
+            ZStack {
+                // Ring
+                Circle()
+                    .stroke(Color(hex: "4A90E2").opacity(isDragging ? 0.8 : 0.4), style: StrokeStyle(lineWidth: isDragging ? 3 : 1, dash: [])) // Solid when dragging
+                    .frame(width: 180, height: 180)
+                
+                // The Handle / Notch
+                Circle()
+                    .fill(Color(hex: "4A90E2"))
+                    .frame(width: 12, height: 12)
+                    .offset(y: -90)
+                    .shadow(color: Color(hex: "4A90E2").opacity(0.5), radius: 5)
+                
+                // Active Sector Indicator (Cone)
+                if isDragging {
+                    Path { path in
+                        path.move(to: CGPoint(x: 90, y: 90))
+                        path.addArc(center: CGPoint(x: 90, y: 90), radius: 90, startAngle: .degrees(-15), endAngle: .degrees(15), clockwise: false)
+                    }
+                    .fill(Color(hex: "4A90E2").opacity(0.1))
+                    .frame(width: 180, height: 180)
+                    .rotationEffect(.degrees(-90)) // Align to top
+                }
+            }
+            .rotationEffect(.degrees(knobRotation))
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        isDragging = true
+                        
+                        // Calculate Angle
+                        let vector = CGVector(dx: value.location.x - 90, dy: value.location.y - 90) // Center is roughly 90,90 relative to frame 180
+                        // Since ZStack center is 0,0 for rotation, but drag location is relative. 
+                        // Actually better to use geometry logic, but simple vector from center works.
+                        // Assuming Frame is centered.
+                        
+                        let angle = atan2(vector.dy, vector.dx) * 180 / .pi + 90
+                        let normalizedAngle = angle < 0 ? angle + 360 : angle
+                        
+                        // Haptic Snap Logic (Every 45 degrees - 8 sectors)
+                        let snapInterval: Double = 45
+                        let nextSnap = round(normalizedAngle / snapInterval) * snapInterval
+                        
+                        if abs(nextSnap - knobRotation) > 1 {
+                             impactFeedback.impactOccurred(intensity: 0.5)
+                        }
+                        
+                        self.knobRotation = normalizedAngle
+                        
+                        // Determine Module
+                        self.focusedModuleName = determineModule(angle: normalizedAngle)
+                    }
+                    .onEnded { _ in
+                        withAnimation {
+                            isDragging = false
+                            // Snap to nearest sector
+                            let snapInterval: Double = 45
+                            self.knobRotation = round(self.knobRotation / snapInterval) * snapInterval
+                        }
+                        // Reset focus after 3 seconds
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            if !isDragging {
+                                withAnimation {
+                                    self.focusedModuleName = nil
+                                }
+                            }
+                        }
+                    }
+            )
+            
+            // 3. Inner Data Display
+            Circle()
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 .frame(width: 120, height: 120)
-                .shadow(color: .cyan.opacity(0.3), radius: 20)
+                .background(Circle().fill(Color(hex: "1C1C1E").opacity(0.95)))
+                .onTapGesture {
+                    // RESET DIAL
+                    withAnimation {
+                        focusedModuleName = nil
+                    }
+                    impactFeedback.impactOccurred(intensity: 0.7)
+                }
             
-            // 2. Spinning Energy Field (Fast)
-            Circle()
-                .stroke(
-                    AngularGradient(colors: [.cyan.opacity(0), .cyan, .cyan.opacity(0)], center: .center),
-                    lineWidth: 2
-                )
-                .frame(width: 130, height: 130)
-                .rotationEffect(.degrees(rotateHulahup ? 360 : 0))
-                .animation(.linear(duration: 4).repeatForever(autoreverses: false), value: rotateHulahup)
-            
-            // 3. The "Hulahup" Ring (Slow, 3D Tilted)
-            // Outer Orbit
-            Circle()
-                .strokeBorder(
-                    AngularGradient(gradient: Gradient(colors: [.blue.opacity(0), .white, .blue.opacity(0)]), center: .center),
-                    lineWidth: 3
-                )
-                .frame(width: 220, height: 220)
-                .rotation3DEffect(.degrees(75), axis: (x: 1, y: 0, z: 0))
-                .rotationEffect(.degrees(rotateHulahup ? 360 : 0))
-                .animation(.linear(duration: 12).repeatForever(autoreverses: false), value: rotateHulahup)
-            
-            // Inner Orbit (Counter Rotate)
-            Circle()
-                .strokeBorder(
-                    AngularGradient(gradient: Gradient(colors: [.purple.opacity(0), .white.opacity(0.5), .purple.opacity(0)]), center: .center),
-                    lineWidth: 1
-                )
-                .frame(width: 180, height: 180)
-                .rotation3DEffect(.degrees(75), axis: (x: 1, y: 0, z: 0))
-                .rotationEffect(.degrees(rotateHulahup ? -360 : 0))
-                .animation(.linear(duration: 15).repeatForever(autoreverses: false), value: rotateHulahup)
-
-            
-            // 4. Decision Text / Loading
-            if showDecision {
-                VStack {
-                    Text("KONSEY KARARI")
-                        .font(.caption2)
+            // 4. Decision Text
+            if let moduleName = focusedModuleName {
+                // Showing Selected Module Logic
+                VStack(spacing: 4) {
+                    Text(moduleName)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(hex: "4A90E2"))
+                    
+                    if let decision = viewModel.grandDecisions[symbol] {
+                        if let bist = decision.bistDetails {
+                            viewForBistModule(moduleName: moduleName, bist: bist)
+                        } else {
+                            viewForGlobalModule(moduleName: moduleName, decision: decision)
+                        }
+                    } else {
+                        Text("VERİ YOK")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.gray)
+                    }
+                }
+            } else if showDecision {
+                // Showing GRAND DECISION (Default)
+                VStack(spacing: 4) {
+                    Text("KONSEY")
+                        .font(.system(size: 8, design: .monospaced))
                         .tracking(2)
                         .foregroundColor(.gray)
                     
                     if let decision = viewModel.grandDecisions[symbol] {
                         Text(decision.action.rawValue)
-                            .font(.system(size: 18, weight: .black, design: .rounded)) // Size fixed to prevent truncation
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
                             .foregroundColor(
-                                decision.action == .aggressiveBuy || decision.action == .accumulate ? .green :
                                 decision.action == .aggressiveBuy || decision.action == .accumulate ? .green :
                                 (decision.action == .liquidate || decision.action == .trim ? .red : .yellow)
                             )
-                            .shadow(color: decision.action == .aggressiveBuy ? .green : .blue, radius: 10)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 4)
-                            .minimumScaleFactor(0.8) // Ensure text fits
+                            .minimumScaleFactor(0.8)
                         
-                        Text("\(Int(decision.confidence * 100))% Güven")
-                            .font(.caption)
-                            .bold()
-                            .foregroundColor(.white)
+                        Text("\(Int(decision.confidence * 100))% GÜVEN")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.8))
                         
-                        // VETO BADGE - Show why signal was blocked
                         if !decision.vetoes.isEmpty {
                             HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.shield.fill")
+                                Image(systemName: "xmark.shield")
                                     .font(.system(size: 8))
                                 Text(decision.vetoes.first?.module ?? "")
-                                    .font(.system(size: 8, weight: .bold))
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
                             }
-                            .foregroundColor(.red)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Color.red.opacity(0.2))
-                            .cornerRadius(4)
+                            .foregroundColor(.red.opacity(0.8))
+                            .padding(.top, 2)
                         }
                     } else {
                         Text("...")
-                            .font(.title)
+                            .font(.system(size: 16, design: .monospaced))
                     }
                 }
             } else {
-                ProgressView()
-                    .scaleEffect(1.5)
+                ProgressView().scaleEffect(0.8).tint(.white)
             }
         }
         .onAppear {
-            rotateHulahup = true
+            // Initial animation removed to start at 0 (Top)
         }
+    }
+    
+    // Mapping Angle (0 at top, clockwise) to Module Names
+    // Mapping Angle (0 at top, clockwise) to Module Names
+    private func determineModule(angle: Double) -> String {
+        let isBist = symbol.uppercased().hasSuffix(".IS")
+        
+        // FILTERED MODULES (Strictly exclude Pantheon members)
+        let bistModules: [ArgusSanctumView.BistModuleType] = [.grafik, .bilanço, .rejim, .sirkiye, .kulis, .moneyflow]
+        let globalModules: [ArgusSanctumView.ModuleType] = [.orion, .atlas, .aether, .hermes]
+        
+        let sectors = isBist ? bistModules.count : globalModules.count
+        let sectorAngle = 360.0 / Double(sectors)
+        
+        // Adjust angle so 0 is first module (centered)
+        let index = Int((angle + (sectorAngle/2)).truncatingRemainder(dividingBy: 360) / sectorAngle)
+        
+        if isBist {
+            if index < bistModules.count {
+                // Map BIST Enum to Proposal Proposer String
+                let module = bistModules[index]
+                switch module {
+                case .grafik: return "ORION"
+                case .bilanço: return "ATLAS"
+                case .sirkiye: return "AETHER"
+                case .kulis: return "HERMES"
+                case .moneyflow: return "POSEIDON"
+                case .rejim: return "CHIRON" // Rejim is usually mapped to Chiron or Aether logic depending on context. Keeping CHIRON for Rejim consistent with other mappings if that's the intent, OR map to AETHER if Rejim is macro. 
+                                             // Let's look at getBistModuleResult: .rejim -> bist.rejim. And viewForBistModule logic.
+                                             // getBistModuleResult maps "AETHER" to bist.rejim. So Rejim should return "AETHER".
+                default: return "ORION"
+                }
+            }
+        } else {
+            if index < globalModules.count {
+                return globalModules[index].rawValue // "ORION", "ATLAS" etc
+            }
+        }
+        
+        return "ORION"
+    }
+
+    // MARK: - Helper Views
+    
+    @ViewBuilder
+    private func viewForBistModule(moduleName: String, bist: BistDecisionResult) -> some View {
+        if let mod = getBistModuleResult(moduleName: moduleName, bist: bist) {
+            Text(mod.action.rawValue)
+                 .font(.system(size: 14, weight: .bold, design: .monospaced))
+                 .foregroundColor(
+                     mod.action == .buy ? .green :
+                     (mod.action == .sell ? .red : .yellow)
+                 )
+            Text(String(format: "%.0f PUAN", mod.score))
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundColor(.gray)
+        } else {
+            Text("--")
+                .font(.system(size: 14, design: .monospaced))
+        }
+    }
+    
+    private func getBistModuleResult(moduleName: String, bist: BistDecisionResult) -> BistModuleResult? {
+        switch moduleName {
+        case "ORION": return bist.grafik
+        case "ATLAS": return bist.bilanco
+        case "AETHER": return bist.rejim
+        case "HERMES": return bist.kulis
+        case "ATHENA": return bist.faktor
+        case "DEMETER": return bist.sektor
+        case "POSEIDON": return bist.akis
+        case "CHIRON": return nil
+        default: return nil
+        }
+    }
+    
+    @ViewBuilder
+    private func viewForGlobalModule(moduleName: String, decision: ArgusGrandDecision) -> some View {
+        let data = getGlobalData(module: moduleName, decision: decision)
+        
+        if data.action != "--" {
+            Text(data.action)
+                 .font(.system(size: 14, weight: .bold, design: .monospaced))
+                 .foregroundColor(data.color)
+            Text(String(format: "%.0f%% GÜVEN", data.confidence * 100))
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundColor(.gray)
+        } else {
+            Text("--")
+                .font(.system(size: 14, design: .monospaced))
+        }
+    }
+    
+    private func getGlobalData(module: String, decision: ArgusGrandDecision) -> (action: String, confidence: Double, color: Color) {
+        if module == "ORION" {
+            let col: Color = decision.orionDecision.action == .buy ? .green : (decision.orionDecision.action == .sell ? .red : .yellow)
+            return (decision.orionDecision.action.rawValue, decision.orionDecision.netSupport, col)
+        } else if module == "ATLAS", let atlas = decision.atlasDecision {
+            let col: Color = atlas.action == .buy ? .green : (atlas.action == .sell ? .red : .yellow)
+            return (atlas.action.rawValue, atlas.netSupport, col)
+        } else if module == "AETHER" {
+            let col: Color = decision.aetherDecision.stance == .riskOn ? .green : (decision.aetherDecision.stance == .riskOff ? .red : .yellow)
+            return (decision.aetherDecision.stance.rawValue, decision.aetherDecision.netSupport, col)
+        } else if module == "HERMES", let hermes = decision.hermesDecision {
+             return (hermes.sentiment.rawValue, hermes.netSupport, .white)
+        }
+        return ("--", 0, .gray)
+    }
+
+    struct Style {
+        static let dashStroke = StrokeStyle(lineWidth: 1, dash: [4, 4])
+    }
+}
+
+// MARK: - PANTHEON (THE OVERWATCH DECK)
+// MARK: - PANTHEON (THE OVERWATCH DECK)
+// MARK: - PANTHEON (THE OVERWATCH DECK)
+struct PantheonDeckView: View {
+    let symbol: String
+    @ObservedObject var viewModel: TradingViewModel
+    let isBist: Bool
+    @Binding var selectedModule: ArgusSanctumView.ModuleType?
+    @Binding var selectedBistModule: ArgusSanctumView.BistModuleType?
+    
+    var body: some View {
+        ZStack {
+            // ARC LAYOUT CONTAINER
+            // Height constrained to prevent pushing content too far down
+            
+            // 0. VISUAL CONNECTORS (Lines)
+            Path { path in
+                // Chiron Bottom Center
+                let apex = CGPoint(x: UIScreen.main.bounds.width / 2, y: 35)
+                // Athena Top Center (Approx)
+                let leftFlank = CGPoint(x: (UIScreen.main.bounds.width / 2) - 100, y: 80)
+                // Demeter Top Center (Approx)
+                let rightFlank = CGPoint(x: (UIScreen.main.bounds.width / 2) + 100, y: 80)
+                
+                path.move(to: apex); path.addLine(to: leftFlank)
+                path.move(to: apex); path.addLine(to: rightFlank)
+            }
+            .stroke(SanctumTheme.chironColor.opacity(0.15), lineWidth: 1)
+            
+            // 1. APEX: CHIRON (Time & Risk)
+            let chiron = viewModel.chronosDetails[symbol]
+            let chironScore = chiron != nil ? "\(Int(chiron!.timeScore))" : "--"
+            let chironColor = SanctumTheme.chironColor // Always White for high contrast
+            
+            VStack(spacing: 4) {
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: "1E293B")) // Slate 800
+                        .frame(width: 56, height: 56)
+                        .shadow(color: chironColor.opacity(0.3), radius: 10, x: 0, y: 0) // Glow
+                    
+                    Circle()
+                        .stroke(chironColor, lineWidth: 2) // Bold White Stroke
+                        .frame(width: 56, height: 56)
+                        
+                    Image(systemName: "hourglass")
+                        .font(.system(size: 20))
+                        .foregroundColor(chironColor)
+                }
+                
+                Text("CHIRON")
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .foregroundColor(chironColor)
+                    .tracking(2)
+            }
+            .offset(y: -20)
+            .zIndex(100)
+            .onTapGesture {
+                if isBist {
+                    selectedBistModule = .rejim
+                } else {
+                    selectedModule = .chiron
+                }
+            }
+            
+            // 2. FLANKS: ATHENA (Left)
+            PantheonFlankView(
+                name: isBist ? "FAKTÖR" : "ATHENA",
+                icon: "brain.head.profile",
+                color: SanctumTheme.athenaColor,
+                score: getAthenaScore(),
+                label: getAthenaLabel()
+            )
+            .offset(x: -100, y: 55)
+            .onTapGesture {
+                if isBist {
+                    selectedBistModule = .faktor
+                } else {
+                    selectedModule = .athena
+                }
+            }
+            
+            // 3. FLANKS: DEMETER (Right)
+            PantheonFlankView(
+                name: isBist ? "SEKTÖR" : "DEMETER",
+                icon: "leaf.fill",
+                color: SanctumTheme.demeterColor,
+                score: getDemeterScore(),
+                label: getDemeterLabel()
+            )
+            .offset(x: 100, y: 55)
+            .onTapGesture {
+                if isBist {
+                    selectedBistModule = .sektor
+                } else {
+                    selectedModule = .demeter
+                }
+            }
+            
+        }
+        .frame(height: 120)
+        .padding(.top, 10)
+    }
+    
+    // Data Helpers
+    func getAthenaScore() -> String {
+        if isBist {
+            if let score = viewModel.grandDecisions[symbol]?.bistDetails?.faktor.score {
+                return String(format: "%.0f", score)
+            }
+            return "--"
+        } else {
+            return String(format: "%.0f", viewModel.athenaResults[symbol]?.totalScore ?? 0.0)
+        }
+    }
+    
+    func getAthenaLabel() -> String {
+        return isBist ? "AKIL" : "STRATEJİ"
+    }
+    
+    func getDemeterScore() -> String {
+        if isBist {
+            if let score = viewModel.grandDecisions[symbol]?.bistDetails?.sektor.score {
+                return String(format: "%.0f", score)
+            }
+            return "--"
+        } else {
+            return String(format: "%.0f", viewModel.getDemeterScore(for: symbol)?.totalScore ?? 0.0)
+        }
+    }
+    
+    func getDemeterLabel() -> String {
+        return isBist ? "ZEMİN" : "SEKTÖR"
+    }
+}
+
+struct PantheonFlankView: View {
+    let name: String
+    let icon: String
+    let color: Color
+    let score: String
+    let label: String
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            // Icon Badge (Circle Geometry)
+            ZStack {
+                Circle()
+                    .fill(Color(hex: "1E293B")) // Slate 800
+                    .frame(width: 44, height: 44)
+                
+                Circle()
+                    .stroke(color.opacity(0.8), lineWidth: 1.5)
+                    .frame(width: 44, height: 44)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(color)
+            }
+            
+            // Info
+            VStack(spacing: 1) {
+                Text(name)
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundColor(color.opacity(0.9))
+                    .tracking(1)
+                
+                Text(score)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+}
+
+// Custom Shape for Chiron
+struct HexagonShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let width = rect.width
+        let height = rect.height
+        let x = rect.minX
+        let y = rect.minY
+        
+        path.move(to: CGPoint(x: x + width * 0.5, y: y))
+        path.addLine(to: CGPoint(x: x + width, y: y + height * 0.25))
+        path.addLine(to: CGPoint(x: x + width, y: y + height * 0.75))
+        path.addLine(to: CGPoint(x: x + width * 0.5, y: y + height))
+        path.addLine(to: CGPoint(x: x, y: y + height * 0.75))
+        path.addLine(to: CGPoint(x: x, y: y + height * 0.25))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -669,6 +1084,7 @@ struct HoloPanelView: View {
                         contentForModule(module)
                     }
                     .padding()
+                    .padding(.bottom, 100) // Tab bar clearance
                 }
             }
             .task {
@@ -692,12 +1108,11 @@ struct HoloPanelView: View {
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SanctumTheme.glassMaterial)
-        .cornerRadius(0)
-        .overlay(
-            RoundedRectangle(cornerRadius: 0)
-                .stroke(LinearGradient(colors: [module.color, .clear], startPoint: .top, endPoint: .bottom), lineWidth: 1)
-        )
+        .background(SanctumTheme.bg.opacity(0.95)) // Deep Navy High Opacity
+        .cornerRadius(0) // Full screen usually stays 0, but content inside might be card.
+        // Let's keep HoloPanel as the "Base" layer for the module, effectively a new page.
+        // User requested "Containers" to be cards. HoloPanel content is the container.
+
     }
     
     // Helper to map UI Module to System Entity
@@ -709,7 +1124,8 @@ struct HoloPanelView: View {
         case .hermes: return .hermes
         case .athena: return .argus // Athena maps to Argus main for now
         case .demeter: return .poseidon // Demeter maps to Poseidon (Sectors/Whales similar concept)
-        case .chiron: return .chronos // Chiron/Chronos Time
+        case .chiron: return .demeter // Chiron/Demeter mapping
+        case .prometheus: return .orion // Prometheus uses Orion's technical data
         }
     }
     
@@ -717,138 +1133,42 @@ struct HoloPanelView: View {
     func contentForModule(_ module: ArgusSanctumView.ModuleType) -> some View {
         switch module {
         case .atlas:
-            VStack(alignment: .leading, spacing: 16) {
-                // BIST Specific: Yeni Öğretici Puanlama Kartı
-                if symbol.uppercased().hasSuffix(".IS") {
-                    AtlasBistScoreCard(symbol: symbol)
-                    BistDividendCard(symbol: symbol)
-                    BistCapitalIncreaseCard(symbol: symbol)
-                }
-
-                // NEW: Global Module Detail Card
-                if let grandDecision = viewModel.grandDecisions[symbol],
-                   let atlasDecision = grandDecision.atlasDecision {
-                    // Convert AtlasDecision to CouncilDecision for the common view
-                    let councilDecision = CouncilDecision(
-                        symbol: atlasDecision.symbol,
-                        action: atlasDecision.action,
-                        netSupport: atlasDecision.netSupport,
-                        approveWeight: 0, // Atlas uses different weighting, simplified for UI
-                        vetoWeight: 0,
-                        isStrongSignal: atlasDecision.isStrongSignal,
-                        isWeakSignal: !atlasDecision.isStrongSignal && atlasDecision.netSupport > 0.1,
-                        winningProposal: atlasDecision.winningProposal.map { prop in
-                            CouncilProposal(
-                                proposer: prop.proposer,
-                                proposerName: prop.proposerName,
-                                action: prop.action,
-                                confidence: prop.confidence,
-                                reasoning: prop.reasoning,
-                                entryPrice: nil,
-                                stopLoss: nil,
-                                target: prop.targetPrice
-                            )
-                        },
-                        allProposals: [], // Not needed for card view
-                        votes: atlasDecision.votes.map { vote in
-                            CouncilVote(
-                                voter: vote.voter,
-                                voterName: vote.voterName,
-                                decision: vote.decision,
-                                reasoning: vote.reasoning,
-                                weight: vote.weight
-                            )
-                        },
-                        vetoReasons: atlasDecision.vetoReasons,
-                        timestamp: atlasDecision.timestamp
-                    )
-                    
-                    GlobalModuleDetailCard(
-                        moduleName: "Atlas",
-                        decision: councilDecision,
-                        moduleColor: SanctumTheme.atlasColor,
-                        moduleIcon: "building.columns.fill"
-                    )
-                } else if viewModel.failedFundamentals.contains(symbol) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.largeTitle)
-                            .foregroundColor(.red)
-                        Text("Temel Veri Alınamadı")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        Text("FMP servisinden veri çekilemedi. Lütfen daha sonra tekrar deneyin.")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.red.opacity(0.1))
-                    .cornerRadius(12)
-                } else {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .tint(SanctumTheme.atlasColor)
-                        Text("Atlas Konseyi toplanıyor...")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                }
+            // 🆕 BIST vs Global kontrolü (.IS suffix veya bilinen BIST sembolü)
+            if symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol) {
+                // BIST sembolü için .IS suffix ekle (gerekirse)
+                let bistSymbol = symbol.uppercased().hasSuffix(".IS") ? symbol : "\(symbol.uppercased()).IS"
+                BISTBilancoDetailView(sembol: bistSymbol)
+            } else {
+                AtlasV2DetailView(symbol: symbol)
             }
             
         case .orion:
-            VStack(alignment: .leading, spacing: 16) {
-                // BIST: Rölatif Güç Analizi (Endekse Göre Performans)
-                if symbol.uppercased().hasSuffix(".IS") {
-                    OrionRelativeStrengthCard(symbol: symbol)
-                }
-                
-                // NEW: Global Module Detail Card
-                if let grandDecision = viewModel.grandDecisions[symbol] {
-                    GlobalModuleDetailCard(
-                        moduleName: "Orion",
-                        decision: grandDecision.orionDecision,
-                        moduleColor: SanctumTheme.orionColor,
-                        moduleIcon: "chart.xyaxis.line"
+            VStack(spacing: 16) {
+                // 🆕 Eğitici Orion Detay Görünümü
+                if let orion = viewModel.orionScores[symbol] {
+                    OrionDetailView(
+                        symbol: symbol,
+                        orion: orion,
+                        candles: viewModel.candles[symbol],
+                        patterns: viewModel.patterns[symbol]
                     )
-                }
-                
-                // Technical Score
-                // Backtest Button (Only visible if data exists)
-                if viewModel.orionScores[symbol] != nil {
-                    Button(action: {
-                        showBacktestSheet = true
-                    }) {
-                        HStack {
-                            Image(systemName: "chart.bar.xaxis")
-                            Text("Backtest Çalıştır")
-                                .font(.caption)
-                                .bold()
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(SanctumTheme.orionColor.opacity(0.3))
-                        .cornerRadius(10)
-                        .foregroundColor(.white)
-                    }
-                    .padding(.horizontal, 4)
-                    .sheet(isPresented: $showBacktestSheet) {
-                        OrionBacktestView(symbol: symbol, candles: viewModel.candles[symbol] ?? [])
-                    }
                 } else {
-                    // Loading State
                     VStack(spacing: 12) {
                         ProgressView()
                             .tint(SanctumTheme.orionColor)
-                        Text("Orion Konseyi toplanıyor...")
+                        Text("Orion analizi yükleniyor...")
                             .font(.caption)
                             .foregroundColor(.gray)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                    .frame(maxWidth: .infinity, minHeight: 200)
+                }
+                
+                // NEW: Prometheus - 5 Day Forecast
+                if let candles = viewModel.candles[symbol], candles.count >= 30 {
+                    ForecastCard(
+                        symbol: symbol,
+                        historicalPrices: candles.map { $0.close }
+                    )
                 }
             }
             
@@ -926,6 +1246,9 @@ struct HoloPanelView: View {
             
         case .hermes:
             VStack(alignment: .leading, spacing: 16) {
+                // NEW: Hermes V2 - Sentiment Pulse from Finnhub
+                SentimentPulseCard(symbol: symbol)
+                
                 // BIST: Analist Konsensüsü
                 if symbol.uppercased().hasSuffix(".IS") {
                     HermesAnalystCard(symbol: symbol, currentPrice: viewModel.quotes[symbol]?.currentPrice ?? 0)
@@ -966,16 +1289,34 @@ struct HoloPanelView: View {
                         moduleIcon: "gavel.fill"
                     )
                 } else {
-                    // Loading State
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .tint(SanctumTheme.hermesColor)
-                        Text("Hermes Konseyi toplanıyor...")
+                    // No Decision Yet - Show Hermes Intro Card
+                    VStack(alignment: .leading, spacing: 12) {
+                        // Header
+                        HStack {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                                .foregroundColor(SanctumTheme.hermesColor)
+                            Text("Hermes Kulak Kesidi")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
+                        
+                        // Description
+                        Text("Hermes, finansal haberleri ve piyasa dedikodularını analiz ederek hisse senedinin medyadaki algısını değerlendirir.")
                             .font(.caption)
-                            .foregroundColor(.gray)
+                            .foregroundColor(.white.opacity(0.7))
+                        
+                        Divider().background(Color.white.opacity(0.2))
+                        
+                        // Dynamic Tips
+                        VStack(alignment: .leading, spacing: 8) {
+                            HermesInfoRow(icon: "newspaper.fill", text: "Haberleri taramak için aşağıdaki butonu kullanın")
+                            HermesInfoRow(icon: "chart.line.uptrend.xyaxis", text: "Olumlu haberler fiyat yükselişini destekleyebilir")
+                            HermesInfoRow(icon: "exclamationmark.triangle", text: "Olumsuz haberler risk oluşturabilir")
+                        }
                     }
-                    .frame(maxWidth: .infinity)
                     .padding()
+                    .background(SanctumTheme.hermesColor.opacity(0.1))
+                    .cornerRadius(12)
                 }
                 
                 // Manual Analysis Button
@@ -1321,9 +1662,14 @@ struct HoloPanelView: View {
                 
                 // Learning tips
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("💡 Nasıl Öğreniyor?")
-                        .font(.caption)
-                        .foregroundColor(.white)
+                    HStack(spacing: 4) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.caption)
+                            .foregroundColor(.yellow)
+                        Text("Nasıl Öğreniyor?")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                    }
                     
                     Text("Chiron, geçmiş kararlardan ve fiyat hareketlerinden öğrenerek modül ağırlıklarını dinamik olarak ayarlar. Başarılı modüllerin ağırlığı artar.")
                         .font(.caption2)
@@ -1332,6 +1678,56 @@ struct HoloPanelView: View {
                 .padding()
                 .background(Color.white.opacity(0.03))
                 .cornerRadius(8)
+            }
+            
+        case .prometheus:
+            // Prometheus - 5 Day Price Forecasting (Holt-Winters)
+            VStack(spacing: 16) {
+                // Header
+                HStack {
+                    Image(systemName: "crystal.ball")
+                        .font(.title2)
+                        .foregroundColor(.orange)
+                    Text("Prometheus Öngörü Sistemi")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Spacer()
+                }
+                
+                // Info Box
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.orange.opacity(0.8))
+                    Text("Prometheus, geçmiş fiyat verilerini Holt-Winters algoritması ile analiz ederek 5 günlük fiyat tahmini üretir. Güven skoru, son dönem volatilitesine göre hesaplanır.")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding()
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(12)
+                
+                // Forecast Card
+                if let candles = viewModel.candles[symbol], candles.count >= 30 {
+                    ForecastCard(
+                        symbol: symbol,
+                        historicalPrices: candles.map { $0.close }
+                    )
+                } else {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .tint(.orange)
+                        Text("Fiyat verisi yükleniyor...")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text("En az 30 günlük veri gerekli")
+                            .font(.caption2)
+                            .foregroundColor(.gray.opacity(0.7))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 150)
+                    .padding()
+                    .background(Color.white.opacity(0.03))
+                    .cornerRadius(12)
+                }
             }
         }
     }
@@ -1419,9 +1815,11 @@ struct HoloPanelView: View {
         VStack(alignment: .leading, spacing: 4) {
             chironWeightRow("Orion", weight: weights.orion, color: .cyan)
             chironWeightRow("Atlas", weight: weights.atlas, color: .yellow)
+            chironWeightRow("Phoenix", weight: weights.phoenix, color: .orange)
             chironWeightRow("Aether", weight: weights.aether, color: .purple)
-            chironWeightRow("Hermes", weight: weights.hermes, color: .orange)
-            chironWeightRow("Cronos", weight: weights.cronos, color: .gray)
+            chironWeightRow("Hermes", weight: weights.hermes, color: .green)
+            chironWeightRow("Demeter", weight: weights.demeter, color: .brown)
+            chironWeightRow("Athena", weight: weights.athena, color: .pink)
         }
     }
     
@@ -1749,15 +2147,9 @@ struct BistHoloPanelView: View {
             GrafikEducationalCard(symbol: symbol)
             
         case .bilanço:
-            if let detail = bistDetails?.bilanco {
-                BistModuleDetailCard(
-                    moduleResult: detail,
-                    moduleColor: module.color,
-                    moduleIcon: module.icon
-                )
-            } else {
-                AtlasBistScoreCard(symbol: symbol)
-            }
+            // 🆕 Yeni BIST Bilanço Eğitim Görünümü
+            let bistSymbol = symbol.uppercased().hasSuffix(".IS") ? symbol : "\(symbol.uppercased()).IS"
+            BISTBilancoDetailView(sembol: bistSymbol)
             
         case .faktor:
             if let detail = bistDetails?.faktor {
@@ -1817,6 +2209,10 @@ struct BistHoloPanelView: View {
             }
             
         case .kulis:
+            // 🆕 BIST Sentiment Pulse (Ana Bileşen)
+            BISTSentimentPulseCard(symbol: symbol)
+            
+            // Backend karar verisi (varsa)
             if let detail = bistDetails?.kulis {
                 BistModuleDetailCard(
                     moduleResult: detail,
@@ -1824,8 +2220,13 @@ struct BistHoloPanelView: View {
                     moduleIcon: module.icon
                 )
             }
-            // Analist kartları (Hermes)
-            HermesAnalystCard(symbol: symbol, currentPrice: viewModel.quotes[symbol]?.currentPrice ?? 0)
+            
+            // Analist kartları (Hermes - Alt Bileşen)
+            HermesAnalystCard(
+                symbol: symbol,
+                currentPrice: viewModel.quotes[symbol]?.currentPrice ?? 0,
+                newsDecision: viewModel.grandDecisions[symbol]?.hermesDecision
+            )
             
         case .sirkiye:
             // Sirkiye Dashboard (Makro Görünüm)
@@ -1833,3 +2234,24 @@ struct BistHoloPanelView: View {
         }
     }
 }
+
+// MARK: - Hermes Helper View
+
+struct HermesInfoRow: View {
+    let icon: String
+    let text: String
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundColor(SanctumTheme.hermesColor.opacity(0.8))
+                .frame(width: 16)
+            
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.6))
+        }
+    }
+}
+
