@@ -24,6 +24,9 @@ struct Algo_TradingApp: App {
             let modelContainer = try ModelContainer(for: ShadowTradeSession.self, MissedOpportunityLog.self)
             self.container = modelContainer
             
+            // SETUP NOTIFICATION DELEGATE
+            UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+            
             // Inject into Singleton immediately
             Task { @MainActor in
                 LearningPersistenceManager.shared.setContext(modelContainer.mainContext)
@@ -36,8 +39,14 @@ struct Algo_TradingApp: App {
                 let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
                 self.container = try ModelContainer(for: schema, configurations: [config])
                 print("⚠️ Using In-Memory Safe Container")
-            } catch {
-                fatalError("Failed to create generic fallback container: \(error)")
+            } catch let fallbackError {
+                // GRACEFUL DEGRADATION: Use absolute minimal container
+                // Instead of crashing, log and use empty schema
+                print("🚨 FATAL FALLBACK FAILED: \(fallbackError)")
+                print("🛡️ Using minimal empty container - some features may be unavailable")
+                
+                // Minimal fallback - sadece app açılsın
+                self.container = try! ModelContainer(for: Schema([]))
             }
         }
     }
