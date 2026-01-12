@@ -17,6 +17,7 @@ class TradingViewModel: ObservableObject {
     
     @Published var quotes: [String: Quote] = [:]
     @Published var candles: [String: [Candle]] = [:]
+    @Published var patterns: [String: [OrionChartPattern]] = [:] // Orion V3 Pattern Store
     @Published var portfolio: [Trade] = [] {
         didSet {
             savePortfolio()
@@ -82,6 +83,9 @@ class TradingViewModel: ObservableObject {
     @Published var scoutingCandidates: [TradeSignal] = [] // Opportunities found by Scout
     @Published var scoutLogs: [ScoutLog] = [] // Detailed logs of why trades were accepted/rejected
     
+    // Trade Brain Plan Execution Alerts
+    @Published var planAlerts: [TradeBrainAlert] = [] // Plan triggered notifications
+    
     // AGORA (Execution Governor V2)
     @Published var agoraSnapshots: [DecisionSnapshot] = [] // History of decisions (Approved & Rejected)
 
@@ -120,9 +124,6 @@ class TradingViewModel: ObservableObject {
     @Published var hermesSummaries: [String: [HermesSummary]] = [:] // Symbol -> Summaries
     @Published var hermesMode: HermesMode = .full 
     
-    // Wall Street Radar (Discover)
-    @Published var radarFeed: [RadarItem] = [] 
-    
     // Generic Backtest State
     @Published var activeBacktestResult: BacktestResult?
     @Published var isBacktesting: Bool = false 
@@ -138,6 +139,14 @@ class TradingViewModel: ObservableObject {
     let aiSignalService = AISignalService.shared
     // private let tvSocket = TradingViewSocketService.shared // REMOVED
     // private var tvSubscription: AnyCancellable? // REMOVED
+    
+    // Sınırsız Pozisyon Modu (Limit Yok)
+    @Published var isUnlimitedPositions = false {
+        didSet {
+            PortfolioRiskManager.shared.isUnlimitedPositionsEnabled = isUnlimitedPositions
+            print("⚡️ Sınırsız Pozisyon Modu: \(isUnlimitedPositions ? "AÇIK" : "KAPALI")")
+        }
+    }
     
     // Live Mode
     @Published var isLiveMode = false {
@@ -200,6 +209,13 @@ class TradingViewModel: ObservableObject {
         loadBalance()
         loadTransactions()
         setupStreamingObservation()
+        
+        // Ekonomik takvim beklenti hatırlatması kontrolü
+        Task { @MainActor in
+            EconomicCalendarService.shared.checkAndNotifyMissingExpectations()
+        }
+        
+        setupTradeBrainObservers()
     }
     
     private func setupStreamingObservation() {
@@ -225,6 +241,60 @@ class TradingViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+    
+    // MARK: - Trade Brain Execution Handlers
+    
+    private func setupTradeBrainObservers() {
+        NotificationCenter.default.addObserver(self, selector: #selector(handleTradeBrainBuy(_:)), name: .tradeBrainBuyOrder, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleTradeBrainSell(_:)), name: .tradeBrainSellOrder, object: nil)
+    }
+    
+    @objc private func handleTradeBrainBuy(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let symbol = userInfo["symbol"] as? String,
+              let quantity = userInfo["quantity"] as? Double,
+              let price = userInfo["price"] as? Double else { return }
+        
+        Task { @MainActor in
+            // 1. İşlemi Gerçekleştir
+            self.buy(
+                symbol: symbol,
+                quantity: quantity,
+                source: .autoPilot,
+                engine: .pulse,
+                stopLoss: nil,
+                takeProfit: nil,
+                rationale: "Trade Brain Execution"
+            )
+            
+            // 2. Log (Basit bildirim)
+            print("✅ TRADE BRAIN ALIM: \(symbol) - \(Int(quantity)) adet @ \(String(format: "%.2f", price))")
+        }
+    }
+    
+    @objc private func handleTradeBrainSell(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let _ = userInfo["price"] as? Double,
+              let reason = userInfo["reason"] as? String else { return }
+        
+        if let tradeIdStr = userInfo["tradeId"] as? String,
+           let tradeId = UUID(uuidString: tradeIdStr),
+           let trade = self.portfolio.first(where: { $0.id == tradeId }) {
+            
+            Task { @MainActor in
+                // 1. İşlemi Gerçekleştir
+                self.sell(
+                    tradeId: tradeId,
+                    currentPrice: self.quotes[trade.symbol]?.currentPrice ?? 0,
+                    reason: reason,
+                    source: .autoPilot
+                )
+                
+                // 2. Log
+                print("🚨 TRADE BRAIN SATIŞ: \(trade.symbol) - \(reason)")
+            }
+        }
     }
     
     /// Call this once on App launch. Idempotent.
@@ -486,6 +556,14 @@ class TradingViewModel: ObservableObject {
         let symbols = watchlist // No limit - analyze all
         
         for symbol in symbols {
+            // FIX: Quote (fiyat) verisini önce çek!
+            if quotes[symbol] == nil {
+                let val = await MarketDataStore.shared.ensureQuote(symbol: symbol)
+                if let q = val.value {
+                    await MainActor.run { self.quotes[symbol] = q }
+                }
+            }
+            
             // FULL ANALYSIS: Use the same loadArgusData as detail view for consistency
             // This is slower but ensures Terminal and Detail show the same decision
             if grandDecisions[symbol] == nil {
@@ -641,19 +719,36 @@ class TradingViewModel: ObservableObject {
     @MainActor
     func buy(symbol: String, quantity: Double, source: TradeSource = .user, engine: AutoPilotEngine? = nil, stopLoss: Double? = nil, takeProfit: Double? = nil, rationale: String? = nil, decisionTrace: DecisionTraceSnapshot? = nil, marketSnapshot: MarketSnapshot? = nil) {
         
-        // BIST MARKET HOUR CHECK
-        if symbol.uppercased().hasSuffix(".IS") && !isBistMarketOpen() {
-            print("🛑 İŞLEM REDDEDİLDİ: BIST Piyasası Kapalı (\(symbol))")
-            self.lastAction = "🛑 Piyasa Kapalı: İşlem Reddedildi"
+        // UNIFIED INPUT VALIDATION (Phase 1 Fix)
+        let isBist = symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol)
+        let availableBalance = isBist ? bistBalance : balance
+        let price = quotes[symbol]?.currentPrice
+        
+        let validation = TradeValidator.validateBuy(
+            symbol: symbol,
+            quantity: quantity,
+            price: price,
+            availableBalance: availableBalance,
+            isBistMarketOpen: isBistMarketOpen(),
+            isGlobalMarketOpen: MarketStatusService.shared.canTrade()
+        )
+        
+        guard validation.isValid else {
+            let errorMessage = validation.error?.localizedDescription ?? "Bilinmeyen hata"
+            print("🛑 İŞLEM REDDEDİLDİ: \(errorMessage)")
+            self.lastAction = "🛑 \(errorMessage)"
             return
         }
+        
+        // Price now guaranteed to be valid
+        let validPrice = price!
         
         // AGORA GUARDRAIL (Decision V2)
         // ----------------------------------------------------------------
         if let decision = argusDecisions[symbol] {
             let snapshot = AgoraExecutionGovernor.shared.audit(
                 decision: decision,
-                currentPrice: quotes[symbol]?.currentPrice ?? 0.0,
+                currentPrice: validPrice,
                 portfolio: portfolio,
                 lastTradeTime: lastTradeTimes[symbol],
                 lastActionPrice: nil
@@ -666,36 +761,16 @@ class TradingViewModel: ObservableObject {
                 self.agoraSnapshots.append(snapshot) // Log the rejection
                 return // ABORT TRADE
             }
-            // If Approved, logging happens in transaction or we can append "Execution" snapshot?
-            // User: "DecisionSnapshot (Log-Only)". We logged it above?
-            // Actually, if we proceed, we should probably link the trade ID later. 
-            // For now, minimal diff: Just Guard.
         }
         // ----------------------------------------------------------------
-        guard quantity > 0 else { return }
         
-        // Price Check
-        let price = quotes[symbol]?.currentPrice ?? 0.0
-        guard price > 0 else {
-            self.lastAction = "Hata: \(symbol) fiyatı alınamadı."
-            return
-        }
-        
-        let cost = quantity * price
+        let cost = quantity * validPrice
         let commission = FeeModel.shared.calculate(amount: cost)
         let totalCost = cost + commission
         
-        // BIST için TL bakiyesi, diğerleri için USD
-        // BIST için TL bakiyesi, diğerleri için USD
-        // Check for suffix OR if it's a known BIST symbol (e.g. via SymbolResolver or simple check)
-        let isSuffixBist = symbol.uppercased().hasSuffix(".IS")
-        // Fallback: Check if it's a known BIST symbol without suffix (simple heuristic for now or use shared resolver if available)
-        // Since SymbolResolver is used in View, let's assume it's accessible or implement a basic check.
-        // For safety, let's force suffix check or check if it matches common BIST stocks if resolver isn't in scope.
-        // Better: Use SymbolResolver if available. The user used it in View.
-        // Assuming SymbolResolver is available (based on View usage).
-        let isBist = isSuffixBist || SymbolResolver.shared.isBistSymbol(symbol)
-        let availableBalance = isBist ? bistBalance : balance
+        
+        // isBist ve availableBalance zaten validation öncesi hesaplandı
+        // Burada tekrar kullanıyoruz
         
         if availableBalance >= totalCost {
             if isBist {
@@ -707,7 +782,7 @@ class TradingViewModel: ObservableObject {
             let newTrade = Trade(
                 id: UUID(),
                 symbol: symbol,
-                entryPrice: price,
+                entryPrice: validPrice,
                 quantity: quantity,
                 entryDate: Date(),
                 isOpen: true,
@@ -723,8 +798,8 @@ class TradingViewModel: ObservableObject {
             // Build Execution Snapshot
             let execution = ExecutionSnapshot(
                 orderType: "MARKET",
-                requestedPrice: price,
-                filledPrice: price,
+                requestedPrice: validPrice,
+                filledPrice: validPrice,
                 slippagePct: 0.0,
                 latencyMs: 15.0, // Simulated
                 partialFill: false,
@@ -738,7 +813,7 @@ class TradingViewModel: ObservableObject {
                 positionQtyBefore: 0, // Simplified
                 positionQtyAfter: quantity,
                 avgCostBefore: 0,
-                avgCostAfter: price,
+                avgCostAfter: validPrice,
                 holdingSeconds: 0,
                 unrealizedPnlBefore: 0,
                 realizedPnlThisTrade: 0,
@@ -757,7 +832,7 @@ class TradingViewModel: ObservableObject {
                 type: .buy,
                 symbol: symbol,
                 amount: cost, // Value
-                price: price,
+                price: validPrice,
                 date: Date(),
                 fee: commission,
                 pnl: nil,
@@ -781,7 +856,7 @@ class TradingViewModel: ObservableObject {
             ))
             saveTransactions() // Persist immediately
             
-            self.lastAction = "Alındı: \(String(format: "%.2f", quantity))x \(symbol) @ $\(String(format: "%.2f", price))"
+            self.lastAction = "Alındı: \(String(format: "%.2f", quantity))x \(symbol) @ $\(String(format: "%.2f", validPrice))"
             
             // ARGUS VOICE (Phase 3)
             // Fire-and-forget generation
@@ -795,6 +870,148 @@ class TradingViewModel: ObservableObject {
                     }
                 }
             }
+            
+            // TRADE BRAIN: Pozisyon Planı Oluştur
+            if let grandDecision = self.grandDecisions[symbol] {
+                // Entry Snapshot kaydet
+                let orionScore = self.orionScores[symbol]?.score ?? 50.0
+                
+                // Teknik veriler
+                let candles = self.candles[symbol] ?? []
+                var technicalData: TechnicalSnapshotData? = nil
+                if candles.count >= 20 {
+                    let closes = candles.map { $0.close }
+                    let highs = candles.map { $0.high }
+                    let lows = candles.map { $0.low }
+                    
+                    // Basit RSI hesaplama (son 14 gün)
+                    var rsi: Double? = nil
+                    if closes.count >= 15 {
+                        var gains: Double = 0
+                        var losses: Double = 0
+                        let period = 14
+                        let startIdx = closes.count - period - 1
+                        for i in startIdx..<(closes.count - 1) {
+                            let change = closes[i + 1] - closes[i]
+                            if change > 0 { gains += change }
+                            else { losses += abs(change) }
+                        }
+                        let avgGain = gains / Double(period)
+                        let avgLoss = losses / Double(period)
+                        if avgLoss > 0 {
+                            let rs = avgGain / avgLoss
+                            rsi = 100.0 - (100.0 / (1.0 + rs))
+                        }
+                    }
+                    
+                    // Basit ATR hesaplama
+                    var atr: Double? = nil
+                    if candles.count >= 15 {
+                        var trSum: Double = 0
+                        let period = 14
+                        let startIdx = candles.count - period
+                        for i in startIdx..<candles.count {
+                            let high = highs[i]
+                            let low = lows[i]
+                            let prevClose = i > 0 ? closes[i - 1] : closes[i]
+                            let tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
+                            trSum += tr
+                        }
+                        atr = trSum / Double(period)
+                    }
+                    
+                    // SMA'lar
+                    let sma20: Double? = closes.count >= 20 ? closes.suffix(20).reduce(0, +) / 20.0 : nil
+                    let sma50: Double? = closes.count >= 50 ? closes.suffix(50).reduce(0, +) / 50.0 : nil
+                    let sma200: Double? = closes.count >= 200 ? closes.suffix(200).reduce(0, +) / 200.0 : nil
+                    
+                    // ATH uzaklığı
+                    let ath = closes.max() ?? validPrice
+                    let distanceFromATH = ((ath - validPrice) / ath) * 100
+                    
+                    technicalData = TechnicalSnapshotData(
+                        rsi: rsi,
+                        atr: atr,
+                        sma20: sma20,
+                        sma50: sma50,
+                        sma200: sma200,
+                        distanceFromATH: distanceFromATH,
+                        distanceFrom52WeekLow: nil,
+                        nearestSupport: nil,
+                        nearestResistance: nil,
+                        trend: nil
+                    )
+                }
+                
+                // Makro veriler
+                let macroData = MacroSnapshotData(
+                    vix: self.quotes["^VIX"]?.currentPrice,
+                    spyPrice: self.quotes["SPY"]?.currentPrice,
+                    marketMode: grandDecision.aetherDecision.marketMode
+                )
+                
+                // Snapshot kaydet
+                EntrySnapshotStore.shared.captureSnapshot(
+                    for: newTrade,
+                    grandDecision: grandDecision,
+                    orionScore: orionScore,
+                    atlasScore: nil,
+                    technicalData: technicalData,
+                    macroData: macroData,
+                    fundamentalData: nil
+                )
+                
+                // Plan oluştur
+                PositionPlanStore.shared.createPlan(for: newTrade, decision: grandDecision)
+            } else {
+                // Grand Council kararı yoksa varsayılan neutral plan
+                let defaultOrionDecision = CouncilDecision(
+                    symbol: symbol,
+                    action: .hold,
+                    netSupport: 0.5,
+                    approveWeight: 0,
+                    vetoWeight: 0,
+                    isStrongSignal: false,
+                    isWeakSignal: false,
+                    winningProposal: nil,
+                    allProposals: [],
+                    votes: [],
+                    vetoReasons: [],
+                    timestamp: Date()
+                )
+                
+                let defaultAetherDecision = AetherDecision(
+                    stance: .cautious,
+                    marketMode: .neutral,
+                    netSupport: 0.5,
+                    isStrongSignal: false,
+                    winningProposal: nil,
+                    votes: [],
+                    warnings: [],
+                    timestamp: Date()
+                )
+                
+                let defaultDecision = ArgusGrandDecision(
+                    id: UUID(),
+                    symbol: symbol,
+                    action: source == .autoPilot ? .accumulate : .neutral,
+                    strength: .normal,
+                    confidence: 0.5,
+                    reasoning: source == .autoPilot ? "AutoPilot Giriş" : "Manuel Giriş",
+                    contributors: [],
+                    vetoes: [],
+                    orionDecision: defaultOrionDecision,
+                    atlasDecision: nil,
+                    aetherDecision: defaultAetherDecision,
+                    hermesDecision: nil,
+                    orionDetails: nil,
+                    financialDetails: nil,
+                    bistDetails: nil,
+                    patterns: nil,
+                    timestamp: Date()
+                )
+                PositionPlanStore.shared.createPlan(for: newTrade, decision: defaultDecision)
+            }
         } else {
              self.lastAction = "Bakiye Yetersiz! (Gereken: $\(Int(totalCost)), Mevcut: $\(Int(balance)))"
         }
@@ -803,17 +1020,27 @@ class TradingViewModel: ObservableObject {
     @MainActor
     func sell(symbol: String, quantity: Double, source: TradeSource = .user, engine: AutoPilotEngine? = nil, decisionTrace: DecisionTraceSnapshot? = nil, marketSnapshot: MarketSnapshot? = nil, reason: String? = nil) {
         
-        // BIST MARKET HOUR CHECK
-        if symbol.uppercased().hasSuffix(".IS") && !isBistMarketOpen() {
-            print("🛑 SATIŞ REDDEDİLDİ: BIST Piyasası Kapalı (\(symbol))")
-            self.lastAction = "🛑 Piyasa Kapalı: Satış Reddedildi"
+        // UNIFIED INPUT VALIDATION (Phase 1 Fix)
+        let openTrades = portfolio.filter { $0.symbol == symbol && $0.isOpen }
+        let totalOwned = openTrades.reduce(0.0) { $0 + $1.quantity }
+        
+        let validation = TradeValidator.validateSell(
+            symbol: symbol,
+            quantity: quantity,
+            ownedQuantity: totalOwned,
+            isBistMarketOpen: isBistMarketOpen(),
+            isGlobalMarketOpen: MarketStatusService.shared.canTrade()
+        )
+        
+        guard validation.isValid else {
+            let errorMessage = validation.error?.localizedDescription ?? "Bilinmeyen hata"
+            print("🛑 SATIŞ REDDEDİLDİ: \(errorMessage)")
+            self.lastAction = "🛑 \(errorMessage)"
             return
         }
         
         // AGORA GUARDRAIL (Decision V2)
         // ----------------------------------------------------------------
-        // Note: Sell usually requires Less strict guards? Or "Min Hold Time"?
-        // Agora logic handles Sell guards (Min Hold).
         if let decision = argusDecisions[symbol] {
              let snapshot = AgoraExecutionGovernor.shared.audit(
                 decision: decision,
@@ -831,24 +1058,6 @@ class TradingViewModel: ObservableObject {
             }
         }
         // ----------------------------------------------------------------
-        guard quantity > 0 else { return }
-        
-        // Market Status Check
-        if !MarketStatusService.shared.canTrade() {
-             self.lastAction = "⚠️ Piyasa Kapalı: Satış Beklemede"
-             // Allow sell in simulation? User wants "Spot". Real market rules apply?
-             // Let's allow it for now or keep warning.
-             // return // Commented out to allow testing
-        }
-        
-        // Find open trades
-        let openTrades = portfolio.filter { $0.symbol == symbol && $0.isOpen }
-        let totalOwned = openTrades.reduce(0.0) { $0 + $1.quantity }
-        
-        guard totalOwned >= quantity else {
-            self.lastAction = "Hata: Yetersiz Pozisyon (\(symbol))"
-            return
-        }
         
         // Execution
         let price = quotes[symbol]?.currentPrice ?? 0.0
@@ -909,10 +1118,19 @@ class TradingViewModel: ObservableObject {
                             orionScoreAtEntry: self.orionScores[symbol]?.score,
                             atlasScoreAtEntry: FundamentalScoreStore.shared.getScore(for: symbol)?.totalScore,
                             aetherScoreAtEntry: self.macroRating?.numericScore,
-                            phoenixScoreAtEntry: nil
+                            phoenixScoreAtEntry: nil,
+                            allModuleScores: nil,
+                            systemDecision: nil,
+                            ignoredWarnings: nil,
+                            regime: nil
                         )
                         await ChironDataLakeService.shared.logTrade(record)
                         print("🧠 Chiron: Trade logged for learning - \(symbol) \(pnlPercent > 0 ? "WIN" : "LOSS")")
+                        
+                        // 🆕 OTOMATİK ÖĞRENME TETİKLE - Her 3 trade'de 1 analiz
+                        Task {
+                            await ChironLearningJob.shared.analyzeSymbol(symbol)
+                        }
                     }
                 } else {
                     // Partial Close: Split trade
@@ -921,6 +1139,32 @@ class TradingViewModel: ObservableObject {
                     
                     let pnl = (price - tradeEntryPrice) * soldPart
                     totalRealizedPnL += pnl
+                    
+                    // 🆕 PARTIAL CLOSE'U DA LOGLA
+                    let pnlPercent = ((price - tradeEntryPrice) / tradeEntryPrice) * 100
+                    let record = TradeOutcomeRecord(
+                        id: UUID(),
+                        symbol: symbol,
+                        engine: portfolio[i].engine ?? .pulse,
+                        entryDate: portfolio[i].entryDate,
+                        exitDate: Date(),
+                        entryPrice: tradeEntryPrice,
+                        exitPrice: price,
+                        pnlPercent: pnlPercent,
+                        exitReason: "PARTIAL_CLOSE",
+                        orionScoreAtEntry: self.orionScores[symbol]?.score,
+                        atlasScoreAtEntry: FundamentalScoreStore.shared.getScore(for: symbol)?.totalScore,
+                        aetherScoreAtEntry: self.macroRating?.numericScore,
+                        phoenixScoreAtEntry: nil,
+                        allModuleScores: nil,
+                        systemDecision: nil,
+                        ignoredWarnings: nil,
+                        regime: nil
+                    )
+                    Task {
+                        await ChironDataLakeService.shared.logTrade(record)
+                        print("🧠 Chiron: Partial trade logged - \(symbol) \(pnlPercent > 0 ? "WIN" : "LOSS")")
+                    }
                     
                     // Modify current to be "Sold"
                     portfolio[i].quantity = soldPart
@@ -1518,6 +1762,20 @@ extension TradingViewModel {
         saveTransactions() // Persist immediately
     }    
 
+    var bistPortfolio: [Trade] {
+        portfolio.filter { $0.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol) }
+    }
+
+    var globalPortfolio: [Trade] {
+        portfolio.filter { !($0.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) }
+    }
+    
+    
+    // Logları filtrele: Sadece Global semboller (BIST olmayanlar)
+    var globalScoutLogs: [ScoutLog] {
+        scoutLogs.filter { !($0.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) }
+    }
+
     // MARK: - BIST Tam Reset Functions
     func resetBistPortfolio() {
         print("🚨 BIST PORTFÖYÜ SIFIRLANIYOR...")
@@ -1541,5 +1799,61 @@ extension TradingViewModel {
         saveBistBalance()
         print("✅ Bakiye 1.000.000 TL olarak ayarlandı.")
     }
+    
+    // MARK: - Smart Rebalancing (Portföy Dengesi Analizi)
+    
+    /// Her pozisyonun portföy içindeki yüzde ağırlığı
+    var portfolioAllocation: [String: PortfolioAllocationItem] {
+        let totalEquity = getEquity()
+        guard totalEquity > 0 else { return [:] }
+        
+        var allocation: [String: PortfolioAllocationItem] = [:]
+        
+        for trade in portfolio where trade.isOpen {
+            let currentPrice = quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
+            let positionValue = currentPrice * trade.quantity
+            let percentage = (positionValue / totalEquity) * 100
+            
+            allocation[trade.symbol] = PortfolioAllocationItem(
+                symbol: trade.symbol,
+                value: positionValue,
+                percentage: percentage,
+                quantity: trade.quantity
+            )
+        }
+        
+        return allocation
+    }
+    
+    /// Konsantrasyon uyarıları (basit string formatında)
+    var concentrationWarnings: [String] {
+        var warnings: [String] = []
+        
+        for (symbol, item) in portfolioAllocation {
+            // Tek pozisyon > %25 uyarısı
+            if item.percentage > 25 {
+                let emoji = item.percentage > 35 ? "🚨" : "⚠️"
+                warnings.append("\(emoji) \(symbol) portföyün %\(Int(item.percentage))'ini oluşturuyor. Max önerilen: %25")
+            }
+        }
+        
+        return warnings.sorted()
+    }
+    
+    /// En büyük pozisyonlar (Top N)
+    func topPositions(count: Int = 5) -> [PortfolioAllocationItem] {
+        return portfolioAllocation.values.sorted { $0.percentage > $1.percentage }.prefix(count).map { $0 }
+    }
 
 }
+
+// MARK: - Portfolio Allocation Models
+
+struct PortfolioAllocationItem: Identifiable {
+    var id: String { symbol }
+    let symbol: String
+    let value: Double
+    let percentage: Double
+    let quantity: Double
+}
+
