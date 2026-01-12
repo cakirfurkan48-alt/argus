@@ -332,56 +332,13 @@ struct ArgusSanctumView: View {
                 
                 // 3. HOLO PANEL (Details when module selected)
                 if selectedModule == nil {
-                    VStack(spacing: 12) {
-                        // Mini Chart
-                        SanctumMiniChart(candles: viewModel.candles[symbol] ?? [])
-                            .frame(height: 80)
-                            .padding(.horizontal)
-                        
-                        // Info Strip (Universe + Transactions)
-                        HStack(spacing: 16) {
-                            // Universe Info
-                            if let universeItem = viewModel.universeCache[symbol] {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "globe")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                    Text(universeItem.sources.first?.rawValue ?? "Scout")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                }
-                            }
-                            
-                            // Transaction Count
-                            let txCount = viewModel.transactionHistory.filter { $0.symbol == symbol }.count
-                            if txCount > 0 {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.left.arrow.right")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                    Text("\(txCount) işlem")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                }
-                            }
-                            
-                            Spacer()
-                            
-                            Text("Modül Seçin")
-                                .font(.caption2)
-                                .foregroundColor(.gray.opacity(0.6))
-                        }
-                        .padding(.horizontal)
-                    }
-                    .transition(.opacity)
+                    Spacer()
                     
-                    // 4. ADVISOR PANEL (Bottom)
-                    if let decision = viewModel.grandDecisions[symbol], !decision.advisors.isEmpty {
-                        ArgusAdvisorsView(advisors: decision.advisors)
-                            .padding(.horizontal)
-                            .padding(.bottom, 20)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
+                    // Minimal Footer
+                    Text("Detaylı analiz için modullere dokunun")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.3))
+                        .padding(.bottom, 30) // Tab bar clearance
                 }
             }
             // .ignoresSafeArea() -- REMOVED: This was causing the header to slide under the notch/island.
