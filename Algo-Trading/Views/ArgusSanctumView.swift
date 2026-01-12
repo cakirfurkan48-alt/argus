@@ -2146,6 +2146,9 @@ struct BistHoloPanelView: View {
             // Teknik gostergeler (SAR, TSI, RSI)
             GrafikEducationalCard(symbol: symbol)
             
+            // Rölatif Güç (XU100'e göre performans)
+            OrionRelativeStrengthCard(symbol: symbol)
+            
             // Prometheus - 5 Gunluk Fiyat Tahmini (Global ile ayni)
             if let candles = viewModel.candles[symbol], candles.count >= 30 {
                 ForecastCard(
