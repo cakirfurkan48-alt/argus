@@ -24,7 +24,7 @@ struct ArgusLabView: View {
                     OpenTradesListView(trades: viewModel.openTrades)
                         .tag(0)
                     
-                    ClosedTradesListView(trades: viewModel.closedTrades)
+                    ClosedTradesListView(trades: viewModel.closedTrades, lessons: viewModel.lessons)
                         .tag(1)
                     
                     LessonsListView(lessons: viewModel.lessons)
@@ -75,6 +75,12 @@ struct OpenTradesListView: View {
 
 struct ClosedTradesListView: View {
     let trades: [TradeRecord]
+    let lessons: [LessonRecord]
+    
+    init(trades: [TradeRecord], lessons: [LessonRecord] = []) {
+        self.trades = trades
+        self.lessons = lessons
+    }
     
     var body: some View {
         ScrollView {
@@ -85,9 +91,11 @@ struct ClosedTradesListView: View {
                     message: "Kapanan işlemler burada listenecek."
                 )
             } else {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 16) {
                     ForEach(trades) { trade in
-                        TradeCard(trade: trade, isOpen: false)
+                        // TradeHistoryCard ile lesson eşleştir
+                        let matchingLesson = lessons.first { $0.tradeId == trade.id }
+                        TradeHistoryCard(trade: trade, lesson: matchingLesson)
                     }
                 }
                 .padding()

@@ -1684,6 +1684,38 @@ struct HoloPanelView: View {
                             .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
                     )
                 }
+                
+                // ARGUS LAB Navigation (Trade History & Lessons)
+                NavigationLink(destination: ArgusLabView()) {
+                    HStack {
+                        Image(systemName: "flask.fill")
+                            .font(.title3)
+                            .foregroundColor(.purple)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Argus Lab")
+                                .font(.subheadline)
+                                .bold()
+                                .foregroundColor(.white)
+                            Text("İşlem Geçmişi & Öğrenmeler")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .padding()
+                    .background(Color.purple.opacity(0.1))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.purple.opacity(0.3), lineWidth: 1)
+                    )
+                }
             }
             
         case .prometheus:
