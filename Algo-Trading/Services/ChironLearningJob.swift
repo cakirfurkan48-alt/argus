@@ -51,7 +51,7 @@ final class ChironLearningJob {
                 await logLearningEvent(symbol: symbol, engine: .corse, weights: llmWeights)
                 print("🤖 Chiron: LLM weight recommendation applied for \(symbol) CORSE")
             }
-        } else if let corseWeights = generateWeightRecommendation(symbol: symbol, engine: .corse, analysis: corseAnalysis) {
+        } else if let corseWeights = await generateWeightRecommendation(symbol: symbol, engine: .corse, analysis: corseAnalysis) {
             weightStore.updateWeights(symbol: symbol, engine: .corse, weights: corseWeights)
             await logLearningEvent(symbol: symbol, engine: .corse, weights: corseWeights)
         }
@@ -69,7 +69,7 @@ final class ChironLearningJob {
                 await logLearningEvent(symbol: symbol, engine: .pulse, weights: llmWeights)
                 print("🤖 Chiron: LLM weight recommendation applied for \(symbol) PULSE")
             }
-        } else if let pulseWeights = generateWeightRecommendation(symbol: symbol, engine: .pulse, analysis: pulseAnalysis) {
+        } else if let pulseWeights = await generateWeightRecommendation(symbol: symbol, engine: .pulse, analysis: pulseAnalysis) {
             weightStore.updateWeights(symbol: symbol, engine: .pulse, weights: pulseWeights)
             await logLearningEvent(symbol: symbol, engine: .pulse, weights: pulseWeights)
         }
@@ -164,93 +164,89 @@ final class ChironLearningJob {
         symbol: String,
         engine: AutoPilotEngine,
         analysis: EngineAnalysis
-    ) -> ChironModuleWeights? {
+    ) async -> ChironModuleWeights? {
         guard analysis.tradeCount >= 3 else { return nil }
         
         // Get current weights as baseline
         let current = weightStore.getWeights(symbol: symbol, engine: engine)
         
-        // Adjust weights based on module performance
-        var orion = current.orion
-        var atlas = current.atlas
-        var phoenix = current.phoenix
-        var aether = current.aether
-        var hermes = current.hermes
-        var demeter = current.demeter
-        var athena = current.athena
+        // 1. Bayesian Smoothing for each module
+        // Posterior = (Alpha + Wins) / (Alpha + Beta + Total)
+        // Prior: Alpha=5, Beta=5 (Neutral, weight ~0.5)
         
-        // Increase weight for modules that correlate with wins
-        let learningRate = 0.1 // Conservative adjustment
-        
-        if let orionDelta = analysis.modulePerformance["orion"] {
-            orion += learningRate * (orionDelta > 0 ? 0.05 : -0.03)
+        func calculateBayesianScore(module: String) async -> Double {
+            // Load global accuracy for this module (to check general reliability)
+            let records = await dataLake.loadModuleAccuracy(module: module)
+            
+            // Filter for this symbol to be specific (Concept Drift handling)
+            let symbolRecords = records.filter { $0.symbol == symbol }
+            
+            // If not enough symbol specific data, mix with global data (Shrinkage)
+            let relevantRecords = symbolRecords.count < 5 ? records : symbolRecords
+            
+            guard !relevantRecords.isEmpty else { return 0.5 }
+            
+            let wins = Double(relevantRecords.filter { $0.wasCorrect }.count)
+            let total = Double(relevantRecords.count)
+            
+            let alpha = 5.0
+            let beta = 5.0
+            
+            return (alpha + wins) / (alpha + beta + total)
         }
         
-        if let atlasDelta = analysis.modulePerformance["atlas"] {
-            atlas += learningRate * (atlasDelta > 0 ? 0.05 : -0.03)
+        let orionScore = await calculateBayesianScore(module: "orion")
+        let atlasScore = await calculateBayesianScore(module: "atlas")
+        let phoenixScore = await calculateBayesianScore(module: "phoenix")
+        let aetherScore = await calculateBayesianScore(module: "aether")
+        
+        // 2. Map Scores to Weights (Dynamic Ranges)
+        // Base Ranges:
+        // Orion: 0.10 - 0.40
+        // Atlas: 0.10 - 0.40
+        // Phoenix: 0.10 - 0.35
+        
+        func mapScoreToWeight(score: Double, minW: Double, maxW: Double) -> Double {
+            // Score 0.0 -> minW
+            // Score 0.5 -> mid
+            // Score 1.0 -> maxW
+            let range = maxW - minW
+            return minW + (score * range)
         }
         
-        if let phoenixDelta = analysis.modulePerformance["phoenix"] {
-            phoenix += learningRate * (phoenixDelta > 0 ? 0.05 : -0.03)
-        }
+        var orion = mapScoreToWeight(score: orionScore, minW: 0.15, maxW: 0.45)
+        var atlas = mapScoreToWeight(score: atlasScore, minW: 0.15, maxW: 0.45)
+        var phoenix = mapScoreToWeight(score: phoenixScore, minW: 0.10, maxW: 0.35)
+        var aether = mapScoreToWeight(score: aetherScore, minW: 0.10, maxW: 0.30)
         
-        // Adjust aether based on overall win rate
-        if analysis.winRate < 0.4 {
-            aether += 0.05 // More macro awareness when losing
-            demeter += 0.03 // Sector awareness too
-        }
+        // Normalize basics
+        let totalDynamic = orion + atlas + phoenix + aether
         
-        // Clamp weights to reasonable bounds
-        orion = max(0.05, min(0.5, orion))
-        atlas = max(0.05, min(0.5, atlas))
-        phoenix = max(0.05, min(0.4, phoenix))
-        aether = max(0.05, min(0.3, aether))
-        hermes = max(0.02, min(0.25, hermes))
-        demeter = max(0.02, min(0.25, demeter))
-        athena = max(0.02, min(0.2, athena))
+        // Keep fixed/minor modules steady but normalize
+        let hermes = current.hermes // News usually manual/static
+        let demeter = current.demeter
+        let athena = current.athena
+        let fixedTotal = hermes + demeter + athena
+        
+        if totalDynamic + fixedTotal > 1.0 {
+            // Scale down dynamic parts to fit
+            let available = 1.0 - fixedTotal
+            let scale = available / totalDynamic
+            orion *= scale
+            atlas *= scale
+            phoenix *= scale
+            aether *= scale
+        }
         
         // Anlaşılır Türkçe açıklama oluştur
         let winRateInt = Int(analysis.winRate * 100)
-        let avgPnlStr = String(format: "%.1f", analysis.avgPnl)
         
-        // Özet cümle oluştur
         var summaryParts: [String] = []
+        summaryParts.append("Bayesian Analiz (% \(winRateInt) Başarı)")
         
-        // Performans özeti
-        let performanceDesc: String
-        if winRateInt >= 60 {
-            performanceDesc = "🎯 Harika performans"
-        } else if winRateInt >= 50 {
-            performanceDesc = "✅ İyi performans"
-        } else if winRateInt >= 40 {
-            performanceDesc = "⚠️ Geliştirilebilir"
-        } else {
-            performanceDesc = "🔴 Dikkat gerekli"
-        }
-        summaryParts.append("\(performanceDesc) (\(analysis.tradeCount) işlemde %\(winRateInt) başarı)")
-        
-        // Modül değerlendirmesi
-        let orionPerf = analysis.modulePerformance["orion"] ?? 0
-        let atlasPerf = analysis.modulePerformance["atlas"] ?? 0
-        
-        if orionPerf > 2 {
-            summaryParts.append("Orion teknik sinyalleri isabetli 📈")
-        } else if orionPerf < -2 {
-            summaryParts.append("Orion sinyallerinde düzeltme yapıldı")
-        }
-        
-        if atlasPerf > 2 {
-            summaryParts.append("Atlas temel analizi güçlü 💹")
-        } else if atlasPerf < -2 {
-            summaryParts.append("Atlas ağırlığı azaltıldı")
-        }
-        
-        // PnL durumu
-        if analysis.avgPnl > 2 {
-            summaryParts.append("Ortalama kazanç: +%\(avgPnlStr)")
-        } else if analysis.avgPnl < -2 {
-            summaryParts.append("Ortalama kayıp: %\(avgPnlStr)")
-        }
+        if orionScore > 0.6 { summaryParts.append("Orion Güvenilir (Skor: \(String(format: "%.2f", orionScore)))") }
+        if atlasScore > 0.6 { summaryParts.append("Atlas Güçlü (Skor: \(String(format: "%.2f", atlasScore)))") }
+        if orionScore < 0.4 { summaryParts.append("Orion Zayıf") }
         
         let reasoning = summaryParts.joined(separator: ". ")
         
@@ -263,7 +259,7 @@ final class ChironLearningJob {
             demeter: demeter,
             athena: athena,
             updatedAt: Date(),
-            confidence: min(0.9, 0.5 + Double(analysis.tradeCount) * 0.02),
+            confidence: min(0.95, (Double(analysis.tradeCount) * 0.05) + 0.5),
             reasoning: reasoning
         )
     }

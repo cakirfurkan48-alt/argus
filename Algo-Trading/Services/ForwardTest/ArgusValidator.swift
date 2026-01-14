@@ -218,6 +218,7 @@ class ArgusValidator {
     
     private func feedResultsToChiron(_ results: [ForwardTestResult]) async {
         for result in results {
+            // 1. Log Learning Event
             let event = ChironLearningEvent(
                 id: UUID(),
                 date: result.verificationDate,
@@ -226,9 +227,43 @@ class ArgusValidator {
                 engine: nil,
                 description: result.wasCorrect ? "Doğrulama Başarılı" : "Doğrulama Başarısız",
                 reasoning: result.notes ?? "",
-                confidence: result.accuracy / 100
+                confidence: result.accuracy / 100.0
             )
             await chiron.logLearningEvent(event)
+            
+            // 2. Log Module Predictions (Attribution)
+            if let scores = result.moduleScores {
+                for (module, score) in scores {
+                    // Attribution Logic:
+                    // Eğer modül skoru yüksekse (>50) ve sonuç doğruysa -> Modül Başarılı
+                    // Eğer modül skoru düşükse (<50) ve sonuç yanlışsa -> Modül Başarılı (Doğru çekimserlik)
+                    // Buna "Signal Agreement" diyoruz.
+                    
+                    let signalAgreement: Bool
+                    if score >= 50 {
+                        signalAgreement = result.wasCorrect
+                    } else {
+                        // Skor düşük, yani modül "girme" dedi. Eğer sonuç kötüyse (fiyat düştüyse/zarar yazdıysa), modül haklıdır.
+                        // Ancak burada result.wasCorrect "Kararın" doğruluğu.
+                        // Eğer Karar = BUY ve Sonuç = Kötü ise wasCorrect = False.
+                        // Modül Score = 30 ise (Desteklemedi), Modül haklı çıktı.
+                        signalAgreement = !result.wasCorrect
+                    }
+                    
+                    let prediction = ModulePredictionRecord(
+                        id: UUID(),
+                        module: module,
+                        symbol: result.symbol,
+                        date: result.eventDate,
+                        signal: score >= 50 ? "SUPPORT" : "ABSTAIN",
+                        scoreAtTime: score,
+                        wasCorrect: signalAgreement,
+                        actualPnl: result.actualChange
+                    )
+                    
+                    await chiron.logModulePrediction(prediction)
+                }
+            }
         }
         
         // Sonuçları yerel diske de yedekleyelim (Analiz UI'ı için)
