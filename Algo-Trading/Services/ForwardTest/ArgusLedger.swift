@@ -220,6 +220,32 @@ final class ArgusLedger: Sendable {
         }
     }
     
+    /// Reads a blob from storage by hash.
+    func readBlob(hash: String) -> Data? {
+        let sql = """
+        SELECT payload_bytes FROM blobs WHERE hash_id = ? LIMIT 1;
+        """
+        
+        return queue.sync {
+            ensureConnection()
+            var stmt: OpaquePointer?
+            var result: Data?
+            
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (hash as NSString).utf8String, -1, nil)
+                
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    if let blobPtr = sqlite3_column_blob(stmt, 0) {
+                        let blobSize = Int(sqlite3_column_bytes(stmt, 0))
+                        result = Data(bytes: blobPtr, count: blobSize)
+                    }
+                }
+            }
+            sqlite3_finalize(stmt)
+            return result
+        }
+    }
+    
     /// Caches a blob reference for the current symbol cycle.
     /// Used to implicitly pass data provenance to AGORA.
     func cacheSnapshotRef(symbol: String, type: String, hash: String) {
