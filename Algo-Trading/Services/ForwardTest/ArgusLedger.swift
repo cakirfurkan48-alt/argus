@@ -144,7 +144,14 @@ final class ArgusLedger: Sendable {
             old_weight REAL NOT NULL,
             new_weight REAL NOT NULL,
             reason TEXT,
-            trade_id TEXT
+            trade_id TEXT,
+            
+            -- Observatory: Extended Learning Tracking
+            regime TEXT,           -- Trend, Chop, RiskOff
+            window_days INTEGER,   -- 30, 60, 90
+            sample_size INTEGER,   -- Kaç karar üzerinden hesaplandı
+            trigger_metric TEXT,   -- win_rate, sharpe vb.
+            trigger_value REAL     -- Tetikleyici metrik değeri
         );
         """
         
@@ -542,6 +549,144 @@ final class ArgusLedger: Sendable {
         }
     }
     
+    // MARK: - Observatory: Learning Event Logging
+    
+    /// Logs a learning event (weight update) for Observatory.
+    func logLearning(event: LearningEvent) {
+        let now = Date().iso8601
+        
+        // Insert one row per module weight change
+        let sql = """
+        INSERT INTO weight_history (timestamp, module, old_weight, new_weight, reason, regime, window_days, sample_size, trigger_metric, trigger_value)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        
+        queue.async {
+            self.ensureConnection()
+            
+            for (module, delta) in event.weightDeltas {
+                let oldWeight = event.oldWeights[module] ?? 0.0
+                let newWeight = event.newWeights[module] ?? 0.0
+                
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_bind_text(stmt, 1, (now as NSString).utf8String, -1, nil)
+                    sqlite3_bind_text(stmt, 2, (module as NSString).utf8String, -1, nil)
+                    sqlite3_bind_double(stmt, 3, oldWeight)
+                    sqlite3_bind_double(stmt, 4, newWeight)
+                    sqlite3_bind_text(stmt, 5, (event.reason as NSString).utf8String, -1, nil)
+                    
+                    if let regime = event.regime {
+                        sqlite3_bind_text(stmt, 6, (regime as NSString).utf8String, -1, nil)
+                    } else {
+                        sqlite3_bind_null(stmt, 6)
+                    }
+                    
+                    sqlite3_bind_int(stmt, 7, Int32(event.windowDays))
+                    sqlite3_bind_int(stmt, 8, Int32(event.sampleSize))
+                    
+                    if let metric = event.triggerMetric {
+                        sqlite3_bind_text(stmt, 9, (metric as NSString).utf8String, -1, nil)
+                    } else {
+                        sqlite3_bind_null(stmt, 9)
+                    }
+                    
+                    if let value = event.triggerValue {
+                        sqlite3_bind_double(stmt, 10, value)
+                    } else {
+                        sqlite3_bind_null(stmt, 10)
+                    }
+                    
+                    if sqlite3_step(stmt) != SQLITE_DONE {
+                        print("🚨 ArgusLedger: Learning Event Write Error")
+                    }
+                }
+                sqlite3_finalize(stmt)
+            }
+            
+            print("🧠 ArgusLedger: Learning Event Logged (\(event.weightDeltas.count) modules)")
+        }
+    }
+    
+    /// Loads recent learning events for Observatory UI.
+    func loadLearningEvents(limit: Int = 50) -> [LearningEvent] {
+        let sql = """
+        SELECT timestamp, module, old_weight, new_weight, reason, regime, window_days, sample_size, trigger_metric, trigger_value
+        FROM weight_history
+        ORDER BY timestamp DESC
+        LIMIT ?;
+        """
+        
+        var results: [(String, String, Double, Double, String?, String?, Int, Int, String?, Double?)] = []
+        
+        queue.sync {
+            ensureConnection()
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_int(stmt, 1, Int32(limit))
+                
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    let timestamp = String(cString: sqlite3_column_text(stmt, 0))
+                    let module = String(cString: sqlite3_column_text(stmt, 1))
+                    let oldWeight = sqlite3_column_double(stmt, 2)
+                    let newWeight = sqlite3_column_double(stmt, 3)
+                    let reason = sqlite3_column_text(stmt, 4).map { String(cString: $0) }
+                    let regime = sqlite3_column_text(stmt, 5).map { String(cString: $0) }
+                    let windowDays = Int(sqlite3_column_int(stmt, 6))
+                    let sampleSize = Int(sqlite3_column_int(stmt, 7))
+                    let triggerMetric = sqlite3_column_text(stmt, 8).map { String(cString: $0) }
+                    let triggerValue = sqlite3_column_type(stmt, 9) == SQLITE_NULL ? nil : sqlite3_column_double(stmt, 9)
+                    
+                    results.append((timestamp, module, oldWeight, newWeight, reason, regime, windowDays, sampleSize, triggerMetric, triggerValue))
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        
+        // Group by timestamp to form LearningEvents
+        var eventsByTimestamp: [String: (reason: String?, regime: String?, windowDays: Int, sampleSize: Int, triggerMetric: String?, triggerValue: Double?, deltas: [String: Double], oldWeights: [String: Double], newWeights: [String: Double])] = [:]
+        
+        for row in results {
+            let (timestamp, module, oldW, newW, reason, regime, windowDays, sampleSize, triggerMetric, triggerValue) = row
+            let delta = newW - oldW
+            
+            if var existing = eventsByTimestamp[timestamp] {
+                existing.deltas[module] = delta
+                existing.oldWeights[module] = oldW
+                existing.newWeights[module] = newW
+                eventsByTimestamp[timestamp] = existing
+            } else {
+                eventsByTimestamp[timestamp] = (
+                    reason: reason,
+                    regime: regime,
+                    windowDays: windowDays,
+                    sampleSize: sampleSize,
+                    triggerMetric: triggerMetric,
+                    triggerValue: triggerValue,
+                    deltas: [module: delta],
+                    oldWeights: [module: oldW],
+                    newWeights: [module: newW]
+                )
+            }
+        }
+        
+        return eventsByTimestamp.map { (timestamp, data) in
+            LearningEvent(
+                id: UUID(),
+                timestamp: ISO8601DateFormatter().date(from: timestamp) ?? Date(),
+                weightDeltas: data.deltas,
+                oldWeights: data.oldWeights,
+                newWeights: data.newWeights,
+                reason: data.reason ?? "Bilinmiyor",
+                triggerMetric: data.triggerMetric,
+                triggerValue: data.triggerValue,
+                regime: data.regime,
+                windowDays: data.windowDays,
+                sampleSize: data.sampleSize
+            )
+        }.sorted { $0.timestamp > $1.timestamp }
+    }
+    
     /// Records a weight change in history.
     func recordWeightChange(module: String, oldWeight: Double, newWeight: Double, reason: String?, tradeId: UUID? = nil) {
         let now = Date().iso8601
@@ -703,6 +848,86 @@ final class ArgusLedger: Sendable {
                 continuation.resume(returning: results)
             }
         }
+    }
+    
+    // MARK: - Observatory: Load Recent Decisions for Timeline
+    
+    /// Loads recent decision events for Observatory Timeline.
+    func loadRecentDecisions(limit: Int = 100) -> [DecisionCard] {
+        let sql = """
+        SELECT event_id, symbol, event_time_utc, payload_json, processed, horizon_pnl_percent
+        FROM events
+        WHERE event_type = 'DecisionEvent'
+        ORDER BY event_time_utc DESC
+        LIMIT ?;
+        """
+        
+        var results: [DecisionCard] = []
+        
+        queue.sync {
+            ensureConnection()
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_int(stmt, 1, Int32(limit))
+                
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    guard let eventIdPtr = sqlite3_column_text(stmt, 0),
+                          let symbolPtr = sqlite3_column_text(stmt, 1),
+                          let timestampPtr = sqlite3_column_text(stmt, 2),
+                          let payloadPtr = sqlite3_column_text(stmt, 3) else { continue }
+                    
+                    let eventId = String(cString: eventIdPtr)
+                    let symbol = String(cString: symbolPtr)
+                    let timestampStr = String(cString: timestampPtr)
+                    let payloadJson = String(cString: payloadPtr)
+                    let processed = Int(sqlite3_column_int(stmt, 4))
+                    let pnl = sqlite3_column_type(stmt, 5) == SQLITE_NULL ? nil : sqlite3_column_double(stmt, 5)
+                    
+                    // Parse payload
+                    guard let data = payloadJson.data(using: .utf8),
+                          let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                    
+                    let action = payload["action"] as? String ?? "GÖZLE"
+                    let confidence = payload["confidence"] as? Double ?? 0.5
+                    let scoresDict = payload["scores"] as? [String: Double] ?? [:]
+                    let marketRegion = payload["market_region"] as? String ?? (symbol.contains(".IS") ? "BIST" : "US")
+                    
+                    // Extract top factors
+                    var factors: [DecisionCard.Factor] = []
+                    for (name, value) in scoresDict.sorted(by: { $0.value > $1.value }).prefix(3) {
+                        let emoji: String
+                        switch name.lowercased() {
+                        case "orion": emoji = "📊"
+                        case "atlas": emoji = "💰"
+                        case "aether": emoji = "🌍"
+                        case "hermes": emoji = "📰"
+                        case "athena": emoji = "🧠"
+                        case "demeter": emoji = "🌾"
+                        default: emoji = "📈"
+                        }
+                        factors.append(DecisionCard.Factor(name: name, emoji: emoji, value: value))
+                    }
+                    
+                    let card = DecisionCard(
+                        id: UUID(uuidString: eventId) ?? UUID(),
+                        symbol: symbol,
+                        market: marketRegion,
+                        timestamp: ISO8601DateFormatter().date(from: timestampStr) ?? Date(),
+                        action: action,
+                        confidence: confidence,
+                        topFactors: factors,
+                        horizon: .t7, // Default, can be enhanced later
+                        outcome: processed == 1 ? .matured : .pending,
+                        actualPnl: pnl
+                    )
+                    
+                    results.append(card)
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        
+        return results
     }
     
     // MARK: - Trade Row Parser
