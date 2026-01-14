@@ -3,7 +3,6 @@ import Charts
 
 struct ChronosLabView: View {
     @StateObject var viewModel: ChronosLabViewModel
-    @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
         ZStack {
@@ -27,13 +26,6 @@ struct ChronosLabView: View {
         }
         .navigationTitle("Chronos Lab 🧪")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Kapat") {
-                    presentationMode.wrappedValue.dismiss()
-                }
-            }
-        }
     }
     
     // MARK: - Components
