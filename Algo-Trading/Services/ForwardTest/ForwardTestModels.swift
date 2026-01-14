@@ -74,3 +74,21 @@ struct PendingForwardTest: Codable, Identifiable, Sendable {
         daysUntilMature <= 0
     }
 }
+
+// MARK: - Event Data Types (For Ledger Queries)
+struct ForecastEventData: Sendable {
+    let eventId: String
+    let symbol: String
+    let eventDate: Date
+    let currentPrice: Double
+    let predictedPrice: Double
+}
+
+struct DecisionEventData: Sendable {
+    let eventId: String
+    let symbol: String
+    let eventDate: Date
+    let currentPrice: Double
+    let action: String
+    let moduleScores: [String: Double]
+}

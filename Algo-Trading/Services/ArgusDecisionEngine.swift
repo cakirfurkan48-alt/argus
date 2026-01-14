@@ -447,11 +447,11 @@ struct ArgusDecisionEngine {
         
         // --- CHIRON LOGGING (Memory) ---
         Task {
-            // Forward Test Ledger (Black Box V0)
-            let refs = ForwardTestLedger.shared.getSnapshotRefs(symbol: symbol)
+            // Argus Ledger (The Scientific Truth)
+            let refs = ArgusLedger.shared.getSnapshotRefs(symbol: symbol)
             let hashes = refs.values.map { $0 }
             
-            ForwardTestLedger.shared.logDecision(
+            ArgusLedger.shared.logDecision(
                 decisionId: trace.id.uuidString,
                 symbol: symbol,
                 action: finalAction.rawValue,

@@ -280,4 +280,38 @@ final class MarketDataStore: ObservableObject {
             }
         }
     }
+    // MARK: - Historical Data Access (Validator)
+    
+    /// Belirli bir tarihteki kapanış fiyatını getirir.
+    /// Validator (Doğrulayıcı) modülü için kritik önem taşır.
+    /// Önce cache'deki mumlara bakar, yoksa API'ye gider (henüz API geçmiş veri çekme implemente edilmediği için mum cache'i esastır).
+    func fetchHistoricalClose(symbol: String, targetDate: Date) async -> Double? {
+        // En yakın mumu bulmak için 1 günlük mumları kullanırız
+        let candlesResult = await ensureCandles(symbol: symbol, timeframe: "1day")
+        
+        guard let candles = candlesResult.value, !candles.isEmpty else {
+            return nil
+        }
+        
+        // Hedef tarihe en yakın mumu bul
+        // Mum tarihleri genellikle gün başlangıcıdır (00:00).
+        let calendar = Calendar.current
+        
+        // Basit arama (Veri seti küçük olduğu için yeterli, ileride Binary Search yapılabilir)
+        // Tarih sırasına göre olduğu varsayımıyla (Heimdall sort eder)
+        
+        let targetDay = calendar.startOfDay(for: targetDate)
+        
+        // Tam eşleşme ara
+        if let match = candles.first(where: { calendar.isDate($0.date, inSameDayAs: targetDay) }) {
+            return match.close
+        }
+        
+        // Tam eşleşme yoksa (haftasonu vb.), hedef tarihten ÖNCEKİ en son kapanışı bul (Latest Known Value)
+        // Veya hedef tarih bir "vade" ise ve o gün veri yoksa, o günü takip eden ilk işlem günü mü yoksa önceki mi?
+        // Finansal standart: O gün tatilse, bir önceki işlem gününün kapanışı o günün değeri kabul edilir.
+        
+        let validCandles = candles.filter { $0.date <= targetDate }
+        return validCandles.last?.close
+    }
 }

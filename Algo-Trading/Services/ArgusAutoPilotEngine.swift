@@ -367,7 +367,8 @@ final class ArgusAutoPilotEngine: Sendable {
                 financials: financials,
                 macro: macro,
                 news: news,
-                engine: .pulse
+                engine: .pulse,
+                origin: "AUTOPILOT"
             )
             
             grandDecision = decision

@@ -54,7 +54,7 @@ struct ModuleOpinionEvent: Codable {
 
 // MARK: - Event Recording Extension
 
-extension ForwardTestLedger {
+extension ArgusLedger {
     
     func logDataSnapshot(
         symbol: String,

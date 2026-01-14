@@ -2,15 +2,15 @@ import Foundation
 import SQLite3
 import CryptoKit
 
-// MARK: - Forward Test Ledger (Black Box V0)
-/// The Flight Recorder for Argus. Records immutable blobs and events for deterministic replay.
+// MARK: - Argus Ledger (The Scientific Truth)
+/// The Single Source of Truth for Argus. Records validation events, trades, and learning outcomes.
 /// Uses raw SQLite3 for zero-dependency, offline-first storage.
-final class ForwardTestLedger: Sendable {
-    static let shared = ForwardTestLedger()
+final class ArgusLedger: Sendable {
+    static let shared = ArgusLedger()
     
     private let dbPath: String
     private var db: OpaquePointer?
-    private let queue = DispatchQueue(label: "com.argus.forwardtest.ledger", qos: .utility)
+    private let queue = DispatchQueue(label: "com.argus.ledger", qos: .utility)
     
     // MARK: - Integration Context (Runtime Only)
     // Acts as a bridge between DataGateway and AGORA without changing method signatures.
@@ -22,7 +22,8 @@ final class ForwardTestLedger: Sendable {
         // Store in Application Support or Documents
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         let docDir = paths[0]
-        let dbUrl = docDir.appendingPathComponent("ArgusBlackBox_V0.sqlite")
+        // Clean start for Scientific Era
+        let dbUrl = docDir.appendingPathComponent("ArgusScience_V1.sqlite")
         self.dbPath = dbUrl.path
         
         // Lazy init: Do strictly nothing here to prevent Main Thread Hangs.
@@ -40,9 +41,9 @@ final class ForwardTestLedger: Sendable {
     
     private func openDatabase() {
         if sqlite3_open(dbPath, &db) != SQLITE_OK {
-            print("🚨 FlightRecorder: Error opening database at \(dbPath)")
+            print("🚨 ArgusLedger: Error opening database at \(dbPath)")
         } else {
-            print("💾 FlightRecorder: Database opened at \(dbPath)")
+            print("💾 ArgusLedger: Database opened at \(dbPath)")
         }
     }
     
@@ -77,24 +78,49 @@ final class ForwardTestLedger: Sendable {
             payload_json TEXT NOT NULL,
             schema_version INTEGER NOT NULL DEFAULT 1,
             app_build TEXT NOT NULL,
-            engine_version TEXT
+            engine_version TEXT,
+            
+            -- Scientific Validation Columns
+            processed INTEGER DEFAULT 0,
+            outcome_score REAL,
+            horizon_pnl_percent REAL,
+            validation_date TEXT
         );
         """
         
-        // ARGUS 3.0: New Tables
+        // ARGUS 3.0: Unified Trade Log (Scientific Schema)
         let createTrades = """
         CREATE TABLE IF NOT EXISTS trades (
             trade_id TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'OPEN',
-            entry_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'OPEN', -- OPEN, CLOSED
+            
+            -- Entry Context (Experiment Conditions)
+            entry_date TEXT NOT NULL, -- Execution Time
+            as_of_date TEXT,          -- Data Knowledge Time (No Lookahead)
             entry_price REAL NOT NULL,
-            entry_reason TEXT,
+            entry_action TEXT NOT NULL, -- BUY, SELL
+            decision_id TEXT,
+            
+            -- Experiment Meta
+            instrument_type TEXT DEFAULT 'STOCK', -- STOCK, ETF, CRYPTO
+            market_region TEXT DEFAULT 'US',      -- US, BIST
+            data_version_hash TEXT,               -- Snapshot Hash
+            engine_config_hash TEXT,              -- Model/Rule Hash
+            
+            -- Exit & Outcome
             exit_date TEXT,
             exit_price REAL,
+            exit_reason TEXT,
+            
+            -- Scientific Metrics
             pnl_percent REAL,
-            dominant_signal TEXT,
-            decision_id TEXT
+            max_drawdown REAL,
+            holding_period_days REAL,
+            
+            -- Learning
+            learned_weight_adjustment REAL,
+            lesson_blob_id TEXT
         );
         """
         
@@ -256,7 +282,7 @@ final class ForwardTestLedger: Sendable {
         }
     }
     
-    /// Logs a Prometheus price forecast.
+    // MARK: - Forecast Logging
     func logForecast(
         symbol: String,
         currentPrice: Double,
@@ -266,9 +292,9 @@ final class ForwardTestLedger: Sendable {
     ) {
         let payload: [String: Any] = [
             "current_price": currentPrice,
-            "predicted_price_5d": predictedPrice,
-            "daily_forecasts": predictions,
-            "confidence_score": confidence,
+            "predicted_price": predictedPrice,
+            "predictions": predictions,
+            "confidence": confidence,
             "model": "Holt-Winters-V1",
             "horizon_days": 5
         ]
@@ -279,6 +305,73 @@ final class ForwardTestLedger: Sendable {
             symbol: symbol,
             payload: payload
         )
+    }
+    
+    /// Logs a Grand Council Decision with full scientific context.
+    func logDecision(
+        decisionId: UUID,
+        symbol: String,
+        action: String,
+        confidence: Double,
+        scores: [String: Double],
+        vetoes: [String],
+        origin: String, // UI_SCAN, AUTOPILOT, BACKTEST
+        runId: String? = nil,
+        currentPrice: Double? = nil
+    ) {
+        let now = Date().iso8601
+        let snapshots = getSnapshotRefs(symbol: symbol)
+        
+        // Calculate Data Hash (Composite of all snapshots)
+        let dataHash = snapshots.values.sorted().joined(separator: "|")
+        let dataVersionHash = sha256(data: dataHash.data(using: .utf8) ?? Data())
+        
+        let payload: [String: Any] = [
+            "action": action,
+            "confidence": confidence,
+            "scores": scores,
+            "vetoes": vetoes,
+            "origin": origin,
+            "snapshots": snapshots,
+            "current_price": currentPrice ?? 0.0,
+            
+            // Scientific Meta
+            "as_of_utc": now, // For now, decision time is data time (until historical fetch is ready)
+            "data_version_hash": dataVersionHash,
+            "engine_config_hash": "ARGUS_V3_DEFAULT", // TODO: Hash config dynamically
+            "instrument_type": "STOCK",
+            "market_region": symbol.contains(".IS") ? "BIST" : "US"
+        ]
+        
+        let runIdentifier = runId ?? SessionID.shared.id
+        
+        // Record Event
+        let eventSql = """
+        INSERT INTO events (event_id, event_type, event_time_utc, run_id, decision_id, symbol, payload_json, app_build, engine_version, processed)
+        VALUES (?, 'DecisionEvent', ?, ?, ?, ?, ?, ?, 'ARGUS-3.0', 0);
+        """
+        
+        let payloadJson = asJsonString(payload) ?? "{}"
+        let appBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+        
+        queue.async {
+            self.ensureConnection()
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(self.db, eventSql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (UUID().uuidString as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (now as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 3, (runIdentifier as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 4, (decisionId.uuidString as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 5, (symbol as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 6, (payloadJson as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 7, (appBuild as NSString).utf8String, -1, nil)
+                
+                if sqlite3_step(stmt) != SQLITE_DONE {
+                    print("🚨 ArgusLedger: Decision Log Error")
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
     }
     
     // MARK: - Helpers
@@ -693,7 +786,7 @@ extension Date {
 }
 
 // MARK: - Reading API for Forward Test Processing
-extension ForwardTestLedger {
+extension ArgusLedger {
     
     /// ForecastEvent'leri okur (işlenmemiş olanlar)
     func getUnprocessedForecasts() async -> [ForecastEventData] {
@@ -801,7 +894,7 @@ extension ForwardTestLedger {
                         eventDate: eventDate,
                         currentPrice: currentPrice,
                         action: action,
-                        moduleScores: moduleScores
+                        moduleScores: moduleScores ?? [:]
                     ))
                 }
                 
@@ -891,7 +984,7 @@ extension ForwardTestLedger {
 }
 
 // MARK: - Export / Dump Extension
-extension ForwardTestLedger {
+extension ArgusLedger {
     
     /// Dumps all events to a JSONL file at the specified URL.
     func dumpEvents(to fileUrl: URL) throws {

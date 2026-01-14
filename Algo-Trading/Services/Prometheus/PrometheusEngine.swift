@@ -61,7 +61,7 @@ actor PrometheusEngine {
         forecastCache[symbol] = (result, Date())
         
         // Forward Test Logging (Black Box)
-        ForwardTestLedger.shared.logForecast(
+        ArgusLedger.shared.logForecast(
             symbol: symbol,
             currentPrice: currentPrice,
             predictedPrice: predictedPrice,

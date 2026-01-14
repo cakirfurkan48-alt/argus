@@ -89,7 +89,8 @@ struct ArgusCockpitView: View {
                     
                     // Content based on selected tab
                     if selectedMarket == .fonlar {
-                        Text("Fon Modülü Yakında...")
+                        // RESTORED: Funds Module
+                        FundListView()
                     } else {
                         // Stock Terminal
                         VStack(spacing: 0) {

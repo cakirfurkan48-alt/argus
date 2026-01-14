@@ -16,9 +16,9 @@ class ArgusLabViewModel: ObservableObject {
         
         Task {
             // Fetch from ledger
-            openTrades = await ForwardTestLedger.shared.getOpenTrades()
-            closedTrades = await ForwardTestLedger.shared.getClosedTrades(limit: 50)
-            lessons = await ForwardTestLedger.shared.getLessons(limit: 50)
+            openTrades = await ArgusLedger.shared.getOpenTrades()
+            closedTrades = await ArgusLedger.shared.getClosedTrades(limit: 50)
+            lessons = await ArgusLedger.shared.getLessons(limit: 50)
             isLoading = false
         }
     }

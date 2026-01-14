@@ -336,7 +336,7 @@ final class YahooFinanceProvider: HeimdallProvider {
         let (candles, hash) = try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: interval, limit: outputSize)
         
         // Context Propagation (Black Box V0)
-        ForwardTestLedger.shared.cacheSnapshotRef(symbol: symbol, type: "CANDLES_OHLCV", hash: hash)
+        ArgusLedger.shared.cacheSnapshotRef(symbol: symbol, type: "CANDLES_OHLCV", hash: hash)
         
         return candles
     }

@@ -28,7 +28,7 @@ actor YahooCandleAdapter {
         
         // HOOK-1: Data Snapshot
         let latency = Date().timeIntervalSince(start) * 1000
-        let blobHash = ForwardTestLedger.shared.logDataSnapshot(
+        let blobHash = ArgusLedger.shared.logDataSnapshot(
             symbol: symbol,
             type: "CANDLES_OHLCV",
             blobData: data,

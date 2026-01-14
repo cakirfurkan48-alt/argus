@@ -12,47 +12,46 @@ struct FundListView: View {
     @State private var selectedFund: FundListItem? = nil
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                Theme.background.ignoresSafeArea()
+        // NavigationView removed for embedding in ArgusCockpitView
+        ZStack {
+            Theme.background.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // MARK: - Sort Picker
+                sortPickerSection
                 
-                VStack(spacing: 0) {
-                    // MARK: - Sort Picker
-                    sortPickerSection
-                    
-                    // MARK: - Category Filter
-                    categoryFilterSection
-                    
-                    // MARK: - Fund List
-                    if dataManager.isLoading && dataManager.fundPrices.isEmpty {
-                        loadingView
-                    } else {
-                        fundListSection
-                    }
+                // MARK: - Category Filter
+                categoryFilterSection
+                
+                // MARK: - Fund List
+                if dataManager.isLoading && dataManager.fundPrices.isEmpty {
+                    loadingView
+                } else {
+                    fundListSection
                 }
             }
-            .navigationTitle("Fonlar")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        Task { await dataManager.refresh() }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundColor(Theme.tint)
-                    }
-                    .disabled(dataManager.isLoading)
+        }
+        // .navigationTitle("Fonlar") // Managed by parent
+        // .navigationBarTitleDisplayMode(.large)
+         .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    Task { await dataManager.refresh() }
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundColor(Theme.tint)
                 }
+                .disabled(dataManager.isLoading)
             }
-            .searchable(text: $searchText, prompt: "Fon ara...")
-            .task {
-                if dataManager.fundPrices.isEmpty {
-                    await dataManager.loadAllFunds()
-                }
+        }
+        .searchable(text: $searchText, prompt: "Fon ara...")
+        .task {
+            if dataManager.fundPrices.isEmpty {
+                await dataManager.loadAllFunds()
             }
-            .sheet(item: $selectedFund) { fund in
-                FundDetailView(fundCode: fund.code, fundName: fund.name)
-            }
+        }
+        .sheet(item: $selectedFund) { fund in
+            FundDetailView(fundCode: fund.code, fundName: fund.name)
         }
     }
     

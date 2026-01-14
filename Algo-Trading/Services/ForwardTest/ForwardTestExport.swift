@@ -49,11 +49,11 @@ final class ForwardTestExport: Sendable {
     }
     
     private func exportEvents(to url: URL) throws {
-        try ForwardTestLedger.shared.dumpEvents(to: url)
+        try ArgusLedger.shared.dumpEvents(to: url)
     }
     
     private func exportBlobs(to dir: URL) throws {
-        try ForwardTestLedger.shared.dumpBlobs(to: dir)
+        try ArgusLedger.shared.dumpBlobs(to: dir)
     }
 }
 

@@ -430,8 +430,8 @@ extension TradingViewModel {
             let isStrongSell = decision.finalScoreCore <= 35 && decision.finalActionCore == SignalAction.sell
             
             if isStrongBuy || isStrongSell {
-                SignalTrackerService.shared.trackSignal(symbol: symbol, price: quote.currentPrice, decision: decision)
-                print("📝 Auto-Tracked Context: \(symbol) Score: \(Int(decision.finalScoreCore)) Action: \(decision.finalActionCore.rawValue)")
+                // SignalTrackerService removed (ArgusLedger auto-logs via Council)
+                // print("📝 Auto-Tracked Context: \(symbol) Score: \(Int(decision.finalScoreCore)) Action: \(decision.finalActionCore.rawValue)")
             }
         }
         
@@ -508,7 +508,8 @@ extension TradingViewModel {
                  engine: .pulse, // Defaulting to pulse/standard for now
                  athena: athenaScore,
                  demeter: demeterScore,
-                 sirkiyeInput: sirkiyeInput
+                 sirkiyeInput: sirkiyeInput,
+                 origin: "UI_SCAN"
              )
              
              await MainActor.run {

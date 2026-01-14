@@ -148,7 +148,7 @@ struct ChironDetailView: View {
                             .cornerRadius(12)
                             
                             // MARK: - Forward Test Dashboard (NEW)
-                            ForwardTestDashboardCard()
+                            ArgusScientificDashboardCard()
                             
                             // MARK: - Performans Özeti (Chiron 3.0)
                             ChironPerformanceSummaryCard()

@@ -166,7 +166,7 @@ actor ExecutionGovernor {
         return openCount >= effectiveLimit
     }
 
-    // MARK: - Journaling Hook (ARGUS 3.0: Migrated to ForwardTestLedger)
+    // MARK: - Journaling Hook (ARGUS 3.0: Migrated to ArgusLedger)
     
     func didExecute(trade: Trade, scores: (Double, Double, Double, Double, Double?)) async {
         // Create entry reason from scores
@@ -174,7 +174,7 @@ actor ExecutionGovernor {
         let dominantSignal = scores.1 > scores.0 ? "Orion" : "Atlas"
         
         // Log to ArgusLedger (Single Source of Truth)
-        ForwardTestLedger.shared.openTrade(
+        ArgusLedger.shared.openTrade(
             symbol: trade.symbol,
             price: trade.entryPrice,
             reason: reason,

@@ -35,22 +35,18 @@ struct StockDetailView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
-                    // 1. Track Signal Button (Forward Test)
+                    // 1. Track Signal Button (REMOVED - ArgusLedger auto-logs calls)
+                    /*
                     if let decision = viewModel.argusDecisions[symbol],
                        let quote = viewModel.quotes[symbol] {
                         Button(action: {
-                            SignalTrackerService.shared.trackSignal(
-                                symbol: symbol,
-                                price: quote.currentPrice,
-                                decision: decision
-                            )
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.success)
+                             // Legacy Journaling removed in Phase 1
                         }) {
                             Image(systemName: "dot.radiowaves.left.and.right")
-                                .foregroundColor(.red)
+                                .foregroundColor(.gray)
                         }
                     }
+                    */
                     
                     // 2. Chronos Lab Button (Walk-Forward)
                     NavigationLink(destination: ChronosDetailView(symbol: symbol)

@@ -116,7 +116,9 @@ actor ArgusGrandCouncil {
         // chiron: ChronosResult? = nil, (REMOVED)
         // NEW: BIST Macro Input (Sirkiye)
         sirkiyeInput: SirkiyeEngine.SirkiyeInput? = nil,
-        forceRefresh: Bool = false
+        forceRefresh: Bool = false,
+        // ARGUS 3.0: Origin Context
+        origin: String = "UI_SCAN"
     ) async -> ArgusGrandDecision {
         
         // 1. Check Cache
@@ -134,7 +136,7 @@ actor ArgusGrandCouncil {
         let isBist = symbol.uppercased().hasSuffix(".IS")
         
         // 1.5 Orion V3 Pattern Detection (Synchronous calculation for decision input)
-        let detectedPatterns = OrionPatternEngine.shared.detectPatterns(candles: candles)
+        let detectedPatterns = await OrionPatternEngine.shared.detectPatterns(candles: candles)
         if !detectedPatterns.isEmpty {
             print("📐 Orion V3: \(detectedPatterns.count) formasyon tespit edildi.")
         }
@@ -287,6 +289,25 @@ actor ArgusGrandCouncil {
                 timestamp: Date()
             )
             
+            // ARGUS 3.0: THE HOOK (BIST)
+            ArgusLedger.shared.logDecision(
+                decisionId: finalDecision.id,
+                symbol: symbol,
+                action: finalDecision.action.rawValue,
+                confidence: finalDecision.confidence,
+                scores: [
+                    "Orion": orionDecision.netSupport * 100.0,
+                    "Atlas": (atlasDecision?.netSupport ?? 0.0) * 100.0,
+                    "Aether": trueMacroDecision.netSupport * 100.0,
+                    "Hermes": (hermesDecision?.netSupport ?? 0.0) * 100.0,
+                    "Athena": athena?.factorScore ?? 0.0,
+                    "Demeter": demeter?.totalScore ?? 0.0
+                ],
+                vetoes: [], // BIST logic handles vetoes internally currently
+                origin: origin,
+                currentPrice: candles.last?.close
+            )
+            
             // Update Cache & Return Early
             decisionCache[symbol] = (finalDecision, Date())
             return finalDecision
@@ -343,6 +364,25 @@ actor ArgusGrandCouncil {
             athena: athena,
             demeter: demeter
             // chiron: chiron (REMOVED)
+        )
+        
+        // ARGUS 3.0: THE HOOK (GLOBAL)
+        ArgusLedger.shared.logDecision(
+            decisionId: grandDecision.id,
+            symbol: symbol,
+            action: grandDecision.action.rawValue,
+            confidence: grandDecision.confidence,
+            scores: [
+                "Orion": orionDecision.netSupport * 100.0,
+                "Atlas": (atlasDecision?.netSupport ?? 0.0) * 100.0,
+                "Aether": aetherDecision.netSupport * 100.0,
+                "Hermes": (hermesDecision?.netSupport ?? 0.0) * 100.0,
+                "Athena": athena?.factorScore ?? 0.0,
+                "Demeter": demeter?.totalScore ?? 0.0
+            ],
+            vetoes: grandDecision.vetoes.map { "\($0.module): \($0.reason)" },
+            origin: origin,
+            currentPrice: candles.last?.close
         )
         
         // 4. Update Cache

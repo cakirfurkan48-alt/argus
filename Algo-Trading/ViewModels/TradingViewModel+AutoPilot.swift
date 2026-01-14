@@ -131,7 +131,8 @@ extension TradingViewModel {
                             macro: macro,
                             news: newsData,
                             engine: .pulse,
-                            sirkiyeInput: sirkiyeInput
+                            sirkiyeInput: sirkiyeInput,
+                            origin: "AUTOPILOT"
                         )
                         
                         await MainActor.run {

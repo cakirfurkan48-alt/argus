@@ -76,7 +76,7 @@ actor ArgusEventBus {
     
     /// Convenience method to publish trade opened event and log to ledger.
     func publishTradeOpened(symbol: String, price: Double, reason: String, dominantSignal: String? = nil) {
-        let tradeId = ForwardTestLedger.shared.openTrade(
+        let tradeId = ArgusLedger.shared.openTrade(
             symbol: symbol,
             price: price,
             reason: reason,
@@ -87,13 +87,13 @@ actor ArgusEventBus {
     
     /// Convenience method to publish trade closed event and log to ledger.
     func publishTradeClosed(tradeId: UUID, exitPrice: Double, symbol: String, pnlPercent: Double) {
-        ForwardTestLedger.shared.closeTrade(tradeId: tradeId, exitPrice: exitPrice)
+        ArgusLedger.shared.closeTrade(tradeId: tradeId, exitPrice: exitPrice)
         publish(.tradeClosed(tradeId: tradeId, symbol: symbol, pnlPercent: pnlPercent))
     }
     
     /// Convenience method to publish lesson learned and log to ledger.
     func publishLesson(tradeId: UUID, lesson: String, deviation: Double?, weightChanges: [String: Double]?) {
-        ForwardTestLedger.shared.recordLesson(tradeId: tradeId, lesson: lesson, deviationPercent: deviation, weightChanges: weightChanges)
+        ArgusLedger.shared.recordLesson(tradeId: tradeId, lesson: lesson, deviationPercent: deviation, weightChanges: weightChanges)
         publish(.lessonLearned(tradeId: tradeId, lesson: lesson))
     }
 }

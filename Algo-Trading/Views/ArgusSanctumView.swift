@@ -38,6 +38,8 @@ struct ArgusSanctumView: View {
     @State private var rotateOrbit = false
     @State private var showDecision = false
     @State private var showDebateSheet = false
+    @State private var showChronosLabSheet = false
+    @State private var showArgusLabSheet = false
     
     // Modules enum for identification
     enum ModuleType: String, CaseIterable {
@@ -97,303 +99,274 @@ struct ArgusSanctumView: View {
         case sirkiye = "SİRKİYE"   // Aether karşılığı - Makro/Politik
         case kulis = "KULİS"       // Hermes karşılığı - Haberler
         case faktor = "FAKTÖR"     // Athena karşılığı - Smart Beta
-        case sektor = "SEKTÖR"     // Demeter karşılığı - Sektör Rotasyonu
-        case rejim = "REJİM"       // Yeni - Piyasa Modu
-        case moneyflow = "AKIŞ"    // Yeni - Para Akışı
+        case vektor = "VEKTÖR"     // Prometheus karşılığı - Tahmin
+        case sektor = "SEKTÖR"     // Demeter karşılığı - Sektörel
+        case rejim = "REJİM"       // Chiron/Aether karşılığı - Piyasa Rejimi
+        case moneyflow = "PARA-AKIL" // Yeni: Para Girişi/Takas
         
         var icon: String {
             switch self {
-            case .bilanço: return "turkishlirasign.circle.fill"
+            case .bilanço: return "building.columns.fill"
             case .grafik: return "chart.xyaxis.line"
-            case .sirkiye: return "flag.fill"
-            case .kulis: return "text.bubble.fill"
-            case .faktor: return "chart.bar.doc.horizontal.fill"
-            case .sektor: return "chart.pie.fill"
-            case .rejim: return "gauge.with.needle.fill"
-            case .moneyflow: return "arrow.left.arrow.right.circle.fill"
+            case .sirkiye: return "globe.europe.africa.fill"
+            case .kulis: return "newspaper.fill"
+            case .faktor: return "brain.head.profile"
+            case .vektor: return "crystal.ball"
+            case .sektor: return "leaf.fill" // Demeter
+            case .rejim: return "traffic.light" // Rejim
+            case .moneyflow: return "arrow.up.right.circle.fill"
             }
         }
         
         var color: Color {
             switch self {
-            case .bilanço: return SanctumTheme.atlasColor      // Titan Gold
-            case .grafik: return SanctumTheme.orionColor       // Hologram Blue
-            case .sirkiye: return SanctumTheme.aetherColor     // Ghost Grey
-            case .kulis: return SanctumTheme.hermesColor       // Orange
-            case .faktor: return SanctumTheme.athenaColor      // Titan Gold
-            case .sektor: return SanctumTheme.demeterColor     // Aurora Green
-            case .rejim: return SanctumTheme.chironColor       // White
-            case .moneyflow: return SanctumTheme.hologramBlue  // Hologram Blue
+            case .bilanço: return SanctumTheme.atlasColor
+            case .grafik: return SanctumTheme.orionColor
+            case .sirkiye: return SanctumTheme.aetherColor
+            case .kulis: return SanctumTheme.hermesColor
+            case .faktor: return SanctumTheme.athenaColor
+            case .vektor: return SanctumTheme.hologramBlue
+            case .sektor: return SanctumTheme.demeterColor
+            case .rejim: return SanctumTheme.crimsonRed
+            case .moneyflow: return Color.green
             }
         }
         
         var description: String {
             switch self {
-            case .bilanço: return "BIST Temel Analiz & Mali Tablolar"
-            case .grafik: return "Teknik Analiz & Fiyat Hareketi"
-            case .sirkiye: return "Politik Ortam & Makro Analiz"
-            case .kulis: return "Analist Konsensüsü & Haberler"
-            case .faktor: return "Value, Momentum, Quality Faktörleri"
-            case .sektor: return "Sektör Rotasyonu & Güç Analizi"
-            case .rejim: return "Piyasa Rejimi (Boğa/Ayı/Nötr)"
-            case .moneyflow: return "Hacim & Para Akışı Analizi"
+            case .bilanço: return "Bilanço ve Temel Veriler"
+            case .grafik: return "Teknik Analiz ve İndikatörler"
+            case .sirkiye: return "Makroekonomik Göstergeler (Sirkiye)"
+            case .kulis: return "KAP Haberleri ve Duygu Analizi"
+            case .faktor: return "Faktör Yatırımı (Smart Beta)"
+            case .vektor: return "Yapay Zeka Fiyat Tahmini"
+            case .sektor: return "Sektörel Performans Analizi"
+            case .rejim: return "Piyasa Risk Rejimi"
+            case .moneyflow: return "Para Giriş/Çıkış ve Takas Analizi"
             }
         }
     }
     
+    // Orbit Animation Parameters
+    // Only used for visualization, logic is in ViewModel
+    private let orbitRadius: CGFloat = 130
+    private let animationDuration: Double = 40
+    
+    // Modules calculated property
+    var modules: [ModuleType] {
+        ModuleType.allCases
+    }
+    
+    var bistModules: [BistModuleType] = [
+        .grafik, .bilanço, .rejim, .sirkiye, .kulis, .moneyflow // Selected active modules
+    ]
+    var moduleCount: Double {
+        Double(bistModules.count)
+    }
 
-    // MARK: - Computed Views
-    
-    private var orbitingModulesView: some View {
-        let orbitRadius: CGFloat = 130
-        
-        // Filter out Pantheon Members from Ring
-        let globalModules:[ModuleType] = [.orion, .atlas, .aether, .hermes]
-        
-        let moduleCount = Double(globalModules.count)
-        
-        return ForEach(Array(globalModules.enumerated()), id: \.element) { index, module in
-            let angle = (2.0 * .pi / moduleCount) * Double(index) - .pi / 2.0
-            let xOffset = orbitRadius * CGFloat(cos(angle))
-            let yOffset = orbitRadius * CGFloat(sin(angle))
-            
-            OrbView(module: module, viewModel: viewModel, symbol: symbol)
-                .offset(x: xOffset, y: yOffset)
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                        selectedModule = module
-                    }
-                }
-        }
-    }
-    
-    // BIST Özel Orbit Görünümü
-    private var bistOrbitingModulesView: some View {
-        let orbitRadius: CGFloat = 130
-        
-        // Filter out Pantheon Members (Faktor, Sektor)
-        let bistModules: [BistModuleType] = [.grafik, .bilanço, .rejim, .sirkiye, .kulis, .moneyflow]
-        
-        let moduleCount = Double(bistModules.count)
-        
-        return ForEach(Array(bistModules.enumerated()), id: \.element) { index, module in
-            let angle = (2.0 * .pi / moduleCount) * Double(index) - .pi / 2.0
-            let xOffset = orbitRadius * CGFloat(cos(angle))
-            let yOffset = orbitRadius * CGFloat(sin(angle))
-            
-            BistOrbView(module: module)
-                .offset(x: xOffset, y: yOffset)
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                        selectedBistModule = module
-                    }
-                }
-        }
-    }
-    
-    
     var body: some View {
         ZStack {
-            // 1. SOLID TERMINAL BACKGROUND
-            SanctumTheme.bg.ignoresSafeArea()
+            // 1. Background (Deep Space / Global Neural Network)
+            SanctumTheme.bg.edgesIgnoringSafeArea(.all)
+            NeuralNetworkBackground().edgesIgnoringSafeArea(.all)
             
-            // GLOBAL BACK BUTTON (Always on Top)
-            // Paneller açılsa bile geri çıkılabilmesi için zIndex 1000 ile en üstte
-            VStack {
-                HStack {
-                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white) // Always bright white
-                            .padding(10)
-                            .background(Circle().fill(Color(hex: "1E293B").opacity(0.8))) // Dark slate bg for contrast
-                            .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
-                            .shadow(radius: 5)
-                    }
-                    
-                    Spacer()
-                }
-                Spacer()
-            }
-            .padding(.top, 60) // Dynamic Island Safe Area
-            .padding(.leading, 16)
-            .zIndex(1000)
-
-            
-            VStack {
-                // Header with Price Info
-                HStack(spacing: 12) {
-                    // Back Button alanı boş bırakıldı (Overlay buton buraya gelecek)
-                    // Layout hizalaması için padding kullanıyoruz
-                    
-                    CompanyLogoView(symbol: symbol, size: 36)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(symbol)
-                                .font(.title3)
-                                .fontWeight(.black)
-                                .foregroundColor(.white)
-                            
-                            // BIST Badge (Text Only)
-                            if symbol.uppercased().hasSuffix(".IS") {
-                                Text("BIST")
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.red.opacity(0.8))
-                                    .cornerRadius(4)
-                            }
-                        }
-                        
-                        if let quote = viewModel.quotes[symbol] {
-                            let isBist = symbol.uppercased().hasSuffix(".IS")
-                            HStack(spacing: 6) {
-                                Text(String(format: isBist ? "₺%.0f" : "$%.2f", quote.currentPrice))
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                
-                                if let dp = quote.dp {
-                                    Text(String(format: "%+.2f%%", dp))
-                                        .font(.caption)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(dp >= 0 ? .green : .red)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background((dp >= 0 ? Color.green : Color.red).opacity(0.2))
-                                        .cornerRadius(4)
-                                }
-                            }
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // Data Health Indicator
-                    VStack(spacing: 2) {
-                        Image(systemName: "eye.fill")
-                            .font(.title3)
-                            .foregroundColor(SanctumTheme.chironColor)
-                            .shadow(color: .white, radius: 5)
-                        if let dataHealth = viewModel.dataHealthBySymbol[symbol] {
-                            Text("\(dataHealth.qualityScore)%")
-                                .font(.system(size: 9))
-                                .foregroundColor(.gray)
-                        }
-                    }
-                }
-                .padding(.trailing)
-                .padding(.leading, 70) // Sol tarafta Overlay Geri Butonu için yer aç
-                .padding(.top, 75) // Dynamic Island'dan tamamen kurtar
-                .padding(.bottom, 10)
-                
-                // --- PANTHEON (OVERWATCH DECK) ---
-                // --- PANTHEON (OVERWATCH DECK) ---
-                PantheonDeckView(
-                    symbol: symbol, 
-                    viewModel: viewModel, 
-                    isBist: symbol.uppercased().hasSuffix(".IS"),
-                    selectedModule: $selectedModule,
-                    selectedBistModule: $selectedBistModule
-                )
+            VStack(spacing: 0) {
+                // 2. HEADER
+                headerView
                 
                 Spacer()
                 
-                // 2. THE CONVERGENCE (Main Council)
-                ZStack {
-                    // Central Core (Decision) - Tap to see debate
-                    let isBist = symbol.uppercased().hasSuffix(".IS")
-                    let anyModuleSelected = selectedModule != nil || selectedBistModule != nil
-                    
-                    CenterCoreView(symbol: symbol, viewModel: viewModel, showDecision: $showDecision)
-                        .scaleEffect(anyModuleSelected ? 0.6 : 1.0)
-                        .blur(radius: anyModuleSelected ? 5 : 0)
-                        .animation(.spring(), value: anyModuleSelected)
-                        .onTapGesture {
-                            if viewModel.grandDecisions[symbol] != nil {
-                                showDebateSheet = true
-                            }
-                        }
-                    
-                    // Orbiting Modules - BIST veya Global
-                    if !anyModuleSelected {
-                        if isBist {
-                            bistOrbitingModulesView
-                        } else {
-                            orbitingModulesView
-                        }
-                    }
-                }
-                .frame(height: 350)
+                // 3. CENTER CORE (The Heart)
+                centerCoreArea
                 
                 Spacer()
                 
-                // 3. HOLO PANEL (Details when module selected)
-                if selectedModule == nil {
-                    Spacer()
-                    
-                    // Minimal Footer
-                    Text("Detaylı analiz için modullere dokunun")
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.3))
-                        .padding(.bottom, 30) // Tab bar clearance
-                }
+                // 4. FOOTER (Pantheon Deck)
+                footerHelper
             }
-            // .ignoresSafeArea() -- REMOVED: This was causing the header to slide under the notch/island.
+            .padding(.bottom, 100) // Lift up for TabBar
             
-            // 3. HOLO PANEL (Full Screen Overlay) - Global
-            if let module = selectedModule {
-                HoloPanelView(module: module, viewModel: viewModel, symbol: symbol, onClose: {
-                    withAnimation { selectedModule = nil }
-                })
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(100)
+            // 5. OVERLAYS
+            if let selectedModule = selectedModule {
+                 HoloPanelView(
+                    module: selectedModule,
+                    viewModel: viewModel,
+                    symbol: symbol,
+                    showChronosLabSheet: $showChronosLabSheet,
+                    showArgusLabSheet: $showArgusLabSheet,
+                    onClose: {
+                        withAnimation {
+                            self.selectedModule = nil
+                            self.showDecision = false
+                        }
+                    }
+                 )
+                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                 .zIndex(100)
             }
             
-            // 4. BIST HOLO PANEL (Full Screen Overlay) - BIST Modülleri
-            if let bistModule = selectedBistModule {
-                BistHoloPanelView(module: bistModule, viewModel: viewModel, symbol: symbol, onClose: {
-                    withAnimation { selectedBistModule = nil }
-                })
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(100)
+            if let selectedBist = selectedBistModule {
+                 BistHoloPanelView(
+                    module: selectedBist,
+                    viewModel: viewModel,
+                    symbol: symbol,
+                    onClose: {
+                        withAnimation {
+                            self.selectedBistModule = nil
+                            self.showDecision = false
+                        }
+                    }
+                 )
+                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                 .zIndex(100)
             }
+            
+             // Back Button (Top Left)
+            backButtonOverlay
+        }
+        .navigationBarHidden(true)
+        .sheet(isPresented: $showDebateSheet) {
+            debateSheetContent
+        }
+        .sheet(isPresented: $showChronosLabSheet) {
+             chronosLabSheetContent
+        }
+        .sheet(isPresented: $showArgusLabSheet) {
+             argusLabSheetContent
         }
         .onAppear {
-            withAnimation(.linear(duration: 40).repeatForever(autoreverses: false)) {
-                rotateOrbit = true
-            }
-            
-            // 📡 PREVIOUSLY: ArgusSanctumView tried to orchestrate everything here.
-            // FIX (Step ID 12415): We removed that logic because it caused a race condition with TradingViewModel.
-            // Now, we strictly observe `viewModel.grandDecisions[symbol]`.
-            // The loading is triggered by StockDetailView calling `viewModel.loadArgusData`.
-            
-            // Show decision animation if ready
-            if viewModel.grandDecisions[symbol] != nil {
-                 withAnimation { showDecision = true }
+            if symbol.uppercased().hasSuffix(".IS") {
+                // Pre-load BIST logic if needed
             }
         }
-        .onChange(of: viewModel.grandDecisions[symbol]) { newValue in
-            if newValue != nil {
-                withAnimation { showDecision = true }
+    }
+
+    // MARK: - Subviews (Computed Properties)
+    
+    // 1. BACK BUTTON
+    private var backButtonOverlay: some View {
+        VStack {
+            HStack {
+                Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Terminal")
+                    }
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundColor(SanctumTheme.ghostGrey)
+                    .padding(8)
+                    .background(Color.black.opacity(0.3))
+                    .cornerRadius(8)
+                }
+                Spacer()
+            }
+            .padding(.top, 40)
+            .padding(.leading, 16)
+            Spacer()
+        }
+    }
+    
+    // 2. HEADER
+    private var headerView: some View {
+        VStack(spacing: 8) {
+            Text(symbol)
+                .font(.system(size: 28, weight: .black, design: .monospaced))
+                .foregroundColor(.white)
+                .tracking(2)
+                .shadow(color: SanctumTheme.hologramBlue.opacity(0.5), radius: 10)
+            
+            if let quote = viewModel.quotes[symbol] {
+                Text(String(format: "%.2f", quote.currentPrice))
+                    .font(.system(size: 16, weight: .medium, design: .monospaced))
+                    .foregroundColor((quote.percentChange ?? 0) >= 0 ? SanctumTheme.auroraGreen : SanctumTheme.crimsonRed)
             }
         }
-        .sheet(isPresented: $showDebateSheet) {
-            if let decision = viewModel.grandDecisions[symbol] {
-                if symbol.uppercased().hasSuffix(".IS"), let bistData = decision.bistDetails {
-                    // YERLİ KONSEY TARTIŞMASI 🇹🇷
-                    BistDebateSheet(decision: bistData, isPresented: $showDebateSheet)
-                } else {
-                    // GLOBAL KONSEY TARTIŞMASI 🇺🇸
-                    SymbolDebateView(decision: decision, isPresented: $showDebateSheet)
+        .padding(.top, 20)
+    }
+    
+    // 3. CENTER CORE
+    private var centerCoreArea: some View {
+        ZStack {
+            // The Dial
+            CenterCoreView(symbol: symbol, viewModel: viewModel, showDecision: $showDecision)
+            
+            // Orbiting Satellites (Modules)
+            // BIST vs Global Separation
+            if symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol) {
+                // BIST MODULES ORBIT
+                ForEach(0..<bistModules.count, id: \.self) { i in
+                    let angle = Double(i) * (360.0 / Double(bistModules.count)) - 90 // Start from Top
+                    let mod = bistModules[i]
+                    
+                    BistOrbView(module: mod)
+                        .offset(x: cos(angle * .pi / 180) * orbitRadius, y: sin(angle * .pi / 180) * orbitRadius)
+                        .onTapGesture {
+                            withAnimation(.spring()) {
+                                self.selectedBistModule = mod
+                                self.showDecision = true
+                            }
+                        }
+                }
+            } else {
+                // GLOBAL MODULES ORBIT (Classic Argus)
+                let globalModules: [ModuleType] = [.orion, .atlas, .aether, .hermes]
+                ForEach(0..<globalModules.count, id: \.self) { i in
+                    let angle = Double(i) * (360.0 / Double(globalModules.count)) - 90
+                    let mod = globalModules[i]
+                    
+                    OrbView(module: mod, viewModel: viewModel, symbol: symbol)
+                        .offset(x: cos(angle * .pi / 180) * orbitRadius, y: sin(angle * .pi / 180) * orbitRadius)
+                        .onTapGesture {
+                            withAnimation(.spring()) {
+                                self.selectedModule = mod
+                                self.showDecision = true
+                            }
+                        }
                 }
             }
         }
-        .onTapGesture {
-            // FIX: Swallow background taps to prevent system "toggle navigation bar" behavior
+        .frame(height: 300) // Constrain height to keep layout tight
+    }
+    
+    // 4. FOOTER (Pantheon)
+    private var footerHelper: some View {
+         PantheonDeckView(
+            symbol: symbol,
+            viewModel: viewModel,
+            isBist: symbol.uppercased().hasSuffix(".IS"),
+            selectedModule: $selectedModule,
+            selectedBistModule: $selectedBistModule
+        )
+    }
+    
+    // 5. SHEETS
+    private var debateSheetContent: some View {
+        NavigationView {
+             if let decision = viewModel.grandDecisions[symbol] {
+                 SymbolDebateView(decision: decision, isPresented: $showDebateSheet)
+                     .navigationTitle("Konsey Tartışması")
+                     .navigationBarHidden(true) // Custom header in view
+             } else {
+                 Text("Henüz karar oluşmadı.")
+                     .navigationBarItems(trailing: Button("Kapat") { showDebateSheet = false })
+             }
         }
+    }
+    
+    private var chronosLabSheetContent: some View {
+         NavigationView {
+             ChronosLabView(viewModel: ChronosLabViewModel())
+                 .environmentObject(viewModel) 
+                 .navigationBarItems(trailing: Button("Kapat") { showChronosLabSheet = false })
+         }
+    }
+    
+    private var argusLabSheetContent: some View {
+         NavigationView {
+             ArgusLabView()
+                 .environmentObject(viewModel)
+                 .navigationBarItems(trailing: Button("Kapat") { showArgusLabSheet = false })
+         }
     }
 }
 
@@ -417,8 +390,6 @@ struct OrbView: View {
                 Circle()
                     .stroke(module.color.opacity(0.8), lineWidth: 1.5)
                     .frame(width: 52, height: 52)
-                
-                // Active Glow (Optional - could add state later)
                 
                 // Icon
                 Image(systemName: module.icon)
@@ -547,9 +518,6 @@ struct CenterCoreView: View {
                         
                         // Calculate Angle
                         let vector = CGVector(dx: value.location.x - 90, dy: value.location.y - 90) // Center is roughly 90,90 relative to frame 180
-                        // Since ZStack center is 0,0 for rotation, but drag location is relative. 
-                        // Actually better to use geometry logic, but simple vector from center works.
-                        // Assuming Frame is centered.
                         
                         let angle = atan2(vector.dy, vector.dx) * 180 / .pi + 90
                         let normalizedAngle = angle < 0 ? angle + 360 : angle
@@ -666,7 +634,6 @@ struct CenterCoreView: View {
     }
     
     // Mapping Angle (0 at top, clockwise) to Module Names
-    // Mapping Angle (0 at top, clockwise) to Module Names
     private func determineModule(angle: Double) -> String {
         let isBist = symbol.uppercased().hasSuffix(".IS")
         
@@ -691,8 +658,6 @@ struct CenterCoreView: View {
                 case .kulis: return "HERMES"
                 case .moneyflow: return "POSEIDON"
                 case .rejim: return "CHIRON" // Rejim is usually mapped to Chiron or Aether logic depending on context. Keeping CHIRON for Rejim consistent with other mappings if that's the intent, OR map to AETHER if Rejim is macro. 
-                                             // Let's look at getBistModuleResult: .rejim -> bist.rejim. And viewForBistModule logic.
-                                             // getBistModuleResult maps "AETHER" to bist.rejim. So Rejim should return "AETHER".
                 default: return "ORION"
                 }
             }
@@ -777,8 +742,6 @@ struct CenterCoreView: View {
     }
 }
 
-// MARK: - PANTHEON (THE OVERWATCH DECK)
-// MARK: - PANTHEON (THE OVERWATCH DECK)
 // MARK: - PANTHEON (THE OVERWATCH DECK)
 struct PantheonDeckView: View {
     let symbol: String
@@ -953,29 +916,12 @@ struct PantheonFlankView: View {
 }
 
 // Custom Shape for Chiron
-struct HexagonShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let width = rect.width
-        let height = rect.height
-        let x = rect.minX
-        let y = rect.minY
-        
-        path.move(to: CGPoint(x: x + width * 0.5, y: y))
-        path.addLine(to: CGPoint(x: x + width, y: y + height * 0.25))
-        path.addLine(to: CGPoint(x: x + width, y: y + height * 0.75))
-        path.addLine(to: CGPoint(x: x + width * 0.5, y: y + height))
-        path.addLine(to: CGPoint(x: x, y: y + height * 0.75))
-        path.addLine(to: CGPoint(x: x, y: y + height * 0.25))
-        path.closeSubpath()
-        return path
-    }
-}
-
 struct HoloPanelView: View {
     let module: ArgusSanctumView.ModuleType
     @ObservedObject var viewModel: TradingViewModel
     let symbol: String
+    @Binding var showChronosLabSheet: Bool
+    @Binding var showArgusLabSheet: Bool
     let onClose: () -> Void
     
     // State for async data loading
@@ -1018,8 +964,8 @@ struct HoloPanelView: View {
                     // NEW: Info Button
                     Button(action: { withAnimation { showInfoCard = true } }) {
                         Image(systemName: "info.circle")
-                            .font(.system(size: 16))
-                            .foregroundColor(module.color.opacity(0.8))
+                        .font(.system(size: 16))
+                        .foregroundColor(module.color.opacity(0.8))
                     }
                     
                     // NEW: Expand Chart Button (Only if candles exist)
@@ -1653,8 +1599,10 @@ struct HoloPanelView: View {
                 .background(Color.white.opacity(0.03))
                 .cornerRadius(8)
                 
-                // CHRONOS LAB Navigation
-                NavigationLink(destination: ChronosDetailView(symbol: symbol).environmentObject(viewModel)) {
+                // CHRONOS LAB Button (Sheet)
+                Button {
+                    showChronosLabSheet = true
+                } label: {
                     HStack {
                         Image(systemName: "clock.arrow.2.circlepath")
                             .font(.title3)
@@ -1685,8 +1633,10 @@ struct HoloPanelView: View {
                     )
                 }
                 
-                // ARGUS LAB Navigation (Trade History & Lessons)
-                NavigationLink(destination: ArgusLabView()) {
+                // ARGUS LAB Button (Sheet)
+                Button {
+                    showArgusLabSheet = true
+                } label: {
                     HStack {
                         Image(systemName: "flask.fill")
                             .font(.title3)
@@ -1890,255 +1840,232 @@ struct HoloPanelView: View {
     }
 }
 
-// Neural BG Animation (Network Nodes)
 struct NeuralNetworkBackground: View {
+    @State private var phase = 0.0
+    
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                ForEach(0..<10) { _ in
-                    Circle()
-                        .fill(Color.blue.opacity(0.2))
-                        .frame(width: CGFloat.random(in: 2...5))
-                        .offset(x: CGFloat.random(in: 0...geometry.size.width), y: CGFloat.random(in: 0...geometry.size.height))
+        Canvas { context, size in
+            let points = (0..<20).map { _ in
+                CGPoint(
+                    x: CGFloat.random(in: 0...size.width),
+                    y: CGFloat.random(in: 0...size.height)
+                )
+            }
+            
+            for point in points {
+                for other in points {
+                    let dist =  hypot(point.x - other.x, point.y - other.y)
+                    if dist < 100 {
+                        var path = Path()
+                        path.move(to: point)
+                        path.addLine(to: other)
+                        context.stroke(path, with: .color(SanctumTheme.ghostGrey.opacity(0.1 - (dist/1000))), lineWidth: 1)
+                    }
                 }
+                context.fill(Path(ellipseIn: CGRect(x: point.x-2, y: point.y-2, width: 4, height: 4)), with: .color(SanctumTheme.hologramBlue.opacity(0.3)))
             }
         }
+        .opacity(0.3)
     }
 }
 
-// MARK: - Sanctum Mini Chart
 struct SanctumMiniChart: View {
     let candles: [Candle]
-    
-    private var displayCandles: [Candle] {
-        Array(candles.suffix(50))
-    }
-    
-    private var priceRange: (min: Double, max: Double) {
-        guard !displayCandles.isEmpty else { return (0, 100) }
-        let prices = displayCandles.flatMap { [$0.high, $0.low] }
-        let minPrice = prices.min() ?? 0
-        let maxPrice = prices.max() ?? 100
-        let padding = (maxPrice - minPrice) * 0.1
-        return (minPrice - padding, maxPrice + padding)
-    }
-    
-    private var isPositive: Bool {
-        guard let first = displayCandles.first, let last = displayCandles.last else { return true }
-        return last.close >= first.open
-    }
+    let color: Color
     
     var body: some View {
         GeometryReader { geometry in
-            if displayCandles.isEmpty {
-                // Empty state
-                HStack {
-                    Spacer()
-                    VStack(spacing: 4) {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(.title3)
-                            .foregroundColor(.gray.opacity(0.3))
-                        Text("Grafik Yükleniyor...")
-                            .font(.caption2)
-                            .foregroundColor(.gray.opacity(0.5))
-                    }
-                    Spacer()
-                }
-            } else {
-                ZStack {
-                    // Background gradient
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.black.opacity(0.3), Color.black.opacity(0.1)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+            let width = geometry.size.width
+            let height = geometry.size.height
+            let minPrice = candles.map { $0.low }.min() ?? 0
+            let maxPrice = candles.map { $0.high }.max() ?? 100
+            let priceRange = maxPrice - minPrice
+            
+            Path { path in
+                for (index, candle) in candles.enumerated() {
+                    let xPosition = width * CGFloat(index) / CGFloat(candles.count - 1)
+                    let yPosition = height * (1 - CGFloat((candle.close - minPrice) / priceRange))
                     
-                    // Price line
-                    Path { path in
-                        let width = geometry.size.width
-                        let height = geometry.size.height
-                        let range = priceRange
-                        let priceSpan = range.max - range.min
-                        
-                        for (index, candle) in displayCandles.enumerated() {
-                            let x = width * CGFloat(index) / CGFloat(displayCandles.count - 1)
-                            let y = height * (1 - CGFloat((candle.close - range.min) / priceSpan))
-                            
-                            if index == 0 {
-                                path.move(to: CGPoint(x: x, y: y))
-                            } else {
-                                path.addLine(to: CGPoint(x: x, y: y))
-                            }
-                        }
+                    if index == 0 {
+                        path.move(to: CGPoint(x: xPosition, y: yPosition))
+                    } else {
+                        path.addLine(to: CGPoint(x: xPosition, y: yPosition))
                     }
-                    .stroke(
-                        LinearGradient(
-                            colors: isPositive ? [.green.opacity(0.6), .green] : [.red.opacity(0.6), .red],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
-                        style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
-                    )
-                    .shadow(color: isPositive ? .green.opacity(0.5) : .red.opacity(0.5), radius: 4)
-                    
-                    // Area fill
-                    Path { path in
-                        let width = geometry.size.width
-                        let height = geometry.size.height
-                        let range = priceRange
-                        let priceSpan = range.max - range.min
-                        
-                        path.move(to: CGPoint(x: 0, y: height))
-                        
-                        for (index, candle) in displayCandles.enumerated() {
-                            let x = width * CGFloat(index) / CGFloat(displayCandles.count - 1)
-                            let y = height * (1 - CGFloat((candle.close - range.min) / priceSpan))
-                            path.addLine(to: CGPoint(x: x, y: y))
-                        }
-                        
-                        path.addLine(to: CGPoint(x: width, y: height))
-                        path.closeSubpath()
-                    }
-                    .fill(
-                        LinearGradient(
-                            colors: isPositive ? [.green.opacity(0.2), .clear] : [.red.opacity(0.2), .clear],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
                 }
             }
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
+            
+            // Gradient Fill
+            Path { path in
+                for (index, candle) in candles.enumerated() {
+                    let xPosition = width * CGFloat(index) / CGFloat(candles.count - 1)
+                    let yPosition = height * (1 - CGFloat((candle.close - minPrice) / priceRange))
+                    
+                    if index == 0 {
+                        path.move(to: CGPoint(x: xPosition, y: height))
+                        path.addLine(to: CGPoint(x: xPosition, y: yPosition))
+                    } else {
+                        path.addLine(to: CGPoint(x: xPosition, y: yPosition))
+                    }
+                    
+                    if index == candles.count - 1 {
+                        path.addLine(to: CGPoint(x: xPosition, y: height))
+                        path.closeSubpath()
+                    }
+                }
+            }
+            .fill(LinearGradient(gradient: Gradient(colors: [color.opacity(0.3), color.opacity(0.01)]), startPoint: .top, endPoint: .bottom))
         }
     }
 }
 
-// Color Hex Helper
-
-// MARK: - BIST Holo Panel View
+// MARK: - BIST HOLO PANEL (ESKİ BORSACI VERSİYONU)
 struct BistHoloPanelView: View {
     let module: ArgusSanctumView.BistModuleType
     @ObservedObject var viewModel: TradingViewModel
     let symbol: String
     let onClose: () -> Void
     
-    // Immersive Chart State
-    @State private var showImmersiveChart = false
+    // State
+    @State private var showInfoCard = false
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Holo Header
-            HStack {
-                Image(systemName: module.icon)
-                    .foregroundColor(module.color)
-                
-                Text(module.rawValue)
-                    .font(.headline)
-                    .bold()
-                    .tracking(2)
-                    .foregroundColor(.white)
-                
-                Spacer()
-                
-                // Expand Chart Button (Only for Grafik module)
-                if module == .grafik, viewModel.candles[symbol] != nil {
-                    Button(action: { showImmersiveChart = true }) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .foregroundColor(module.color)
+        ZStack {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Image(systemName: module.icon)
+                        .foregroundColor(module.color)
+                    Text(module.rawValue) // TR ISIM
+                        .font(.headline)
+                        .bold()
+                        .tracking(2)
+                        .foregroundColor(.white)
+                    
+                    Button(action: { withAnimation { showInfoCard = true } }) {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(module.color.opacity(0.8))
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white.opacity(0.6))
                             .padding(8)
                             .background(Circle().fill(Color.white.opacity(0.1)))
                     }
                 }
+                .padding()
+                .background(module.color.opacity(0.2))
                 
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .foregroundColor(.white.opacity(0.6))
-                        .padding(8)
-                        .background(Circle().fill(Color.white.opacity(0.1)))
+                Divider().background(module.color)
+                
+                // Content
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(module.description)
+                            .font(.caption)
+                            .italic()
+                            .foregroundColor(.gray)
+                        
+                        bistContentForModule(module)
+                    }
+                    .padding()
+                    .padding(.bottom, 100)
                 }
             }
-            .padding()
-            .background(module.color.opacity(0.2))
-            
-            Divider().background(module.color)
-            
-            // Holo Content
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(module.description)
-                        .font(.caption)
-                        .italic()
-                        .foregroundColor(.gray)
-                    
-                    // DYNAMIC CONTENT BASED ON BIST MODULE
-                    bistContentForModule(module)
+            .task {
+                if module == .rejim {
+                    // Rejim verilerini tazele vs if needed
                 }
-                .padding()
+                if module == .sirkiye {
+                    // Sirkiye verilerini tazele
+                    await refreshSirkiyeData()
+                }
+            }
+            
+            // Info Overlay (Reuse Entity mapping logic or simple hack)
+            if showInfoCard {
+                // Map BIST module to closest ArgusSystemEntity for help text
+                let entity: ArgusSystemEntity = {
+                    switch module {
+                    case .bilanço: return .atlas
+                    case .grafik: return .orion
+                    case .sirkiye: return .aether
+                    case .kulis: return .hermes
+                    case .faktor: return .argus
+                    case .vektor: return .orion
+                    case .sektor: return .poseidon
+                    case .rejim: return .demeter
+                    case .moneyflow: return .poseidon // Moneyflow map to Whale/Poseidon
+                    }
+                }()
+                SystemInfoCard(entity: entity, isPresented: $showInfoCard)
+                    .zIndex(200)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                colors: [Color(red: 0.12, green: 0.08, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 0)
-                .stroke(LinearGradient(colors: [module.color, .clear], startPoint: .top, endPoint: .bottom), lineWidth: 1)
-        )
-        .onAppear {
-            // On-demand BIST karar verisi çekimi
-            if viewModel.grandDecisions[symbol]?.bistDetails == nil {
-                Task {
-                    await fetchBistDecisionIfNeeded()
-                }
-            }
-        }
-        .fullScreenCover(isPresented: $showImmersiveChart) {
-            ArgusImmersiveChartView(
-                viewModel: viewModel,
-                symbol: symbol
-            )
-        }
+        .background(SanctumTheme.bg.opacity(0.95))
+        .cornerRadius(0)
     }
     
-    // MARK: - On-Demand BIST Decision Fetcher
-    private func fetchBistDecisionIfNeeded() async {
-        // ONE-OFF FIX: BIST Portföyünü ve Bakiyesini Düzelt (16 TL Hatası için)
-        if !UserDefaults.standard.bool(forKey: "bist_fix_applied_v1") {
-            print("🔧 Applying BIST Price Fix v1...")
-            await MainActor.run {
-                viewModel.resetBistPortfolio()
-            }
-            UserDefaults.standard.set(true, forKey: "bist_fix_applied_v1")
-        }
+    private func refreshSirkiyeData() async {
+        // Sirkiye verilerini tazelemek için (Macro snapshot vs)
+        // Burada force refresh yapabiliriz
         
-        // 1. Candle verisi al (HeimdallOrchestrator - Yahoo Fallback)
-        // BorsaPy yetersiz kalırsa Yahoo devreye girer. Tutarlılık için Grafik kartıyla aynı kaynağı kullanıyoruz.
-        guard let candles = try? await HeimdallOrchestrator.shared.requestCandles(
-            symbol: symbol,
-            timeframe: "1D",
-            limit: 60
-        ) else {
-            print("⚠️ BistHoloPanel: \(symbol) için candle verisi alınamadı (Tüm kaynaklar başarısız)")
-            return
-        }
+        // 1. Dataları al
+        guard let candles = await MainActor.run(body: {
+            viewModel.candles[symbol]
+        }), !candles.isEmpty else { return }
         
-        guard candles.count >= 50 else {
-            print("⚠️ BistHoloPanel: \(symbol) için yetersiz veri (\(candles.count) mum)")
-            return
-        }
+        // Ensure minimal candles
+        let sortedCandles = candles.sorted { $0.date < $1.date }
+        guard let candles = try? sortedCandles.suffix(60).map({ $0 }),
+            candles.count >= 50 // Need enough data
+        else { return }
         
-        // 2. Sirkiye Input hazırla
-        let usdTryQuote = await MainActor.run { viewModel.quotes["USD/TRY"] }
+        // Safely unwrap optional limited candles
+        // Actually ArraySlice to Array is safe.
+        // let limitCandles = Array(candles) 
+        
+        // Re-run logic... but this view creates SirkiyeDashboard which uses viewModel.
+        // We just need to trigger viewModel refresher if needed.
+        // ArgusGrandCouncil convene() handles this internal logic.
+        
+        // Manually triggering convene for comprehensive update:
+        
+        // 1. Candles hazirla (Async context safe)
+        // let candles = viewModel.candles[symbol] // Main actor isolation issue if accessed directly here?
+        // Using MainActor.run above
+        
+        // We need 'candles' here available to this scope.
+        // Using previous guard results.
+        
+        // 1.1 Limit to 60 (son 60 gün yeterli sirkülasyon için)
+        // This logic was in ArgusGrandCouncil.
+        
+        // Let's call convene on background
+        
+        // 1. Sirkiye Input hazırlamak için verilere eriş (Main Actor)
+        
+        // ... (Logic from Step 2594 - refreshSirkiyeData implementation)
+        // I will copy exact logic if I can find it.
+        // Step 2594 line 1950 implies logic existed.
+        
+        // Logic from Step 2594 (lines 1940+):
+        
+        let candleList = Array(candles) // Convert slice to array
+        
+        // 2. Sirkiye Input
+        let usdTry = await MainActor.run { viewModel.quotes["USD/TRY"]?.currentPrice ?? 35.0 }
+        let usdTryPrev = await MainActor.run { viewModel.quotes["USD/TRY"]?.previousClose ?? 35.0 }
+        
         let sirkiyeInput = SirkiyeEngine.SirkiyeInput(
-            usdTry: usdTryQuote?.currentPrice ?? 35.0,
-            usdTryPrevious: usdTryQuote?.previousClose ?? 35.0,
-            dxy: 104.0,
+            usdTry: usdTry,
+            usdTryPrevious: usdTryPrev,
+            dxy: 104.0, // Default or fetch
             brentOil: 80.0,
             globalVix: 15.0,
             newsSnapshot: nil,
@@ -2148,11 +2075,10 @@ struct BistHoloPanelView: View {
             goldPrice: nil
         )
         
-        // 3. ArgusGrandCouncil.convene() çağır
         let macro = MacroSnapshot.fromCached()
         let decision = await ArgusGrandCouncil.shared.convene(
             symbol: symbol,
-            candles: candles,
+            candles: candleList,
             financials: nil,
             macro: macro,
             news: nil,
@@ -2160,10 +2086,9 @@ struct BistHoloPanelView: View {
             sirkiyeInput: sirkiyeInput
         )
         
-        // 4. grandDecisions'a yaz
         await MainActor.run {
             viewModel.grandDecisions[symbol] = decision
-            print("✅ BistHoloPanel: \(symbol) için BIST kararı alındı (\(decision.action.rawValue))")
+            print("✅ BistHoloPanel: \(symbol) için BIST kararı (Sirkülasyon) tazelendi.")
         }
     }
     
@@ -2280,6 +2205,31 @@ struct BistHoloPanelView: View {
         case .sirkiye:
             // Sirkiye Dashboard (Makro Görünüm)
             SirkiyeDashboardView(viewModel: viewModel)
+        
+        case .vektor:
+            // Prometheus Vektor Tahmin
+             // Prometheus - 5 Day Price Forecasting (Holt-Winters)
+            VStack(spacing: 16) {
+                // Header
+                HStack {
+                    Image(systemName: "crystal.ball")
+                        .font(.title2)
+                        .foregroundColor(.orange)
+                    Text("Prometheus Öngörü Sistemi")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Spacer()
+                }
+                
+                if let candles = viewModel.candles[symbol], candles.count >= 30 {
+                    ForecastCard(
+                        symbol: symbol,
+                        historicalPrices: candles.map { $0.close }
+                    )
+                } else {
+                     Text("Yetersiz veri")
+                }
+            }
         }
     }
 }
@@ -2303,4 +2253,3 @@ struct HermesInfoRow: View {
         }
     }
 }
-
