@@ -9,11 +9,48 @@ struct TradeBrainView: View {
     @State private var selectedTab = 0
     @State private var selectedPlan: PositionPlan?
     @State private var showPlanDetail = false
+    @State private var marketMode: MarketMode = .all
+    
+    enum MarketMode: String, CaseIterable {
+        case all = "Tümü"
+        case global = "Global"
+        case bist = "BIST"
+    }
+    
+    // Filtered portfolio based on market mode
+    private var filteredPortfolio: [Trade] {
+        switch marketMode {
+        case .all: return viewModel.portfolio
+        case .global: return viewModel.portfolio.filter { !$0.symbol.hasSuffix(".IS") }
+        case .bist: return viewModel.portfolio.filter { $0.symbol.hasSuffix(".IS") }
+        }
+    }
+    
+    // Filtered balance based on market mode
+    private var filteredBalance: Double {
+        switch marketMode {
+        case .all: return viewModel.balance + viewModel.bistBalance
+        case .global: return viewModel.balance
+        case .bist: return viewModel.bistBalance
+        }
+    }
+    
+    // Filtered equity based on market mode
+    private var filteredEquity: Double {
+        let portfolioValue = filteredPortfolio.filter { $0.isOpen }.reduce(0.0) { sum, trade in
+            let price = viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
+            return sum + (trade.quantity * price)
+        }
+        return filteredBalance + portfolioValue
+    }
     
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    // Market Selector
+                    marketSelector
+                    
                     // Header
                     headerSection
                     
@@ -44,6 +81,48 @@ struct TradeBrainView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Market Selector
+    
+    private var marketSelector: some View {
+        HStack(spacing: 0) {
+            ForEach(MarketMode.allCases, id: \.self) { mode in
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        marketMode = mode
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if mode == .bist {
+                            Text("🇹🇷")
+                        } else if mode == .global {
+                            Text("🌍")
+                        } else {
+                            Text("📊")
+                        }
+                        Text(mode.rawValue)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(marketMode == mode ? .white : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        marketMode == mode ?
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(mode == .bist ? Color.red : (mode == .global ? Color.blue : Color.purple))
+                        : nil
+                    )
+                }
+            }
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 5)
+        )
     }
     
     // MARK: - Header
@@ -179,9 +258,9 @@ struct TradeBrainView: View {
             SectionHeader(title: "Portföy Sağlığı", icon: "heart.fill", color: .red)
             
             let health = PortfolioRiskManager.shared.checkPortfolioHealth(
-                portfolio: viewModel.portfolio,
-                cashBalance: viewModel.balance,
-                totalEquity: viewModel.getEquity(),
+                portfolio: filteredPortfolio,
+                cashBalance: filteredBalance,
+                totalEquity: filteredEquity,
                 quotes: viewModel.quotes
             )
             
@@ -274,7 +353,7 @@ struct TradeBrainView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Pozisyon Planları", icon: "doc.text.fill", color: .blue)
             
-            let openTrades = viewModel.portfolio.filter { $0.isOpen }
+            let openTrades = filteredPortfolio.filter { $0.isOpen }
             
             if openTrades.isEmpty {
                 BrainEmptyCard(
