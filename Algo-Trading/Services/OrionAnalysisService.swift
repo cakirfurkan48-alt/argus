@@ -177,6 +177,11 @@ final class OrionAnalysisService: @unchecked Sendable {
             rsi: rsiValue,
             macdHistogram: macdHist,
             
+            // NEW FIELDS (Moved to correct position)
+            trendAge: calculateTrendAge(candles: sorted),
+            trendStrength: IndicatorService.lastADX(candles: sorted),
+            aroon: IndicatorService.lastAroon(candles: sorted),
+            
             isRsAvailable: rsAvail,
             trendDesc: "\(trendDesc) | \(rsDesc)",
             momentumDesc: "\(momDesc) | \(volDesc)",
@@ -557,6 +562,29 @@ final class OrionAnalysisService: @unchecked Sendable {
         }
         
         return (min(100.0, max(0.0, score)), isSqueeze)
+    }
+
+    // MARK: - New Leg: Trend Age (Chronos Legacy)
+    private func calculateTrendAge(candles: [Candle]) -> Int {
+        let closes = candles.map { $0.close }
+        let sma20s = IndicatorService.calculateSMA(values: closes, period: 20)
+        let sma50s = IndicatorService.calculateSMA(values: closes, period: 50)
+        
+        var age = 0
+        let count = closes.count
+        
+        // Tersten say: Bugünden geriye
+        for i in 0..<count {
+            let idx = count - 1 - i
+            guard let s20 = sma20s[idx], let s50 = sma50s[idx] else { break }
+            
+            if s20 > s50 {
+                age += 1
+            } else {
+                break // Trend bozulduğu yerde dur
+            }
+        }
+        return age
     }
 
     

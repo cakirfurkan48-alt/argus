@@ -1,49 +1,110 @@
 import Foundation
-import SwiftUI
 
-// MARK: - Chronos Models (Time Intelligence)
+// MARK: - Chronos Walk-Forward Models
+/// Time Machine Results (Zaman Makinesi Çıktıları)
 
-struct ChronosResult: Identifiable {
-    let id = UUID()
+struct WalkForwardConfig: Codable {
+    let inSampleDays: Int      // Optimizasyon penceresi (örn: 252 = 1 yıl)
+    let outOfSampleDays: Int   // Test penceresi (örn: 63 = 3 ay)
+    let stepDays: Int          // Her iterasyonda kaydırma (örn: 63 = 3 aylık rolling)
+    let initialCapital: Double
+    
+    static let standard = WalkForwardConfig(
+        inSampleDays: 252,
+        outOfSampleDays: 63,
+        stepDays: 63,
+        initialCapital: 10000
+    )
+    
+    static let aggressive = WalkForwardConfig(
+        inSampleDays: 180,
+        outOfSampleDays: 45,
+        stepDays: 45,
+        initialCapital: 10000
+    )
+    
+    static let conservative = WalkForwardConfig(
+        inSampleDays: 504,  // 2 yıl
+        outOfSampleDays: 126, // 6 ay
+        stepDays: 126,
+        initialCapital: 10000
+    )
+}
+
+struct WindowResult: Codable, Identifiable {
+    var id: Int { windowNumber }
+    
+    let windowNumber: Int
+    let inSampleStart: Date
+    let inSampleEnd: Date
+    let outSampleStart: Date
+    let outSampleEnd: Date
+    
+    let inSampleReturn: Double
+    let outOfSampleReturn: Double
+    let tradeCount: Int
+    let winRate: Double
+    
+    let optimizedParams: OptimizedParameters
+}
+
+struct OptimizedParameters: Codable {
+    let stopLossPct: Double
+    let entryThreshold: Double
+    let exitThreshold: Double
+    
+    let inSampleReturn: Double
+    let inSampleWinRate: Double
+    let inSampleDrawdown: Double
+}
+
+struct WalkForwardResult {
     let symbol: String
+    let strategy: BacktestConfig.StrategyType
+    let config: WalkForwardConfig
     
-    // 1. Trend Age (The Curse)
-    let trendAgeDays: Int
-    let ageVerdict: ChronosAgeVerdict
+    let windowResults: [WindowResult]
     
-    // 2. Aroon Indicator (Trend Energy)
-    let aroonUp: Double
-    let aroonDown: Double
+    // Aggregate Metrics
+    let totalOutOfSampleReturn: Double
+    let avgOutOfSampleReturn: Double
+    let avgInSampleReturn: Double
+    let overfitRatio: Double    // OOS/IS - 1.0'a yakın = iyi
+    let consistencyScore: Double // Kârlı window yüzdesi
     
-    // 3. Sequential (Exhaustion Counter)
-    let sequentialCount: Int // Positive for Buy Setup (Green), Negative for Sell Setup (Red)
-    let isSequentialComplete: Bool // true if 9 or 13 reached
+    let totalTrades: Int
+    let overallWinRate: Double
     
-    // 4. Time Safety Score (0-100)
-    let timeScore: Double
+    let combinedTrades: [BacktestTrade]
+    let outOfSampleEquity: [EquityPoint]
     
-    // Verdict
-    var summary: String {
-        return "Yaş: \(trendAgeDays) Gün | \(ageVerdict.rawValue)"
+    let generatedAt: Date
+    
+    // Quality Assessment
+    var isReliable: Bool {
+        overfitRatio > 0.6 && consistencyScore > 60 && totalTrades >= 10
     }
 }
 
-enum ChronosAgeVerdict: String {
-    case baby = "👶 YENİ DOĞAN (Güvensiz)"
-    case prime = "💪 OLGUN (Güvenli)"
-    case old = "👴 İHTİYAR (Riskli)"
-    case ancient = "💀 LANETLİ (Uzak Dur)"
-    case downtrend = "📉 Düşüş Trendi"
-    case unknown = "❓ Belirsiz"
+struct OverfitAnalysis: Codable {
+    let score: Double          // 0-100, düşük = iyi
+    let level: OverfitLevel
+    let warnings: [String]
+    let recommendation: String
+}
+
+enum OverfitLevel: String, Codable {
+    case low = "Düşük"
+    case moderate = "Orta"
+    case high = "Yüksek"
+    case critical = "Kritik"
     
-    var color: Color {
+    var color: String {
         switch self {
-        case .baby: return .orange
-        case .prime: return .green
-        case .old: return .yellow
-        case .ancient: return .red
-        case .downtrend: return .gray
-        case .unknown: return .gray
+        case .low: return "green"
+        case .moderate: return "yellow"
+        case .high: return "orange"
+        case .critical: return "red"
         }
     }
 }

@@ -78,6 +78,75 @@ struct IndicatorService {
         return ((highestHigh - close) / (highestHigh - lowestLow)) * -100
     }
     
+    // MARK: - Aroon Oscillator
+    /// Returns Aroon Oscillator value (-100 to +100)
+    static func lastAroon(candles: [Candle], period: Int = 25) -> Double? {
+        // Simple calculation for the last candle
+        guard candles.count >= period + 1 else { return nil }
+        
+        let slice = candles.suffix(period + 1) // Need lookback + 1 to properly scan
+        // Actually typically lookback period includes current bar?
+        // Standard definition: "number of periods since the highest high within the last n periods"
+        // Let's use the standard "last n" candles including current.
+        
+        let sub = Array(candles.suffix(period + 1))
+        // We calculate for the *last* closed bar.
+        // Days since high: index of high from end.
+        
+        // Let's implement full array or just last value? Just last for efficiency here.
+        let analysisSlice = Array(sub.dropLast()) // Previous 'period' candles?
+        // Usually applied to current candle.
+        
+        let relevantCandles = Array(candles.suffix(period + 1)) // period+1 ensures we index correctly?
+        // Let's stick to standard:
+        // Aroon Up = ((25 - Days Since 25-day High)/25) * 100
+        
+        // We look at the last 'period' candles (including current if closed, or previous if analyzing historical)
+        // Assuming 'candles' ends with the bar we want to analyze.
+        
+        let lookback = Array(candles.suffix(period + 1))
+        guard lookback.count >= period + 1 else { return nil }
+        
+        // Range: indices 0 to period.
+        // We want High of last 'period' bars.
+        // e.g. period=3. candles=[A, B, C, D]. suffix(4) -> [A, B, C, D].
+        // High of last 3 bars (B, C, D)? Or including A?
+        // Aroon typically measures over N periods.
+        
+        let window = Array(lookback.suffix(period + 1)) // Safety
+        
+        var highIndex = 0
+        var lowIndex = 0
+        var highVal = -Double.infinity
+        var lowVal = Double.infinity
+        
+        // Iterate backwards from the end (index period) down to 0?
+        // Let's rely on array index.
+        // window[0] is oldest, window[period] is newest.
+        
+        for i in 0...period {
+            let idx = window.count - 1 - i // 0 -> last element (newest)
+            if idx < 0 { break }
+            let c = window[idx]
+            
+            if c.high >= highVal { // Most recent high wins ties? Or oldest? Usually most recent.
+                 // Actually Formula: Days Since High. If High was today, days=0.
+                 highVal = c.high
+                 highIndex = i
+            }
+            
+            if c.low <= lowVal {
+                lowVal = c.low
+                lowIndex = i
+            }
+        }
+        
+        let aroonUp = ((Double(period) - Double(highIndex)) / Double(period)) * 100.0
+        let aroonDown = ((Double(period) - Double(lowIndex)) / Double(period)) * 100.0
+        
+        return aroonUp - aroonDown
+    }
+
     // MARK: - SMA (Simple Moving Average)
     static func calculateSMA(values: [Double], period: Int) -> [Double?] {
         var smaValues = [Double?](repeating: nil, count: values.count)

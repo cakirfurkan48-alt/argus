@@ -1,227 +1,266 @@
 import Foundation
 
-/// Chronos: The Keeper of Time.
-/// Analyzes the "Age", "Energy", and "Exhaustion" of trends.
-class ChronosService {
-    static let shared = ChronosService()
+// MARK: - Chronos Walk-Forward Engine ⏳
+/// Overfit'i önleyen profesyonel backtest yaklaşımı: Chronos
+/// In-sample optimizasyon + Out-of-sample validation
+
+actor ChronosWalkForwardEngine {
+    static let shared = ChronosWalkForwardEngine()
     
     private init() {}
     
-    func analyzeTime(symbol: String, candles: [Candle]) -> ChronosResult? {
-        // Need decent history for SMA200 + Age check
-        guard candles.count > 200 else { return nil }
-        let sorted = candles.sorted { $0.date < $1.date }
+    // MARK: - Walk-Forward Analysis
+    
+    /// Walk-forward backtest çalıştır
+    func runWalkForward(
+        symbol: String,
+        candles: [Candle],
+        config: WalkForwardConfig,
+        strategy: BacktestConfig.StrategyType,
+        financials: FinancialsData? = nil
+    ) async -> WalkForwardResult {
         
-        // 1. Trend Age Calculation
-        let (age, verdict) = calculateTrendAge(candles: sorted)
+        var windowResults: [WindowResult] = []
+        var combinedTrades: [BacktestTrade] = []
+        var outOfSampleEquity: [EquityPoint] = []
         
-        // 2. Aroon Calculation (25 period standard)
-        let (aroonUp, aroonDown) = calculateAroon(candles: sorted, period: 25)
+        // Veri sıralama kontrolü
+        let sortedCandles = candles.sorted { $0.date < $1.date }
+        let totalDays = sortedCandles.count
         
-        // 3. Sequential Counter (Simplified TD)
-        let (seqCount, seqComplete) = calculateSequential(candles: sorted)
+        let windowSize = config.inSampleDays + config.outOfSampleDays
+        var startIndex = 0
+        var windowNumber = 0
         
-        // 4. Time Score Calculation
-        let score = calculateTimeScore(ageVerdict: verdict, aroonUp: aroonUp, aroonDown: aroonDown, seqCount: seqCount)
+        print("⏳ Chronos: Starting analysis for \(symbol) with \(totalDays) candles")
         
-        return ChronosResult(
+        // Sliding window loop
+        while startIndex + windowSize <= totalDays {
+            windowNumber += 1
+            
+            let inSampleEnd = startIndex + config.inSampleDays
+            let outSampleEnd = startIndex + windowSize
+            
+            // Split data
+            let inSampleCandles = Array(sortedCandles[startIndex..<inSampleEnd])
+            let outSampleCandles = Array(sortedCandles[inSampleEnd..<outSampleEnd])
+            
+            // 1. In-Sample: Optimize parameters (simulated)
+            let optimizedParams = await optimizeParameters(
+                candles: inSampleCandles,
+                strategy: strategy,
+                symbol: symbol,
+                financials: financials
+            )
+            
+            // 2. Out-of-Sample: Test with optimized parameters
+            let backtest = BacktestConfig(
+                initialCapital: config.initialCapital,
+                strategy: strategy,
+                stopLossPct: optimizedParams.stopLossPct
+            )
+            
+            let result = await ArgusBacktestEngine.shared.runBacktest(
+                symbol: symbol,
+                config: backtest,
+                candles: outSampleCandles,
+                financials: financials
+            )
+            
+            // Record window result
+            let window = WindowResult(
+                windowNumber: windowNumber,
+                inSampleStart: inSampleCandles.first?.date ?? Date(),
+                inSampleEnd: inSampleCandles.last?.date ?? Date(),
+                outSampleStart: outSampleCandles.first?.date ?? Date(),
+                outSampleEnd: outSampleCandles.last?.date ?? Date(),
+                inSampleReturn: optimizedParams.inSampleReturn,
+                outOfSampleReturn: result.totalReturn,
+                tradeCount: result.trades.count,
+                winRate: result.winRate,
+                optimizedParams: optimizedParams
+            )
+            
+            windowResults.append(window)
+            combinedTrades.append(contentsOf: result.trades)
+            outOfSampleEquity.append(contentsOf: result.equityCurve)
+            
+            print("  Window \(windowNumber): IS=\(String(format: "%.1f", optimizedParams.inSampleReturn))% → OOS=\(String(format: "%.1f", result.totalReturn))%")
+            
+            // Slide window
+            startIndex += config.stepDays
+        }
+        
+        // Calculate overall metrics
+        let totalOOSReturn = windowResults.reduce(0.0) { $0 + $1.outOfSampleReturn }
+        let avgOOSReturn = windowResults.isEmpty ? 0 : totalOOSReturn / Double(windowResults.count)
+        
+        // Overfit Ratio (IS/OOS return comparison)
+        let totalISReturn = windowResults.reduce(0.0) { $0 + $1.inSampleReturn }
+        let avgISReturn = windowResults.isEmpty ? 0 : totalISReturn / Double(windowResults.count)
+        let overfitRatio = avgISReturn != 0 ? avgOOSReturn / avgISReturn : 1.0
+        
+        // Consistency: How many windows were profitable OOS?
+        let profitableWindows = windowResults.filter { $0.outOfSampleReturn > 0 }.count
+        let consistencyScore = Double(profitableWindows) / Double(max(1, windowResults.count)) * 100.0
+        
+        // Win rate across all OOS trades
+        let wins = combinedTrades.filter { $0.pnl > 0 }.count
+        let totalTrades = combinedTrades.count
+        let overallWinRate = totalTrades > 0 ? Double(wins) / Double(totalTrades) * 100.0 : 0
+        
+        return WalkForwardResult(
             symbol: symbol,
-            trendAgeDays: age,
-            ageVerdict: verdict,
-            aroonUp: aroonUp,
-            aroonDown: aroonDown,
-            sequentialCount: seqCount,
-            isSequentialComplete: seqComplete,
-            timeScore: score
+            strategy: strategy,
+            config: config,
+            windowResults: windowResults,
+            totalOutOfSampleReturn: totalOOSReturn,
+            avgOutOfSampleReturn: avgOOSReturn,
+            avgInSampleReturn: avgISReturn,
+            overfitRatio: overfitRatio,
+            consistencyScore: consistencyScore,
+            totalTrades: totalTrades,
+            overallWinRate: overallWinRate,
+            combinedTrades: combinedTrades,
+            outOfSampleEquity: outOfSampleEquity,
+            generatedAt: Date()
         )
     }
     
-    // MARK: - Logic 1: Trend Age (The Curse)
-    private func calculateTrendAge(candles: [Candle]) -> (Int, ChronosAgeVerdict) {
-        let closes = candles.map { $0.close }
-        guard let sma200 = sma(closes, 200) else { return (0, .unknown) }
+    // MARK: - Parameter Optimization (Simplified)
+    
+    /// In-sample veri üzerinde parametre optimizasyonu
+    private func optimizeParameters(
+        candles: [Candle],
+        strategy: BacktestConfig.StrategyType,
+        symbol: String,
+        financials: FinancialsData?
+    ) async -> OptimizedParameters {
         
-        let currentPrice = closes.last ?? 0
+        // Test different stop-loss levels
+        let stopLossOptions = [0.03, 0.05, 0.07, 0.10]
+        var bestReturn = -Double.infinity
+        var bestStopLoss = 0.05
         
-        // If below SMA200, we consider it "Downtrend" or "Reset"
-        if currentPrice < sma200 {
-            return (0, .downtrend)
-        }
-        
-        // Find the last time price crossed ABOVE SMA200
-        // We iterate backwards
-        var daysAbove = 0
-        let count = candles.count
-        
-        // Pre-calculate SMA200 logic somewhat efficiently? 
-        // Or just scan backwards checking dynamic SMA.
-        // Full dynamic SMA scan is heavy. 
-        // Heuristic: Check simple "Price > SMA200" condition backwards. 
-        // Note: SMA200 changes every day. For strict accuracy we need rolling SMA.
-        
-        for i in 0..<count {
-            let idx = count - 1 - i // From last to first
-            if idx < 200 { break } // Needs 200 bars for SMA
+        for sl in stopLossOptions {
+            let config = BacktestConfig(
+                initialCapital: 10000,
+                strategy: strategy,
+                stopLossPct: sl
+            )
             
-            let slice = Array(closes[(idx-200)..<idx])
-            let sliceSum = slice.reduce(0, +)
-            let avg = sliceSum / 200.0
-            let price = closes[idx]
+            let result = await ArgusBacktestEngine.shared.runBacktest(
+                symbol: symbol,
+                config: config,
+                candles: candles,
+                financials: financials
+            )
             
-            if price >= avg {
-                daysAbove += 1
-            } else {
-                // Crossed below, trend start found
-                break
+            // Sharpe-like score (return / risk adjusted)
+            let adjustedReturn = result.totalReturn - (result.maxDrawdown * 0.5)
+            
+            if adjustedReturn > bestReturn {
+                bestReturn = adjustedReturn
+                bestStopLoss = sl
             }
         }
         
-        // Verdict
-        // < 14 Days: Baby
-        // 14 - 90 Days: Early
-        // 90 - 270 Days: Prime
-        // 270 - 500 Days: Old
-        // > 500 Days: Ancient
+        // Run final backtest with best params
+        let finalConfig = BacktestConfig(
+            initialCapital: 10000,
+            strategy: strategy,
+            stopLossPct: bestStopLoss
+        )
         
-        // Calendar days vs Trading days. 
-        // 20 trading days ~ 1 month.
-        // 250 trading days ~ 1 year.
+        let finalResult = await ArgusBacktestEngine.shared.runBacktest(
+            symbol: symbol,
+            config: finalConfig,
+            candles: candles,
+            financials: financials
+        )
         
-        let verdict: ChronosAgeVerdict
-        if daysAbove < 10 { verdict = .baby }
-        else if daysAbove < 180 { verdict = .prime } // < 9 Months
-        else if daysAbove < 360 { verdict = .old }   // < 1.5 Years
-        else { verdict = .ancient }                  // > 1.5 Years
-        
-        return (daysAbove, verdict)
+        return OptimizedParameters(
+            stopLossPct: bestStopLoss,
+            entryThreshold: 75.0, // Default for now
+            exitThreshold: 45.0,
+            inSampleReturn: finalResult.totalReturn,
+            inSampleWinRate: finalResult.winRate,
+            inSampleDrawdown: finalResult.maxDrawdown
+        )
     }
     
-    // MARK: - Logic 2: Aroon
-    private func calculateAroon(candles: [Candle], period: Int) -> (Double, Double) {
-        guard candles.count > period else { return (0, 0) }
-        
-        let slice = candles.suffix(period + 1) // Need lookback
-        let highs = slice.map { $0.high }
-        let lows = slice.map { $0.low }
-        
-        // Find index of highest high and lowest low in the last N periods
-        // Arrays are suffix, so indices 0..period
-        // Index 0 is oldest, Index period is newest (today)
-        // Aroon formula uses "Days since high"
-        
-        var daysSinceHigh = 0
-        var daysSinceLow = 0
-        var maxH = -Double.infinity
-        var minL = Double.infinity
-        
-        // Iterate backwards from today (last index) to period start
-        let count = highs.count
-        
-        for i in 0..<period {
-            let idx = count - 1 - i
-            if highs[idx] > maxH {
-                maxH = highs[idx]
-                daysSinceHigh = i // 0 means high is today
-            }
-            if lows[idx] < minL {
-                minL = lows[idx]
-                daysSinceLow = i
-            }
-        }
-        
-        let up = ((Double(period) - Double(daysSinceHigh)) / Double(period)) * 100.0
-        let down = ((Double(period) - Double(daysSinceLow)) / Double(period)) * 100.0
-        
-        return (up, down)
-    }
+    // MARK: - Overfit Detection
     
-    // MARK: - Logic 3: Sequential (Simplified)
-    private func calculateSequential(candles: [Candle]) -> (Int, Bool) {
-        // Look for 9 consecutive "Price > Price[4 bars ago]" (Buy Setup) 
-        // or "Price < Price[4 bars ago]" (Sell Setup).
-        // Returning simple counter. + for Buy Setup (Bullish Exhaustion?), - for Sell Setup?
-        // Wait, Sequential Buy Setup (Price < Price[4]) implies Bottom Fishing (Bullish signal at 9).
-        // Sequential Sell Setup (Price > Price[4]) implies Top Exhaustion (Bearish signal at 9).
+    /// Overfit skoru hesapla (0-100, düşük = iyi)
+    func calculateOverfitScore(result: WalkForwardResult) -> OverfitAnalysis {
+        var score = 0.0
+        var warnings: [String] = []
         
-        // Let's use standard signed int:
-        // Positive (+): Consecutive closes HIGHER than 4 bars ago (Up Trend -> Exhaustion Risk)
-        // Negative (-): Consecutive closes LOWER than 4 bars ago (Down Trend -> Bounce Opportunity)
-        
-        guard candles.count > 15 else { return (0, false) }
-        let closes = candles.map { $0.close }
-        
-        var upCount = 0
-        var downCount = 0
-        
-        // Check backwards from today
-        // But Sequential resets if condition breaks. So strict sequence.
-        
-        // We calculate current sequence active TODAY.
-        
-        for i in 0..<13 { // Max check 13
-            let idx = closes.count - 1 - i
-            if idx < 4 { break }
-            
-            let current = closes[idx]
-            let prior4 = closes[idx - 4]
-            
-            if current > prior4 {
-                upCount += 1
-                downCount = 0 // Reset other
-            } else if current < prior4 {
-                downCount += 1
-                upCount = 0
-            } else {
-                break // Sequence broken
-            }
-        }
-        
-        if upCount > 0 {
-            return (upCount, upCount >= 9) // 9 is "Setup", 13 is "Countdown" (simplified)
-        } else {
-            return (-downCount, downCount >= 9)
-        }
-    }
-    
-    // MARK: - Logic 4: Scoring
-    private func calculateTimeScore(ageVerdict: ChronosAgeVerdict, aroonUp: Double, aroonDown: Double, seqCount: Int) -> Double {
-        var score = 50.0 // Neutral start
-        
-        // Age Impact
-        switch ageVerdict {
-        case .prime: score += 20 // Ideal
-        case .baby: score -= 10 // Volatile
-        case .old: score -= 10 // Tired
-        case .ancient: score -= 20 // Danger
-        case .downtrend: score -= 10
-        case .unknown: break
-        }
-        
-        // Aroon Impact
-        // AroonUp > 70 implies Strong Trend
-        if aroonUp > 70 && aroonDown < 30 {
+        // 1. IS/OOS Return Gap
+        let returnGap = result.avgInSampleReturn - result.avgOutOfSampleReturn
+        if returnGap > 20 {
+            score += 30
+            warnings.append("In-sample süper, Out-of-sample kötü (Gap: \(String(format: "%.1f", returnGap))%). Overfit belirtisi.")
+        } else if returnGap > 10 {
             score += 15
-        } else if aroonDown > 70 && aroonUp < 30 {
-            score -= 15
-        } else if aroonUp < 50 && aroonDown < 50 {
-            score -= 5 // Dead market
         }
         
-        // Sequential Impact (Exhaustion)
-        // High +Count (e.g. 9 or 13) means "Up Trend Exhausted" -> Risk -> Lower Score
-        if seqCount >= 9 {
-            score -= 20 // Danger Signal
-        } else if seqCount <= -9 {
-            score += 20 // Oversold Signal (Opportunity)
+        // 2. Overfit Ratio
+        if result.overfitRatio < 0.5 {
+            score += 25
+            warnings.append("OOS performansı IS'nin yarısından az.")
+        } else if result.overfitRatio < 0.75 {
+            score += 10
         }
         
-        // Safety Clamps
-        return max(0, min(100, score))
+        // 3. Consistency
+        if result.consistencyScore < 50 {
+            score += 25
+            warnings.append("Test pencerelerinin çoğunda zarar etti (Tutarsız).")
+        } else if result.consistencyScore < 70 {
+            score += 10
+        }
+        
+        // 4. Trade Count
+        if result.totalTrades < 10 {
+            score += 15
+            warnings.append("Yetersiz işlem sayısı (\(result.totalTrades)). İstatistiksel güven düşük.")
+        }
+        
+        // 5. Win Rate Collapse
+        let avgISWinRate = result.windowResults.map { $0.optimizedParams.inSampleWinRate }.reduce(0, +) / Double(max(1, result.windowResults.count))
+        let winRateDrop = avgISWinRate - result.overallWinRate
+        if winRateDrop > 20 {
+            score += 10
+            warnings.append("Win rate OOS'de ciddi düştü.")
+        }
+        
+        let level: OverfitLevel
+        switch score {
+        case 0..<25: level = .low
+        case 25..<50: level = .moderate
+        case 50..<75: level = .high
+        default: level = .critical
+        }
+        
+        return OverfitAnalysis(
+            score: min(100, score),
+            level: level,
+            warnings: warnings,
+            recommendation: generateRecommendation(level: level, warnings: warnings)
+        )
     }
     
-    // Helper
-    private func sma(_ data: [Double], _ period: Int) -> Double? {
-        guard data.count >= period else { return nil }
-        return data.suffix(period).reduce(0, +) / Double(period)
+    private func generateRecommendation(level: OverfitLevel, warnings: [String]) -> String {
+        switch level {
+        case .low:
+            return "✅ Chronos Onayı: Strateji zaman testinden başarıyla geçti. Güvenilir."
+        case .moderate:
+            return "⚠️ Dikkat: Bazı dönemlerde performans düşüyor. Canlı işlemde küçük risk alın."
+        case .high:
+             return "❌ Riskli: Yüksek overfit riski. Geçmişe aşırı uyum sağlanmış olabilir."
+        case .critical:
+             return "⛔️ RED: Chronos bu stratejiyi veto etti. Canlı piyasada batma riski yüksek."
+        }
     }
 }

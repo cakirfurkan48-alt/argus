@@ -18,6 +18,11 @@ struct OrionComponentScores: Codable, Sendable {
     let rsi: Double?
     let macdHistogram: Double?
     
+    // NEW: Chronos Legacy (Transferred to Orion)
+    let trendAge: Int?          // How many days since SMA20 > SMA50 cross
+    let trendStrength: Double?  // ADX or similar strength metric (0-100)
+    let aroon: Double?          // Aroon Oscillator (-100 to +100)
+    
     // Flags for missing data
     
     // Flags for missing data

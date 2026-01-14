@@ -45,7 +45,7 @@ struct AutoPilotContext {
     let aetherRating: MacroEnvironmentRating?
     let hermesInsight: NewsInsight?
     let argusFinalScore: Double?
-    let cronosScore: Double?
+    // let cronosScore: Double? (REMOVED)
 }
 
 protocol AutoPilotStrategyEngine {

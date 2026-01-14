@@ -807,8 +807,8 @@ struct PantheonDeckView: View {
             .stroke(SanctumTheme.chironColor.opacity(0.15), lineWidth: 1)
             
             // 1. APEX: CHIRON (Time & Risk)
-            let chiron = viewModel.chronosDetails[symbol]
-            let chironScore = chiron != nil ? "\(Int(chiron!.timeScore))" : "--"
+            // let chiron = viewModel.chronosDetails[symbol] (Moved to Walk-Forward)
+            let chironScore = "--"
             let chironColor = SanctumTheme.chironColor // Always White for high contrast
             
             VStack(spacing: 4) {

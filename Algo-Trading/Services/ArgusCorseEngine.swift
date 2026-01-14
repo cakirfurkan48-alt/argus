@@ -26,10 +26,8 @@ final class ArgusCorseEngine: AutoPilotStrategyEngine {
             return .init(engine: .corse, symbol: symbol, action: .skip, targetExposurePercent: nil, quantity: 0, rationale: "Entry Criteria Not Met", confidence: 0, dataQualityScore: dqScore, scores: (context.atlasScore, context.orionScore, context.aetherRating?.numericScore, context.hermesInsight?.confidence))
         }
         
-        // Cronos Check (Time Filter)
-        if let cronos = context.cronosScore, cronos < 40 {
-             return .init(engine: .corse, symbol: symbol, action: .skip, targetExposurePercent: nil, quantity: 0, rationale: "Bad Timing (Cronos < 40)", confidence: 0, dataQualityScore: dqScore, scores: (context.atlasScore, context.orionScore, context.aetherRating?.numericScore, context.hermesInsight?.confidence))
-        }
+        // Cronos Check (Time Filter) - REMOVED
+        // if let cronos = context.cronosScore, cronos < 40 { return ... }
         
         // Trend Check (Price > Simple check if MA logic is not available directly, rely on Orion)
         // Orion Score >= 60 implies decent trend usually.
@@ -65,14 +63,8 @@ final class ArgusCorseEngine: AutoPilotStrategyEngine {
              return AutoPilotProposal(engine: .corse, symbol: trade.symbol, action: .sell, targetExposurePercent: 0, quantity: trade.quantity, rationale: "Argus Score Deteriorated (<40)", confidence: 100, dataQualityScore: dq, scores: (context.atlasScore, context.orionScore, context.aetherRating?.numericScore, context.hermesInsight?.confidence))
         }
         
-        // Cronos Decay (<20)
-        if let cr = context.cronosScore, cr < 20 {
-            // If profit is small (< 5%), don't risk it.
-            let pnl = (currentPrice - trade.entryPrice) / trade.entryPrice
-            if pnl < 0.05 {
-                 return AutoPilotProposal(engine: .corse, symbol: trade.symbol, action: .sell, targetExposurePercent: 0, quantity: trade.quantity, rationale: "Cronos Decay (<20) Exit", confidence: 80, dataQualityScore: dq, scores: (context.atlasScore, context.orionScore, context.aetherRating?.numericScore, context.hermesInsight?.confidence))
-            }
-        }
+        // Cronos Decay (<20) - REMOVED
+        // if let cr = context.cronosScore, cr < 20 { ... }
         
         // Take Profit (+15% and Overbought)
         let pnl = (currentPrice - trade.entryPrice) / trade.entryPrice

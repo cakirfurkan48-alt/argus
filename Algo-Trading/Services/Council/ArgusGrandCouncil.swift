@@ -52,7 +52,7 @@ struct ArgusGrandDecision: Sendable, Equatable, Codable {
     
     // For Phoenix
     let phoenixAdvice: PhoenixAdvice? = nil
-    let cronosScore: Double? = nil
+    // let cronosScore: Double? = nil (REMOVED)
     
     // Rich Data for Voice/UI
     let orionDetails: OrionScoreResult?
@@ -113,7 +113,7 @@ actor ArgusGrandCouncil {
         engine: AutoPilotEngine,
         athena: AthenaFactorResult? = nil,
         demeter: DemeterScore? = nil,
-        chiron: ChronosResult? = nil,
+        // chiron: ChronosResult? = nil, (REMOVED)
         // NEW: BIST Macro Input (Sirkiye)
         sirkiyeInput: SirkiyeEngine.SirkiyeInput? = nil,
         forceRefresh: Bool = false
@@ -341,8 +341,8 @@ actor ArgusGrandCouncil {
             ) : nil,
             // Advisors
             athena: athena,
-            demeter: demeter,
-            chiron: chiron
+            demeter: demeter
+            // chiron: chiron (REMOVED)
         )
         
         // 4. Update Cache
@@ -387,8 +387,8 @@ actor ArgusGrandCouncil {
         financialDetails: FinancialSnapshot?,
         // Advisors
         athena: AthenaFactorResult?,
-        demeter: DemeterScore?,
-        chiron: ChronosResult?
+        demeter: DemeterScore?
+        // chiron: ChronosResult? (REMOVED)
     ) -> ArgusGrandDecision {
         
         var contributors: [ModuleContribution] = []
@@ -400,8 +400,8 @@ actor ArgusGrandCouncil {
         advisorNotes.append(CouncilAdvisorGenerator.generateDemeterAdvice(score: demeter))
         
         // Calculate temp action for Chiron check (simplified, will refine later if needed)
-        let _ = orion.action 
-        advisorNotes.append(CouncilAdvisorGenerator.generateChironAdvice(result: chiron, action: .neutral))
+        // let _ = orion.action 
+        // advisorNotes.append(CouncilAdvisorGenerator.generateChironAdvice(result: chiron, action: .neutral))
 
         
         // --- 1. ORION (Technical) ---

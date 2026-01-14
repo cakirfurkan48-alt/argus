@@ -68,8 +68,6 @@ class TradingViewModel: ObservableObject {
     
     @Published var aiSignals: [AISignal] = []
     @Published var macroRating: MacroEnvironmentRating?
-    @Published var cronosScores: [String: Double] = [:] // Cached Cronos scores
-    @Published var chronosDetails: [String: ChronosResult] = [:] // Detailed Chronos Result (New)
     @Published var poseidonWhaleScores: [String: WhaleScore] = [:] // Poseidon (Big Fish)
     
     // UI State

@@ -284,10 +284,11 @@ extension TradingViewModel {
         
         
         
-        // 5. Cronos Score (Time) - REMOVED
-        let symbolCandles = self.candles[symbol] ?? []
+        // 5. Cronos Score (Time) - REMOVED (Migrated to Walk-Forward Engine)
         // let cronosScore: Double = CronosTimeEngine.shared.calculateTimingScore(candles: symbolCandles)
         // self.cronosScores[symbol] = cronosScore
+        
+        let symbolCandles = self.candles[symbol] ?? []
         
         // 6. Poseidon (Big Fish)
         let whaleScore = await PoseidonService.shared.analyzeSmartMoney(symbol: symbol, candles: symbolCandles)

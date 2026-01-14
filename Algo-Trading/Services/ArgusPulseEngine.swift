@@ -32,10 +32,8 @@ final class ArgusPulseEngine: AutoPilotStrategyEngine {
             return .init(engine: .pulse, symbol: symbol, action: .skip, targetExposurePercent: nil, quantity: 0, rationale: "Logic Fail", confidence: 0, dataQualityScore: dqScore, scores: (context.atlasScore, context.orionScore, context.aetherRating?.numericScore, context.hermesInsight?.confidence))
         }
         
-        // Cronos Check (Pulse needs good timing!)
-        if let cronos = context.cronosScore, cronos < 50 {
-             return .init(engine: .pulse, symbol: symbol, action: .skip, targetExposurePercent: nil, quantity: 0, rationale: "Bad Timing (Cronos < 50)", confidence: 0, dataQualityScore: dqScore, scores: (context.atlasScore, context.orionScore, context.aetherRating?.numericScore, context.hermesInsight?.confidence))
-        }
+        // Cronos Check (Pulse needs good timing!) - REMOVED
+        // if let cronos = context.cronosScore, cronos < 50 { return ... }
         
         // Sizing
         let baseExposure = 0.03 // 3% for Scalp
@@ -70,10 +68,8 @@ final class ArgusPulseEngine: AutoPilotStrategyEngine {
             return AutoPilotProposal(engine: .pulse, symbol: trade.symbol, action: .sell, targetExposurePercent: 0, quantity: trade.quantity, rationale: "Pulse TP (+5%)", confidence: 100, dataQualityScore: dq, scores: (nil, nil, nil, nil))
         }
         
-        // Cronos Check (Exit if timing sours < 30)
-        if let cr = context.cronosScore, cr < 30 {
-             return AutoPilotProposal(engine: .pulse, symbol: trade.symbol, action: .sell, targetExposurePercent: 0, quantity: trade.quantity, rationale: "Cronos Decay (<30) Pulse Exit", confidence: 100, dataQualityScore: dq, scores: (nil, nil, nil, nil))
-        }
+        // Cronos Check (Exit if timing sours < 30) - REMOVED
+        // if let cr = context.cronosScore, cr < 30 { return ... }
         
         return AutoPilotProposal(engine: .pulse, symbol: trade.symbol, action: .hold, targetExposurePercent: nil, quantity: trade.quantity, rationale: "Pulse Hold", confidence: 50, dataQualityScore: dq, scores: (nil, nil, nil, nil))
     }
