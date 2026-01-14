@@ -1652,6 +1652,38 @@ struct HoloPanelView: View {
                 .padding()
                 .background(Color.white.opacity(0.03))
                 .cornerRadius(8)
+                
+                // CHRONOS LAB Navigation
+                NavigationLink(destination: ChronosDetailView(symbol: symbol).environmentObject(viewModel)) {
+                    HStack {
+                        Image(systemName: "clock.arrow.2.circlepath")
+                            .font(.title3)
+                            .foregroundColor(.cyan)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Chronos Lab")
+                                .font(.subheadline)
+                                .bold()
+                                .foregroundColor(.white)
+                            Text("Walk-Forward Validation & Backtest")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .padding()
+                    .background(Color.cyan.opacity(0.1))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
+                    )
+                }
             }
             
         case .prometheus:
