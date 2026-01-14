@@ -60,9 +60,15 @@ final class FredProvider: HeimdallProvider, Sendable {
             return cached
         }
         
-        // 2. Fetch Fresh
-        guard let apiKey = await getApiKey() else {
-            throw URLError(.userAuthenticationRequired)
+        // 2. Check API Key
+        guard let apiKey = await getApiKey(), !apiKey.isEmpty else {
+            // API key yok - stale cache dene
+            if let stale = checkCache(seriesId: seriesId, ignoreExpiry: true) {
+                print("⚠️ FRED: No API Key. Serving stale data for \(seriesId)")
+                return stale
+            }
+            print("❌ FRED: No API Key and no cached data for \(seriesId)")
+            throw HeimdallCoreError(category: .authInvalid, code: 401, message: "FRED API Key missing. Configure in Settings.", bodyPrefix: "")
         }
         
         // FRED API

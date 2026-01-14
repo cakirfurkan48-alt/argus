@@ -32,7 +32,7 @@ struct CanonicalInstrument: Sendable, Codable, Equatable {
     // Market / Indicators
     static let vix = CanonicalInstrument(internalId: "macro.vix", displayName: "Volatilite (VIX)", assetType: .index, yahooSymbol: "^VIX", fredSeriesId: "VIXCLS", twelveDataSymbol: "VIX", sourceType: .market)
     static let dxy = CanonicalInstrument(internalId: "macro.dxy", displayName: "DXY Endeksi", assetType: .index, yahooSymbol: "DX-Y.NYB", fredSeriesId: nil, twelveDataSymbol: "DXY", sourceType: .market)
-    static let gold = CanonicalInstrument(internalId: "macro.gold", displayName: "Altın", assetType: .etf, yahooSymbol: "GC=F", fredSeriesId: nil, twelveDataSymbol: "XAU/USD", sourceType: .market)
+    static let gold = CanonicalInstrument(internalId: "macro.gold", displayName: "Altın", assetType: .etf, yahooSymbol: "GLD", fredSeriesId: nil, twelveDataSymbol: "XAU/USD", sourceType: .market)
     static let silver = CanonicalInstrument(internalId: "macro.silver", displayName: "Gümüş", assetType: .etf, yahooSymbol: "SI=F", fredSeriesId: nil, twelveDataSymbol: "XAG/USD", sourceType: .market)
     static let oil = CanonicalInstrument(internalId: "macro.oil", displayName: "Petrol", assetType: .etf, yahooSymbol: "CL=F", fredSeriesId: "DCOILWTICO", twelveDataSymbol: "WTI", sourceType: .market)
     static let btc = CanonicalInstrument(internalId: "macro.btc", displayName: "Bitcoin", assetType: .crypto, yahooSymbol: "BTC-USD", fredSeriesId: nil, twelveDataSymbol: "BTC/USD", sourceType: .market)

@@ -221,7 +221,10 @@ final class HeimdallOrchestrator {
         if instrument.internalId == "macro.trend" {
             throw HeimdallCoreError(category: .unknown, code: 400, message: "Cannot fetch candles for derived (TREND)", bodyPrefix: "")
         }
-        return try await requestCandles(symbol: instrument.internalId, timeframe: timeframe, limit: limit, instrument: instrument)
+        
+        // FIX: Yahoo için yahooSymbol kullan, yoksa internalId'ye fallback
+        let symbol = instrument.yahooSymbol ?? instrument.internalId
+        return try await requestCandles(symbol: symbol, timeframe: timeframe, limit: limit, instrument: instrument)
     }
     
     // MARK: - System Health
