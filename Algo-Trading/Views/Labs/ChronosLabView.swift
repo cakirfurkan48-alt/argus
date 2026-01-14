@@ -6,33 +6,31 @@ struct ChronosLabView: View {
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                Theme.background.ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Header
-                        headerView
-                        
-                        if viewModel.isAnalyzing {
-                            loadingView
-                        } else if let result = viewModel.result, let overfit = viewModel.overfitAnalysis {
-                            resultView(result: result, overfit: overfit)
-                        } else {
-                            configView
-                        }
+        ZStack {
+            Theme.background.ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header
+                    headerView
+                    
+                    if viewModel.isAnalyzing {
+                        loadingView
+                    } else if let result = viewModel.result, let overfit = viewModel.overfitAnalysis {
+                        resultView(result: result, overfit: overfit)
+                    } else {
+                        configView
                     }
-                    .padding()
                 }
+                .padding()
             }
-            .navigationTitle("Chronos Lab 🧪")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Kapat") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
+        }
+        .navigationTitle("Chronos Lab 🧪")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Kapat") {
+                    presentationMode.wrappedValue.dismiss()
                 }
             }
         }

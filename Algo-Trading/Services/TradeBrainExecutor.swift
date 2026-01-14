@@ -120,13 +120,10 @@ class TradeBrainExecutor: ObservableObject {
         var proposedQuantity = allocation / currentPrice
         
         // 2. RİSK KONTROLÜ
-        // FIX: totalEquity hesaplarken her hissenin kendi fiyatını kullanmalıyız. 
-        // Yanlışlıkla 'currentPrice' (işlem yapılan hissenin fiyatı) tüm portföye uygulanıyordu.
-        let portfolioValue = portfolio.filter { $0.isOpen }.reduce(0) { sum, trade in
-            // Eğer quote varsa güncel fiyat, yoksa giriş fiyatı (fallback)
+        // FIX: portfolioValue sadece aynı pazar trade'lerini içermeli (BIST veya Global ayrı)
+        let marketFilteredPortfolio = portfolio.filter { $0.isOpen && $0.symbol.hasSuffix(".IS") == isBist }
+        let portfolioValue = marketFilteredPortfolio.reduce(0) { sum, trade in
             let price = quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
-            // Currency conversion gerekebilir mi? Şimdilik aynı para biriminde işlem yapıldığı varsayılıyor
-            // Ancak global/bist ayrımı zaten availableBalance ile yapıldı.
             return sum + (trade.quantity * price)
         }
         

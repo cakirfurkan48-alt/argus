@@ -8,37 +8,35 @@ struct ArgusLabView: View {
     @State private var selectedTab = 0
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Tab Selector
-                Picker("", selection: $selectedTab) {
-                    Text("Açık").tag(0)
-                    Text("Kapalı").tag(1)
-                    Text("Öğrenmeler").tag(2)
-                }
-                .pickerStyle(.segmented)
-                .padding()
-                
-                // Content
-                TabView(selection: $selectedTab) {
-                    OpenTradesListView(trades: viewModel.openTrades)
-                        .tag(0)
-                    
-                    ClosedTradesListView(trades: viewModel.closedTrades, lessons: viewModel.lessons)
-                        .tag(1)
-                    
-                    LessonsListView(lessons: viewModel.lessons)
-                        .tag(2)
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+        VStack(spacing: 0) {
+            // Tab Selector
+            Picker("", selection: $selectedTab) {
+                Text("Açık").tag(0)
+                Text("Kapalı").tag(1)
+                Text("Öğrenmeler").tag(2)
             }
-            .navigationTitle("🧪 Argus Lab")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { viewModel.refresh() }) {
-                        Image(systemName: "arrow.clockwise")
-                    }
+            .pickerStyle(.segmented)
+            .padding()
+            
+            // Content
+            TabView(selection: $selectedTab) {
+                OpenTradesListView(trades: viewModel.openTrades)
+                    .tag(0)
+                
+                ClosedTradesListView(trades: viewModel.closedTrades, lessons: viewModel.lessons)
+                    .tag(1)
+                
+                LessonsListView(lessons: viewModel.lessons)
+                    .tag(2)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+        }
+        .navigationTitle("🧪 Argus Lab")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { viewModel.refresh() }) {
+                    Image(systemName: "arrow.clockwise")
                 }
             }
         }
