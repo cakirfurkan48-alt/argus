@@ -484,6 +484,193 @@ final class ForwardTestLedger: Sendable {
             sqlite3_finalize(stmt)
         }
     }
+    
+    // MARK: - ARGUS 3.0: Query API for UI
+    
+    /// Returns all open trades.
+    func getOpenTrades() async -> [TradeRecord] {
+        let sql = """
+        SELECT trade_id, symbol, status, entry_date, entry_price, entry_reason, 
+               exit_date, exit_price, pnl_percent, dominant_signal, decision_id
+        FROM trades WHERE status = 'OPEN' ORDER BY entry_date DESC;
+        """
+        
+        return await withCheckedContinuation { continuation in
+            queue.async {
+                self.ensureConnection()
+                var results: [TradeRecord] = []
+                var stmt: OpaquePointer?
+                
+                guard sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    if let record = self.parseTradeRow(stmt: stmt) {
+                        results.append(record)
+                    }
+                }
+                
+                sqlite3_finalize(stmt)
+                continuation.resume(returning: results)
+            }
+        }
+    }
+    
+    /// Returns closed trades with limit.
+    func getClosedTrades(limit: Int = 50) async -> [TradeRecord] {
+        let sql = """
+        SELECT trade_id, symbol, status, entry_date, entry_price, entry_reason, 
+               exit_date, exit_price, pnl_percent, dominant_signal, decision_id
+        FROM trades WHERE status = 'CLOSED' ORDER BY exit_date DESC LIMIT ?;
+        """
+        
+        return await withCheckedContinuation { continuation in
+            queue.async {
+                self.ensureConnection()
+                var results: [TradeRecord] = []
+                var stmt: OpaquePointer?
+                
+                guard sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                sqlite3_bind_int(stmt, 1, Int32(limit))
+                
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    if let record = self.parseTradeRow(stmt: stmt) {
+                        results.append(record)
+                    }
+                }
+                
+                sqlite3_finalize(stmt)
+                continuation.resume(returning: results)
+            }
+        }
+    }
+    
+    /// Returns lessons with limit.
+    func getLessons(limit: Int = 50) async -> [LessonRecord] {
+        let sql = """
+        SELECT lesson_id, trade_id, created_at, lesson_text, deviation_percent, weight_changes_json
+        FROM lessons ORDER BY created_at DESC LIMIT ?;
+        """
+        
+        return await withCheckedContinuation { continuation in
+            queue.async {
+                self.ensureConnection()
+                var results: [LessonRecord] = []
+                var stmt: OpaquePointer?
+                
+                guard sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                sqlite3_bind_int(stmt, 1, Int32(limit))
+                
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    guard let lessonIdPtr = sqlite3_column_text(stmt, 0),
+                          let tradeIdPtr = sqlite3_column_text(stmt, 1),
+                          let createdAtPtr = sqlite3_column_text(stmt, 2),
+                          let lessonTextPtr = sqlite3_column_text(stmt, 3) else { continue }
+                    
+                    let lessonId = UUID(uuidString: String(cString: lessonIdPtr)) ?? UUID()
+                    let tradeId = UUID(uuidString: String(cString: tradeIdPtr)) ?? UUID()
+                    let createdAt = Date.fromISO8601(String(cString: createdAtPtr)) ?? Date()
+                    let lessonText = String(cString: lessonTextPtr)
+                    
+                    var deviation: Double? = nil
+                    if sqlite3_column_type(stmt, 4) != SQLITE_NULL {
+                        deviation = sqlite3_column_double(stmt, 4)
+                    }
+                    
+                    var weightChanges: [String: Double]? = nil
+                    if let jsonPtr = sqlite3_column_text(stmt, 5) {
+                        let jsonStr = String(cString: jsonPtr)
+                        if let data = jsonStr.data(using: .utf8),
+                           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Double] {
+                            weightChanges = dict
+                        }
+                    }
+                    
+                    results.append(LessonRecord(
+                        id: lessonId,
+                        tradeId: tradeId,
+                        createdAt: createdAt,
+                        lessonText: lessonText,
+                        deviationPercent: deviation,
+                        weightChanges: weightChanges
+                    ))
+                }
+                
+                sqlite3_finalize(stmt)
+                continuation.resume(returning: results)
+            }
+        }
+    }
+    
+    // MARK: - Trade Row Parser
+    
+    private func parseTradeRow(stmt: OpaquePointer?) -> TradeRecord? {
+        guard let stmt = stmt,
+              let tradeIdPtr = sqlite3_column_text(stmt, 0),
+              let symbolPtr = sqlite3_column_text(stmt, 1),
+              let statusPtr = sqlite3_column_text(stmt, 2),
+              let entryDatePtr = sqlite3_column_text(stmt, 3) else { return nil }
+        
+        let tradeId = UUID(uuidString: String(cString: tradeIdPtr)) ?? UUID()
+        let symbol = String(cString: symbolPtr)
+        let status = String(cString: statusPtr)
+        let entryDate = Date.fromISO8601(String(cString: entryDatePtr)) ?? Date()
+        let entryPrice = sqlite3_column_double(stmt, 4)
+        
+        var entryReason: String? = nil
+        if let ptr = sqlite3_column_text(stmt, 5) {
+            entryReason = String(cString: ptr)
+        }
+        
+        var exitDate: Date? = nil
+        if let ptr = sqlite3_column_text(stmt, 6) {
+            exitDate = Date.fromISO8601(String(cString: ptr))
+        }
+        
+        var exitPrice: Double? = nil
+        if sqlite3_column_type(stmt, 7) != SQLITE_NULL {
+            exitPrice = sqlite3_column_double(stmt, 7)
+        }
+        
+        var pnlPercent: Double? = nil
+        if sqlite3_column_type(stmt, 8) != SQLITE_NULL {
+            pnlPercent = sqlite3_column_double(stmt, 8)
+        }
+        
+        var dominantSignal: String? = nil
+        if let ptr = sqlite3_column_text(stmt, 9) {
+            dominantSignal = String(cString: ptr)
+        }
+        
+        var decisionId: String? = nil
+        if let ptr = sqlite3_column_text(stmt, 10) {
+            decisionId = String(cString: ptr)
+        }
+        
+        return TradeRecord(
+            id: tradeId,
+            symbol: symbol,
+            status: status,
+            entryDate: entryDate,
+            entryPrice: entryPrice,
+            entryReason: entryReason,
+            exitDate: exitDate,
+            exitPrice: exitPrice,
+            pnlPercent: pnlPercent,
+            dominantSignal: dominantSignal,
+            decisionId: decisionId
+        )
+    }
 }
 
 // Session Helper
