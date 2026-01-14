@@ -9,49 +9,27 @@ actor RateLimiter {
     static let shared = RateLimiter()
     
     // MARK: - Configuration
-    private let minInterval: TimeInterval = 0.2  // 200ms = 5 req/sec max
+    // 🔧 DENGELENMIŞ AYARLAR - Network timeout'ları önlemek için
+    private let minInterval: TimeInterval = 0.1  // 100ms = 10 req/sec max
     private var lastRequestTime: Date = .distantPast
     private var requestCount: Int = 0
     private var windowStart: Date = Date()
-    private let maxRequestsPerMinute: Int = 60
+    private let maxRequestsPerMinute: Int = 300  // Çok daha yüksek limit
     
     private init() {}
     
     // MARK: - Public API
     
     /// İstek yapmadan önce bu fonksiyonu çağır.
-    /// Rate limit aşılmışsa bekler, yoksa hemen döner.
+    /// Paralel istek flood'unu önlemek için minimum bekleme uygular.
     func waitIfNeeded() async {
-        let now = Date()
-        
-        // Sliding window check
-        if now.timeIntervalSince(windowStart) >= 60 {
-            // Reset window
-            windowStart = now
-            requestCount = 0
-        }
-        
-        // Check if we've exceeded the per-minute limit
-        if requestCount >= maxRequestsPerMinute {
-            let waitTime = 60 - now.timeIntervalSince(windowStart)
-            if waitTime > 0 {
-                print("⏳ RateLimiter: Minute limit reached, waiting \(Int(waitTime))s...")
-                try? await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
-                windowStart = Date()
-                requestCount = 0
-            }
-        }
-        
-        // Check minimum interval between requests
-        let elapsed = now.timeIntervalSince(lastRequestTime)
+        // Sadece minimum interval - dakikalık limit yok
+        let elapsed = Date().timeIntervalSince(lastRequestTime)
         if elapsed < minInterval {
             let waitTime = minInterval - elapsed
             try? await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
         }
-        
-        // Update tracking
         lastRequestTime = Date()
-        requestCount += 1
     }
     
     /// Mevcut rate limit durumunu döndürür

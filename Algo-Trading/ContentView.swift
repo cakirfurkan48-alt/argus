@@ -7,6 +7,10 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var showVoiceSheet = false
     
+    // Deep Link State
+    @State private var showNotificationsSheet = false
+    @State private var notificationID: String? = nil
+    
     var body: some View {
         ZStack {
             // Global Living Background
@@ -59,6 +63,22 @@ struct ContentView: View {
                 }
                 .zIndex(1)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ArgusNotificationTapped"))) { notification in
+            if let id = notification.userInfo?["notificationId"] as? String {
+                print("🔔 Argus Deep Link: ID found \(id)")
+                self.notificationID = id
+            } else {
+                print("🔔 Argus Deep Link: No ID, opening Inbox")
+                self.notificationID = nil
+            }
+            // Delay to allow UI to settle if waking from background
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.showNotificationsSheet = true
+            }
+        }
+        .sheet(isPresented: $showNotificationsSheet) {
+            NotificationsView(viewModel: viewModel, deepLinkID: notificationID)
         }
         .sheet(isPresented: $showVoiceSheet) {
             ArgusVoiceView()

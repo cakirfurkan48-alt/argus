@@ -113,78 +113,49 @@ extension TradingViewModel {
                 // Limit Logic
                 let limit = isGeneral ? 5 : 2 // Analyze Top 2 for specific (to improve chances of hit)
                 let topArticles = Array(candidates.prefix(limit))
-                var insights: [NewsInsight] = []
                 
-                for article in topArticles {
-                    // Check if we already analyzed this article in the relevant list
-                    let targetList = isGeneral ? self.generalNewsInsights : self.watchlistNewsInsights
-                    
-                    if let existing = targetList.first(where: { $0.articleId == article.id }) {
-                        insights.append(existing)
-                        continue
+                // V2.3 FIX: GeminiNewsService yerine HermesCoordinator kullan (Batch analiz, tutarlı puanlama)
+                let summaries = await HermesCoordinator.shared.processNews(
+                    articles: topArticles,
+                    allowAI: true,
+                    isGeneral: isGeneral
+                )
+                
+                // HermesSummary -> NewsInsight dönüşümü
+                var insights: [NewsInsight] = summaries.map { summary in
+                    NewsInsight(
+                        id: UUID(),
+                        symbol: summary.symbol,
+                        articleId: summary.id,
+                        headline: summary.summaryTR,
+                        summaryTRLong: summary.impactCommentTR,
+                        impactSentenceTR: summary.impactCommentTR,
+                        sentiment: summary.impactScore > 60 ? .strongPositive : (summary.impactScore < 40 ? .strongNegative : .neutral),
+                        confidence: summary.mode == .full ? 0.85 : 0.5,
+                        impactScore: Double(summary.impactScore),
+                        relatedTickers: nil,
+                        createdAt: summary.createdAt
+                    )
+                }
+                
+                // HERMES DISCOVERY: Check for new opportunities from all insights
+                for insight in insights {
+                    if let tickers = insight.relatedTickers, !tickers.isEmpty {
+                        Task { await self.analyzeDiscoveryCandidates(tickers, source: insight) }
                     }
-                    
-                    do {
-                        // Dynamic Delay:
-                        // General Pipeline can be faster (less calls). Watchlist needs spacing.
-                        let sleepTime: UInt64 = isGeneral ? 500_000_000 : 1_500_000_000 // 0.5s vs 1.5s
-                        try? await Task.sleep(nanoseconds: sleepTime)
-                        
-                        // For General news, we might want to pass "GENERAL" as symbol to prompt, or the actual symbol if available?
-                        // Finnhub General News doesn't always have a ticker. Let's use "MARKET" if general.
-                         let analysisSymbol = isGeneral ? "MARKET" : symbol
-                        
-                        let insight = try await GeminiNewsService.shared.analyzeNews(symbol: analysisSymbol, article: article)
-                        insights.append(insight)
-                        
-                        // HERMES DISCOVERY: Check for new opportunities
-                        if let tickers = insight.relatedTickers, !tickers.isEmpty {
-                            Task { await self.analyzeDiscoveryCandidates(tickers, source: insight) }
+                }
+                
+                // Add to Relevant Feed
+                if isGeneral {
+                    for insight in insights {
+                        if !self.generalNewsInsights.contains(where: { $0.articleId == insight.articleId }) {
+                            self.generalNewsInsights.append(insight)
                         }
-                        
-                        // Add to Relevant Feed immediately
-                        if isGeneral {
-                            if !self.generalNewsInsights.contains(where: { $0.articleId == article.id }) {
-                                self.generalNewsInsights.append(insight)
-                            }
-                        } else {
-                            if !self.watchlistNewsInsights.contains(where: { $0.articleId == article.id }) {
-                                self.watchlistNewsInsights.append(insight)
-                            }
-                        }
-                    } catch {
-                        print("Gemini Analysis Failed for article: \(article.headline). Error: \(error)")
-                        
-                        // Fallback: Create Insight without AI Analysis
-                        let errorMessage = error.localizedDescription
-                        let impactMsg = "Hata: \(errorMessage)" // Full error
-                        
-                        let fallbackInsight = NewsInsight(
-                            id: UUID(),
-                            symbol: article.symbol,
-                            articleId: article.id,
-                            headline: article.headline,
-                            summaryTRLong: article.summary ?? "Detay bulunamadı.",
-                            impactSentenceTR: impactMsg,
-                            sentiment: .neutral,
-                            confidence: 0.0,
-                            impactScore: 50.0, // Default neutral
-                            relatedTickers: nil,
-                            createdAt: article.publishedAt
-                        )
-                        insights.append(fallbackInsight)
-                        
-                        // Add to Relevant Feed immediately
-                        if isGeneral {
-                            // Fix potential issue where contains check might be comparing different ID types if logic differed,
-                            // but here we check by articleId (String) which is safe.
-                            if !self.generalNewsInsights.contains(where: { $0.articleId == article.id }) {
-                                self.generalNewsInsights.append(fallbackInsight)
-                            }
-                        } else {
-                            if !self.watchlistNewsInsights.contains(where: { $0.articleId == article.id }) {
-                                self.watchlistNewsInsights.append(fallbackInsight)
-                            }
+                    }
+                } else {
+                    for insight in insights {
+                        if !self.watchlistNewsInsights.contains(where: { $0.articleId == insight.articleId }) {
+                            self.watchlistNewsInsights.append(insight)
                         }
                     }
                 }

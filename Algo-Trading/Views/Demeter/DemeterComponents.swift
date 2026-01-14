@@ -7,8 +7,9 @@ struct DemeterBadgeView: View {
     var body: some View {
         if let score = score {
             HStack(spacing: 4) {
-                Text("🌾")
+                Image(systemName: "leaf.fill")
                     .font(.caption2)
+                    .foregroundColor(.brown)
                 Text("\(Int(score.totalScore))")
                     .font(.caption2.bold())
                     .foregroundStyle(Color(score.colorName))

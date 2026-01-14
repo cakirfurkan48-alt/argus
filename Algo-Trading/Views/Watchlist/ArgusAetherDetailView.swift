@@ -638,10 +638,15 @@ struct IndicatorDetailRow: View {
                 VStack(alignment: .leading, spacing: 12) {
                     // What is it?
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("📖 Ne Anlama Geliyor?")
-                            .font(.caption)
-                            .bold()
-                            .foregroundColor(Theme.textPrimary)
+                        HStack(spacing: 4) {
+                            Image(systemName: "book.fill")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            Text("Ne Anlama Geliyor?")
+                                .font(.caption)
+                                .bold()
+                                .foregroundColor(Theme.textPrimary)
+                        }
                         Text(indicator.explanation)
                             .font(.caption)
                             .foregroundColor(Theme.textSecondary)
@@ -649,10 +654,15 @@ struct IndicatorDetailRow: View {
                     
                     // Current Interpretation
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("💡 Güncel Yorumu")
-                            .font(.caption)
-                            .bold()
-                            .foregroundColor(Theme.textPrimary)
+                        HStack(spacing: 4) {
+                            Image(systemName: "lightbulb.fill")
+                                .font(.caption)
+                                .foregroundColor(.yellow)
+                            Text("Güncel Yorumu")
+                                .font(.caption)
+                                .bold()
+                                .foregroundColor(Theme.textPrimary)
+                        }
                         Text(indicator.interpretation)
                             .font(.caption)
                             .foregroundColor(Theme.textSecondary)

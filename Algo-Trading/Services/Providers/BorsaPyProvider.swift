@@ -472,115 +472,197 @@ actor BorsaPyProvider {
     
     // MARK: - Mali Tablolar (İş Yatırım)
     
-    /// Şirketin mali tablolarını çeker (Bilanço + Gelir Tablosu)
+    /// Şirketin mali tablolarını çeker (HTML Scraping + Veri Türetme)
+    /// Not: Detaylı bilanço endpointi kapalı olduğu için veriler rasyolar üzerinden geri hesaplanır.
     func getFinancialStatements(symbol: String) async throws -> BistFinancials {
         let cleanSymbol = symbol.uppercased()
             .replacingOccurrences(of: ".IS", with: "")
             .replacingOccurrences(of: ".E", with: "")
         
-        // Temel Oranlar API
-        let ratiosURL = URL(string: "\(stockInfoURL)/GetOranlar?hession=\(cleanSymbol)")!
-        
-        var request = URLRequest(url: ratiosURL)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // 1. HTML Scraping (Rasyolar)
+        let pageURL = URL(string: "https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=\(cleanSymbol)")!
+        var request = URLRequest(url: pageURL)
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-        request.setValue("https://www.isyatirim.com.tr", forHTTPHeaderField: "Referer")
         
-        let (data, _) = try await URLSession.shared.data(for: request)
+        var pe: Double?
+        var pb: Double?
+        var Period: String = ""
         
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let values = json["value"] as? [[String: Any]],
-              let latest = values.first else {
-            throw BorsaPyError.invalidResponse
+        if let (data, response) = try? await URLSession.shared.data(for: request),
+           let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200,
+           let html = String(data: data, encoding: .utf8) {
+            
+            // Tabloyu Bul: data-csvname="finansaloranlargerceklesen"
+            let tablePattern = #"data-csvname="finansaloranlargerceklesen"[^>]*>.*?<tbody>(.*?)</tbody>"#
+            let tdPattern = #"<td>(.*?)</td>"#
+            
+            if let regex = try? NSRegularExpression(pattern: tablePattern, options: [.dotMatchesLineSeparators]),
+               let match = regex.firstMatch(in: html, range: NSRange(location: 0, length: html.utf16.count)),
+               let range = Range(match.range(at: 1), in: html) {
+                
+                let tbody = String(html[range])
+                
+                if let cellRegex = try? NSRegularExpression(pattern: tdPattern, options: [.dotMatchesLineSeparators]) {
+                    let matches = cellRegex.matches(in: tbody, range: NSRange(location: 0, length: tbody.utf16.count))
+                    let cells = matches.compactMap { m -> String? in
+                        guard let r = Range(m.range(at: 1), in: tbody) else { return nil }
+                        return String(tbody[r])
+                    }
+                    
+                    if cells.count >= 7 {
+                        func parseDouble(_ s: String) -> Double? {
+                            let cleaned = s.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".")
+                            return Double(cleaned)
+                        }
+                        
+                        pe = parseDouble(cells[2])
+                        pb = parseDouble(cells[5])
+                        Period = cells[6]
+                    }
+                }
+            }
         }
         
-        // Mali Verileri Çek
-        let financials = BistFinancials(
+        // 2. Veri Zenginleştirme (Reverse Calculation)
+        // Sermaye ve Fiyat -> Market Cap -> Net Kar & Özkaynak
+        
+        var calculatedMarketCap: Double?
+        var derivedNetProfit: Double?
+        var derivedEquity: Double?
+        
+        // Sermaye Verisi
+        let capitalData = try? await fetchSermayeData(symbol: cleanSymbol)
+        // En güncel sermayeyi bul (Tarihe göre sırala veya sonuncuyu al)
+        let latestCapital = capitalData?.compactMap { $0["HSP_BOLUNME_SONRASI_SERMAYE"] as? Double }.first
+        
+        // Anlık Fiyat
+        let quote = try? await getBistQuote(symbol: cleanSymbol)
+        
+        if let cap = latestCapital, let price = quote?.last, price > 0 {
+            let mCap = cap * price
+            calculatedMarketCap = mCap
+            
+            // Net Kar = Market Cap / FK
+            if let p = pe, p > 0 {
+                derivedNetProfit = mCap / p
+            }
+            
+            // Özkaynak = Market Cap / PD/DD
+            if let b = pb, b > 0 {
+                derivedEquity = mCap / b
+            }
+            
+            print("✅ BorsaPy Zenginleştirme: \(cleanSymbol) -> MCup: \(mCap.formatted()), NetKar: \(derivedNetProfit?.formatted() ?? "-"), Özkaynak: \(derivedEquity?.formatted() ?? "-")")
+        }
+        
+        return BistFinancials(
             symbol: cleanSymbol,
-            period: latest["DONEM"] as? String ?? "",
-            // Karlılık
-            netProfit: latest["NET_KAR"] as? Double,
-            ebitda: latest["FAVOK"] as? Double,
-            revenue: latest["NET_SATIS"] as? Double,
-            grossProfit: latest["BRUT_KAR"] as? Double,
-            operatingProfit: latest["FAALIYET_KARI"] as? Double,
-            // Bilanço
-            totalAssets: latest["TOPLAM_VARLIK"] as? Double,
-            totalEquity: latest["OZKAYNAKLAR"] as? Double,
-            totalDebt: latest["TOPLAM_BORC"] as? Double,
-            shortTermDebt: latest["KISA_VADELI_BORC"] as? Double,
-            longTermDebt: latest["UZUN_VADELI_BORC"] as? Double,
-            currentAssets: latest["DONEN_VARLIK"] as? Double,
-            cash: latest["NAKIT"] as? Double,
-            // Oranlar (API'den direkt gelen)
-            roe: latest["OZKAYNAK_KARLILIGI"] as? Double,
-            roa: latest["AKTIF_KARLILIGI"] as? Double,
-            currentRatio: latest["CARI_ORAN"] as? Double,
-            debtToEquity: latest["BORC_OZKAYNAK"] as? Double,
-            netMargin: latest["NET_KAR_MARJI"] as? Double,
+            period: Period.isEmpty ? "N/A" : Period,
+            // Türetilmiş Veriler
+            netProfit: derivedNetProfit,
+            ebitda: nil, // Türetilemedi
+            revenue: nil, // Türetilemedi
+            grossProfit: nil,
+            operatingProfit: nil,
+            totalAssets: nil,
+            totalEquity: derivedEquity,
+            totalDebt: nil,
+            shortTermDebt: nil,
+            longTermDebt: nil,
+            currentAssets: nil,
+            cash: nil,
+            // Oranlar
+            roe: nil,
+            roa: nil,
+            currentRatio: nil,
+            debtToEquity: nil,
+            netMargin: nil,
             // Değerleme
-            pe: latest["FK"] as? Double,
-            pb: latest["PDDD"] as? Double,
-            marketCap: latest["PIYASA_DEGERI"] as? Double,
-            // Meta
+            pe: pe,
+            pb: pb,
+            marketCap: calculatedMarketCap,
             timestamp: Date()
         )
-        
-        return financials
     }
     
-    /// Analist önerilerini çeker
+    /// Analist önerilerini çeker (HTML Scraping - Fallback Yöntemi)
     func getAnalystRecommendations(symbol: String) async throws -> BistAnalystConsensus {
         let cleanSymbol = symbol.uppercased()
             .replacingOccurrences(of: ".IS", with: "")
             .replacingOccurrences(of: ".E", with: "")
         
-        let url = URL(string: "\(stockInfoURL)/GetAnalistOnerileri?hession=\(cleanSymbol)")!
+        // Şirket Kartı Sayfası
+        let pageURL = URL(string: "https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=\(cleanSymbol)")!
         
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        var request = URLRequest(url: pageURL)
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
         
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let values = json["value"] as? [[String: Any]] else {
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw BorsaPyError.requestFailed
+        }
+        
+        guard let html = String(data: data, encoding: .utf8) else {
             throw BorsaPyError.invalidResponse
         }
         
+        // Regex Patterns
+        // 1. Öneri: <span class="al" title="" id="Oneri_Aciklama">AL</span>
+        // Not: Class "al", "sat", "tut" olabilir, id sabit.
+        let recommendationPattern = #"id="Oneri_Aciklama">([^<]+)</span>"#
+        
+        // 2. Hedef Fiyat: <li>Hedef Fiyat <span>580,00</span></li>
+        let targetPattern = #"<li>Hedef Fiyat <span>([\d,]+)</span></li>"#
+        
+        // Helper function for regex
+        func extract(pattern: String, from text: String) -> String? {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+            let nsString = text as NSString
+            let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+            if let match = results.first {
+                return nsString.substring(with: match.range(at: 1))
+            }
+            return nil
+        }
+        
+        let rawRec = extract(pattern: recommendationPattern, from: html)?.uppercased() ?? "NÖTR"
+        let rawTarget = extract(pattern: targetPattern, from: html)
+        
+        // Parse Values
         var buyCount = 0
         var holdCount = 0
         var sellCount = 0
-        var targetPrices: [Double] = []
         
-        for item in values {
-            let recommendation = (item["ONERI"] as? String)?.uppercased() ?? ""
-            if recommendation.contains("AL") || recommendation.contains("BUY") {
-                buyCount += 1
-            } else if recommendation.contains("SAT") || recommendation.contains("SELL") {
-                sellCount += 1
-            } else {
-                holdCount += 1
-            }
-            
-            if let target = item["HEDEF_FIYAT"] as? Double, target > 0 {
-                targetPrices.append(target)
-            }
+        if rawRec.contains("AL") || rawRec.contains("BUY") {
+            buyCount = 1
+        } else if rawRec.contains("SAT") || rawRec.contains("SELL") {
+            sellCount = 1
+        } else {
+            holdCount = 1
         }
         
-        let avgTarget = targetPrices.isEmpty ? nil : targetPrices.reduce(0, +) / Double(targetPrices.count)
-        let highTarget = targetPrices.max()
-        let lowTarget = targetPrices.min()
+        // Turkish locale number parsing (coma -> dot)
+        let targetPrice: Double? = {
+            guard let val = rawTarget else { return nil }
+            let cleaned = val.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".") // 1.000,50 -> 1000.50
+            return Double(cleaned)
+        }()
+        
+        // Tek kaynak olduğu için total=1. İleride başka kaynaklar eklenirse burası artar.
+        print("✅ BorsaPy Scraping: \(cleanSymbol) -> \(rawRec) / Hedef: \(targetPrice ?? 0)")
         
         return BistAnalystConsensus(
             symbol: cleanSymbol,
             buyCount: buyCount,
             holdCount: holdCount,
             sellCount: sellCount,
-            totalAnalysts: buyCount + holdCount + sellCount,
-            averageTargetPrice: avgTarget,
-            highTargetPrice: highTarget,
-            lowTargetPrice: lowTarget,
+            totalAnalysts: (buyCount + holdCount + sellCount > 0) ? 1 : 0, // Eğer veri yoksa 0 olur
+            averageTargetPrice: targetPrice,
+            highTargetPrice: targetPrice,
+            lowTargetPrice: targetPrice,
             timestamp: Date()
         )
     }

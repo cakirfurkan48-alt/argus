@@ -41,8 +41,9 @@ struct CouncilDebateCard: View {
             // Proposal summary (always visible)
             if let proposal = winningProposal {
                 HStack(spacing: 8) {
-                    Text("📢")
-                        .font(.system(size: 12))
+                Image(systemName: "megaphone.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(accentColor)
                     
                     Text(proposal.name)
                         .font(.system(size: 11, weight: .medium))
@@ -69,10 +70,15 @@ struct CouncilDebateCard: View {
                 Divider().background(Theme.border)
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("🗳️ OYLAR")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(Theme.textSecondary)
-                        .tracking(1)
+                    HStack(spacing: 4) {
+                        Image(systemName: "envelope.badge.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(Theme.textSecondary)
+                        Text("OYLAR")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(Theme.textSecondary)
+                            .tracking(1)
+                    }
                     
                     ForEach(Array(votes.enumerated()), id: \.offset) { _, vote in
                         DebateVoteRow(

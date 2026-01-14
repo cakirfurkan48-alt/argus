@@ -4,6 +4,7 @@ struct NotificationsView: View {
     @ObservedObject var store = NotificationStore.shared
     @State private var selectedNotification: ArgusNotification?
     @ObservedObject var viewModel: TradingViewModel // Needed for execution
+    var deepLinkID: String? = nil // Deep Link Parameter
     
     var body: some View {
         NavigationView {
@@ -34,6 +35,17 @@ struct NotificationsView: View {
                             }
                         }
                         .padding()
+                    }
+                }
+            }
+            .onAppear {
+                if let idString = deepLinkID, let id = UUID(uuidString: idString) {
+                    if let note = store.notifications.first(where: { $0.id == id }) {
+                        // Delay slightly to ensure view is ready
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            selectedNotification = note
+                            store.markAsRead(note)
+                        }
                     }
                 }
             }
@@ -114,6 +126,8 @@ struct NotificationRow: View {
         case .tradeExecuted: return "checkmark.circle.fill"
         case .positionClosed: return "xmark.circle.fill"
         case .alert: return "bell.fill"
+        case .dailyReport: return "doc.text.fill"
+        case .weeklyReport: return "calendar.badge.checkmark"
         }
     }
 }

@@ -7,7 +7,7 @@ enum ArgusMode {
     case atlas
     case aether
     case orion
-    case chronos
+    case demeter
     case hermes
     case athena
     case poseidon
@@ -22,7 +22,7 @@ enum ArgusMode {
         case .atlas: return Color.blue // Deep Blue
         case .aether: return Color.cyan // Sky Blue
         case .orion: return Color.purple // Mystery
-        case .chronos: return Color.orange // Time
+        case .demeter: return Color.green // Sector/Growth
         case .hermes: return Color.pink // Speed
         case .athena: return Color.teal // Wisdom
         case .poseidon: return Color.indigo // Depth

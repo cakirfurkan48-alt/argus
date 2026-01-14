@@ -100,8 +100,7 @@ final class ChironOptimizationService: Sendable {
             demeter: currentCore.demeter,
             phoenix: clamp((currentCore.phoenix ?? 1.0) + phoenixDelta, min: input.globalSettings.safeguards.minModuleWeightCore, max: 2.0),
             hermes: currentCore.hermes,
-            athena: currentCore.athena,
-            cronos: currentCore.cronos
+            athena: currentCore.athena
         ).normalized
         
         let newPulse = ModuleWeights(
@@ -111,8 +110,7 @@ final class ChironOptimizationService: Sendable {
             demeter: currentPulse.demeter,
             phoenix: clamp((currentPulse.phoenix ?? 1.0) + phoenixDelta, min: input.globalSettings.safeguards.minModuleWeightPulse, max: 2.0),
             hermes: currentPulse.hermes,
-            athena: currentPulse.athena,
-            cronos: currentPulse.cronos
+            athena: currentPulse.athena
         ).normalized
         
         // Summary note

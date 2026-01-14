@@ -12,6 +12,10 @@ struct PhoenixDetailView: View {
     @State private var selectedDate: Date?
     @State private var selectedPrice: Double?
     
+    // Institution Rates State
+    @State private var institutionRates: [InstitutionRate] = []
+    @State private var showInstitutionRates = false
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -75,6 +79,9 @@ struct PhoenixDetailView: View {
                     .foregroundColor(Theme.tint)
                 }
             }
+            .task {
+                await loadInstitutionRates()
+            }
         }
     }
     
@@ -123,7 +130,7 @@ struct PhoenixDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "doc.text.magnifyingglass")
-                    .foregroundColor(.orange)
+                .foregroundColor(.orange)
                 Text("ANALİZ DETAYI")
                     .font(.headline)
                     .bold()
@@ -201,6 +208,36 @@ struct PhoenixDetailView: View {
         default: return .red
         }
     }
+    
+    // MARK: - Data Loading
+    
+    private func loadInstitutionRates() async {
+        // Map symbol to Doviz.com slug
+        let slug: String?
+        if symbol.contains("ALTIN") || symbol == "GRAM" || symbol == "GLD" {
+            slug = "gram-altin"
+        } else if symbol.contains("GUMUS") {
+            slug = "gram-gumus"
+        } else if symbol == "USD" || symbol == "USDTRY" {
+            slug = "USD"
+        } else {
+            slug = nil
+        }
+        
+        if let asset = slug {
+            do {
+                if ["gram-altin", "gram-gumus", "ons-altin"].contains(asset) {
+                    let rates = try await DovizComService.shared.fetchMetalInstitutionRates(asset: asset)
+                    await MainActor.run {
+                        self.institutionRates = rates
+                        self.showInstitutionRates = true
+                    }
+                }
+            } catch {
+                print("Failed to load rates: \(error)")
+            }
+        }
+    }
 }
 
 // MARK: - Phoenix Chart Component
@@ -233,34 +270,18 @@ struct PhoenixChannelChart: View {
             }
             
             // 2. Channel Lines
-            // We need to match dates to the regression line.
-            // Regression defines line at index relative to the LAST candle in calculation.
-            // Let's iterate the 'sorted' candles that fall within the 'lookback' window.
-            // Those are the last `advice.lookback` candles of the set passed to calculation.
-            // Assuming `candles` passed in includes the recent data.
-            
             if !sorted.isEmpty {
                  // We calculate back in time
                 
                 ForEach(Array(sorted.enumerated()), id: \.offset) { index, candle in
                     // Index relative to end
                     // i=0 is oldest. i=count-1 is newest.
-                    // Phoenix logic used: 0..N-1 where N-1 is latest.
-                    // We need to map candle date to regression 'x'.
-                    // If this candle is within the last 'lookback' candles
                     
                     if index >= (sorted.count - advice.lookback) {
                         // Calculate relative position 0..N-1
-                        // Let's say sorted.count = 200, lookback = 100.
-                        // index 100 -> x=0. index 199 -> x=99.
-                        
                         let relativeX = Double(index - (sorted.count - advice.lookback))
                         
-                        // Line calculation: y = mid(at end) - slope * (end - this)
-                        // Actually slope equation: y = intercept + slope * x
-                        // We have `channelMid` which is the value at x = N-1.
-                        // So: Value(x) = Value(N-1) - slope * ( (N-1) - x )
-                        
+                        // Line calculation
                         let distFromEnd = Double(advice.lookback - 1) - relativeX
                         let midY = (advice.channelMid ?? 0.0) - ((advice.regressionSlope ?? 0.0) * distFromEnd)
                         let upperY = midY + (2.0 * (advice.sigma ?? 0.0))
@@ -275,10 +296,6 @@ struct PhoenixChannelChart: View {
                         
                         LineMark(x: .value("Tarih", candle.date), y: .value("Lower", lowerY))
                             .foregroundStyle(.blue.opacity(0.5))
-                        
-                        // Fill Area (Optional, might be heavy)
-                        // AreaMark cannot easily act between two dynamic lines in Charts yet unless stacked?
-                        // Skipping fill for clarity vs performance.
                     }
                 }
             }

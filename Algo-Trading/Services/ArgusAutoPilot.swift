@@ -44,7 +44,6 @@ final class ArgusAutoPilot {
             orionDetails: nil,
             aether: aether,
             hermes: nil,
-            cronos: nil,
             athena: nil,
             phoenixAdvice: nil,
             demeterScore: nil, 

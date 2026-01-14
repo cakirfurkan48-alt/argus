@@ -28,76 +28,74 @@ actor YahooAuthenticationService {
         return try await refresh()
     }
     
-    private func refresh() async throws -> (String, String) {
-        print("🔐 YahooAuth: Refreshing Crumb & Cookie...")
-        
-        // Step A: Get Cookie from main page or FC
-        let fcURL = URL(string: "https://fc.yahoo.com")!
-        var req = URLRequest(url: fcURL)
-        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", forHTTPHeaderField: "User-Agent")
-        
-        let (_, response) = try await session.data(for: req)
-        
-        guard (response as? HTTPURLResponse) != nil else {
-             throw URLError(.badServerResponse)
-        }
-        
-        // Extract Cookie from Session Storage (more reliable than manual header parsing due to redirects)
-        guard let cookies = session.configuration.httpCookieStorage?.cookies(for: fcURL), !cookies.isEmpty else {
-            // Fallback: Try manual header (sometimes needed if storage fails)
-            // But usually session handles it.
-            // If FC fails, we might try "https://finance.yahoo.com"
-            print("⚠️ YahooAuth: No cookies from FC. Retrying with homepage.")
-             try await Task.sleep(nanoseconds: 500_000_000)
-            return try await refreshFromHomepage()
-        }
-        
-        // Step B: Get Crumb
-        // Now that we have cookies in the session, call getcrumb
-        let crumbURL = URL(string: "https://query1.finance.yahoo.com/v1/test/getcrumb")!
-        var crumbReq = URLRequest(url: crumbURL)
-        crumbReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", forHTTPHeaderField: "User-Agent")
-        
-        let (data, crumbResp) = try await session.data(for: crumbReq)
-        
-        guard let cResp = crumbResp as? HTTPURLResponse, cResp.statusCode == 200 else {
-            print("⚠️ YahooAuth: Crumb failed (HTTP \((crumbResp as? HTTPURLResponse)?.statusCode ?? 0))")
-             throw URLError(.userAuthenticationRequired)
-        }
-        
-        guard let crumbString = String(data: data, encoding: .utf8), !crumbString.isEmpty else {
-             throw URLError(.cannotParseResponse)
-        }
-        
-        self.crumb = crumbString
-        // Extract generic cookie string for headers ("A=...; B=...")
-        self.cookie = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
-        self.lastAuthTime = Date()
-        
-        print("✅ YahooAuth: Acquired Crumb [\(crumbString)]")
-        return (crumbString, self.cookie!)
+    /// Invalidate cached crumb (call this on 401 errors)
+    func invalidate() {
+        print("🔐 YahooAuth: Invalidating Crumb Cache")
+        self.crumb = nil
+        self.cookie = nil
+        self.lastAuthTime = nil
     }
     
-    private func refreshFromHomepage() async throws -> (String, String) {
-         let url = URL(string: "https://finance.yahoo.com")!
-         let req = URLRequest(url: url)
-         let (_, _) = try await session.data(for: req)
-         
-         // Now try getcrumb
-         let crumbURL = URL(string: "https://query1.finance.yahoo.com/v1/test/getcrumb")!
-         var crumbReq = URLRequest(url: crumbURL)
-         crumbReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", forHTTPHeaderField: "User-Agent")
-         
-         let (data, _) = try await session.data(for: crumbReq)
-         guard let s = String(data: data, encoding: .utf8), !s.isEmpty else {
-             throw URLError(.userAuthenticationRequired)
-         }
-         
-         self.crumb = s
-         if let cookies = session.configuration.httpCookieStorage?.cookies(for: url) {
-             self.cookie = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
-         }
-         self.lastAuthTime = Date()
-         return (s, self.cookie ?? "")
+    private func refresh() async throws -> (String, String) {
+        print("🔐 YahooAuth: Refreshing Crumb & Cookie (Robust Mode)...")
+        
+        // 1. Get Cookies via Quote Page (Most reliable source for session initiation)
+        // We use a major ticker like AAPL to ensure the finance session is initialized.
+        let cookieURL = URL(string: "https://finance.yahoo.com/quote/AAPL")!
+        var cookieReq = URLRequest(url: cookieURL)
+        cookieReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
+        
+        let (_, response) = try await session.data(for: cookieReq)
+        
+        guard (response as? HTTPURLResponse) != nil else {
+            throw URLError(.badServerResponse)
+        }
+        
+        // 2. Refresh Cookies variable from Session Storage
+        if let cookies = session.configuration.httpCookieStorage?.cookies(for: cookieURL) {
+            self.cookie = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+        }
+        
+        // 3. Get Crumb (Try query2 first, then query1)
+        let crumbSources = [
+            "https://query2.finance.yahoo.com/v1/test/getcrumb",
+            "https://query1.finance.yahoo.com/v1/test/getcrumb"
+        ]
+        
+        var acquiredCrumb: String? = nil
+        
+        for source in crumbSources {
+            if let c = try? await fetchCrumb(from: source) {
+                acquiredCrumb = c
+                break
+            }
+        }
+        
+        guard let finalCrumb = acquiredCrumb else {
+            print("⚠️ YahooAuth: Failed to get crumb from all sources.")
+            throw URLError(.userAuthenticationRequired)
+        }
+        
+        self.crumb = finalCrumb
+        self.lastAuthTime = Date()
+        
+        print("✅ YahooAuth: Acquired Crumb [\(finalCrumb)]")
+        return (finalCrumb, self.cookie ?? "")
+    }
+    
+    // Helper to fetch crumb with correct headers
+    private func fetchCrumb(from urlString: String) async throws -> String {
+        guard let url = URL(string: urlString) else { return "" }
+        var req = URLRequest(url: url)
+        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
+        req.setValue("https://finance.yahoo.com/quote/AAPL", forHTTPHeaderField: "Referer")
+        
+        let (data, response) = try await session.data(for: req)
+        
+        guard let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200,
+              let text = String(data: data, encoding: .utf8), !text.isEmpty else {
+            throw URLError(.badServerResponse)
+        }
+        return text
     }
 }

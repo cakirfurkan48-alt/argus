@@ -90,7 +90,14 @@ private struct SanctumContentLogic: View {
         Group {
             switch module {
             case .atlas:
-                AtlasContent(viewModel: viewModel, symbol: symbol)
+                // 🆕 BIST vs Global kontrolü (.IS suffix veya bilinen BIST sembolü)
+                if symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol) {
+                    // BIST sembolü için .IS suffix ekle (gerekirse)
+                    let bistSymbol = symbol.uppercased().hasSuffix(".IS") ? symbol : "\(symbol.uppercased()).IS"
+                    BISTBilancoDetailView(sembol: bistSymbol)
+                } else {
+                    AtlasV2DetailView(symbol: symbol)
+                }
             case .orion:
                 OrionContent(viewModel: viewModel, symbol: symbol)
             default:

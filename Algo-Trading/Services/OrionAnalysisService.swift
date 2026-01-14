@@ -69,16 +69,30 @@ final class OrionAnalysisService: @unchecked Sendable {
         guard candles.count > 50 else { return nil }
         let sorted = candles.sorted { $0.date < $1.date }
         
-        // === DYNAMIC WEIGHTS FROM TUNING STORE ===
-        // Get tuned config for this symbol (or global default)
-        let config = OrionV2TuningStore.shared.getConfig(symbol: symbol)
+        // === DYNAMIC WEIGHTS: Chiron Öğrenme > Deep Tune > Default ===
+        let structureMax: Double
+        let trendMax: Double
+        let momentumMax: Double
+        let patternMax: Double
+        let volatilityMax: Double
         
-        // Convert weights to max scores (out of 100)
-        let structureMax = config.structureWeight * 100.0
-        let trendMax = config.trendWeight * 100.0
-        let momentumMax = config.momentumWeight * 100.0
-        let patternMax = config.patternWeight * 100.0
-        let volatilityMax = config.volatilityWeight * 100.0
+        // 1. Önce Chiron'un öğrendiği ağırlıklara bak
+        if let learnedWeights = ChironRegimeEngine.shared.getLearnedOrionWeights(symbol: symbol) {
+            structureMax = learnedWeights.structure * 100.0
+            trendMax = learnedWeights.trend * 100.0
+            momentumMax = learnedWeights.momentum * 100.0
+            patternMax = learnedWeights.pattern * 100.0
+            volatilityMax = learnedWeights.volatility * 100.0
+            print("🧠 Orion[\(symbol)]: Chiron öğrenilmiş ağırlıklar aktif")
+        } else {
+            // 2. Fallback: OrionV2TuningStore (Deep Tune sonuçları)
+            let config = OrionV2TuningStore.shared.getConfig(symbol: symbol)
+            structureMax = config.structureWeight * 100.0
+            trendMax = config.trendWeight * 100.0
+            momentumMax = config.momentumWeight * 100.0
+            patternMax = config.patternWeight * 100.0
+            volatilityMax = config.volatilityWeight * 100.0
+        }
         
         // --- 1. STRUCTURE ---
         let structRes = OrionStructureService.shared.analyzeStructure(candles: sorted)

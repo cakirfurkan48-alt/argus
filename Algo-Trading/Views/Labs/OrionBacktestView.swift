@@ -94,9 +94,24 @@ struct OrionBacktestView: View {
                 .foregroundColor(.secondary)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("📈 Alım: Skor ≥ 70 (kademeli pozisyon)")
-                Text("📉 Satım: Skor < 50 (tam çıkış) veya < 62 (yarım)")
-                Text("🛑 Stop-Loss: %5")
+                HStack(spacing: 4) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.caption2)
+                        .foregroundColor(.green)
+                    Text("Alım: Skor ≥ 70 (kademeli pozisyon)")
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "chart.line.downtrend.xyaxis")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                    Text("Satım: Skor < 50 (tam çıkış) veya < 62 (yarım)")
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.octagon.fill")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                    Text("Stop-Loss: %5")
+                }
             }
             .font(.caption2)
             .foregroundColor(.orange)
@@ -471,10 +486,15 @@ struct OrionBacktestView: View {
             Divider()
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("🎯 Orion V2 Bileşen Ağırlıkları")
-                    .font(.caption)
-                    .bold()
-                    .foregroundColor(.purple)
+                HStack(spacing: 4) {
+                    Image(systemName: "target")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                    Text("Orion V2 Bileşen Ağırlıkları")
+                        .font(.caption)
+                        .bold()
+                        .foregroundColor(.purple)
+                }
                 
                 let orionWeights = OrionV2WeightStore.shared.getWeights(symbol: symbol)
                 

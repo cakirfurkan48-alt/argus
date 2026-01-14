@@ -43,5 +43,5 @@ struct ArgusScores: Codable {
     let aether: Double?
     let hermes: Double?
     let athena: Double?
-    let cronos: Double
+    let demeter: Double?
 }

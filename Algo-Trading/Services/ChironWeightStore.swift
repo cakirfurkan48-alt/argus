@@ -2,49 +2,54 @@ import Foundation
 
 // MARK: - Chiron Module Weights (Engine-Aware)
 /// Weights for Corse/Pulse specific evaluation with metadata
+/// 7 Modül: Orion, Atlas, Phoenix, Aether, Hermes, Demeter, Athena
 struct ChironModuleWeights: Codable, Sendable {
-    var orion: Double
-    var atlas: Double
-    var phoenix: Double
-    var aether: Double
-    var hermes: Double
-    var cronos: Double
+    var orion: Double    // Teknik analiz
+    var atlas: Double    // Temel analiz
+    var phoenix: Double  // Pattern/Senaryo
+    var aether: Double   // Makro ekonomi
+    var hermes: Double   // Haber/Sentiment
+    var demeter: Double  // Sektör rotasyonu
+    var athena: Double   // Smart Beta/Factor
     
     let updatedAt: Date
     let confidence: Double
     let reasoning: String
     
-    // Default balanced weights
+    // Default balanced weights - CORSE (Uzun Vade, Fundamental Ağırlıklı)
     static var defaultCorse: ChironModuleWeights {
         ChironModuleWeights(
-            orion: 0.20,
-            atlas: 0.35,  // Corse = Uzun vade = Fundamentals ağırlıklı
-            phoenix: 0.20,
-            aether: 0.15,
+            orion: 0.15,   // Teknik daha az önemli
+            atlas: 0.30,   // Fundamental öncelikli
+            phoenix: 0.10,
+            aether: 0.15,  // Makro önemli
             hermes: 0.05,
-            cronos: 0.05,
+            demeter: 0.15, // Sektör rotasyonu
+            athena: 0.10,  // Factor investing
             updatedAt: Date(),
             confidence: 0.5,
-            reasoning: "Varsayılan Corse ağırlıkları (uzun vade, fundamental odaklı)"
+            reasoning: "📊 Uzun vadeli yatırım stratejisi. Atlas (fundamental), Demeter (sektör) ve Aether (makro) öncelikli."
         )
     }
     
+    // Default balanced weights - PULSE (Kısa Vade, Momentum Ağırlıklı)
     static var defaultPulse: ChironModuleWeights {
         ChironModuleWeights(
-            orion: 0.35,  // Pulse = Kısa vade = Teknik ağırlıklı
-            atlas: 0.10,
-            phoenix: 0.30,
+            orion: 0.30,   // Teknik öncelikli
+            atlas: 0.05,   // Fundamental daha az
+            phoenix: 0.25, // Pattern önemli
             aether: 0.10,
-            hermes: 0.10,
-            cronos: 0.05,
+            hermes: 0.15,  // Haber önemli
+            demeter: 0.10,
+            athena: 0.05,
             updatedAt: Date(),
             confidence: 0.5,
-            reasoning: "Varsayılan Pulse ağırlıkları (kısa vade, momentum odaklı)"
+            reasoning: "⚡ Kısa vadeli momentum stratejisi. Orion (teknik), Phoenix (pattern) ve Hermes (haber) öncelikli."
         )
     }
     
     var totalWeight: Double {
-        orion + atlas + phoenix + aether + hermes + cronos
+        orion + atlas + phoenix + aether + hermes + demeter + athena
     }
     
     func normalized() -> ChironModuleWeights {
@@ -56,7 +61,8 @@ struct ChironModuleWeights: Codable, Sendable {
             phoenix: phoenix / total,
             aether: aether / total,
             hermes: hermes / total,
-            cronos: cronos / total,
+            demeter: demeter / total,
+            athena: athena / total,
             updatedAt: updatedAt,
             confidence: confidence,
             reasoning: reasoning

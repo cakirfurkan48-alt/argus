@@ -57,16 +57,18 @@ actor PhoenixScenarioEngine {
         switch timeframe {
         case .h4:
             // Fetch 1h candles and resample (4:1)
-            let rawCandles = try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: "60m", limit: fetchLimit * 4)
+            let (rawCandles, _) = try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: "60m", limit: fetchLimit * 4)
             return resample(candles: rawCandles, groupSize: 4)
             
         case .auto:
             // Default to 1h for Auto (logic handles resolution upstream usually, or here)
             // Ideally explicit timeframe is passed. If Auto arrives here, assume 1h.
-            return try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: "60m", limit: fetchLimit)
+            let (candles, _) = try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: "60m", limit: fetchLimit)
+            return candles
             
         default:
-            return try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: timeframe.yahooInterval, limit: fetchLimit)
+            let (candles, _) = try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: timeframe.yahooInterval, limit: fetchLimit)
+            return candles
         }
     }
     

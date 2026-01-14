@@ -123,25 +123,14 @@ struct StockDetailContent: View {
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
-        ZStack {
-            Theme.background.edgesIgnoringSafeArea(.all)
-            
-            VStack(spacing: 0) {
-                // 1. Navigation Header (Simple Back Arrow)
-                simpleHeader
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-                    .padding(.bottom, 8)
-                
-                // Sanctum View (Primary and only view)
-                ArgusSanctumView(symbol: symbol, viewModel: viewModel)
-                    .sheet(isPresented: $showDebateSheet) {
-                        if let decision = viewModel.grandDecisions[symbol] {
-                            AgoraDebateSheet(decision: decision)
-                        }
+            // Sanctum View (Primary and only view)
+            ArgusSanctumView(symbol: symbol, viewModel: viewModel)
+                .sheet(isPresented: $showDebateSheet) {
+                    if let decision = viewModel.grandDecisions[symbol] {
+                        AgoraDebateSheet(decision: decision)
                     }
-            }
-        }
+                }
+        .background(Theme.background.ignoresSafeArea())
         .navigationBarHidden(true)
         .task {
             await viewModel.loadArgusData(for: symbol)
@@ -149,14 +138,15 @@ struct StockDetailContent: View {
         }
         // MARK: - Sheets
         .sheet(isPresented: $showAtlasSheet) {
-            ArgusAtlasSheet(score: viewModel.getFundamentalScore(for: symbol))
+            ArgusAtlasSheet(score: viewModel.getFundamentalScore(for: symbol), symbol: symbol)
                 .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showOrionSheet) {
             ArgusOrionSheet(
                 symbol: symbol,
                 orion: viewModel.orionScores[symbol],
-                candles: viewModel.candles[symbol]
+                candles: viewModel.candles[symbol],
+                patterns: viewModel.patterns[symbol]
             )
         }
         .sheet(isPresented: $showAetherSheet) {
@@ -209,76 +199,6 @@ struct StockDetailContent: View {
         }
     }
     
-    var simpleHeader: some View {
-        HStack {
-            Button(action: { presentationMode.wrappedValue.dismiss() }) {
-                Image(systemName: "arrow.left")
-                    .font(.title2)
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(Circle().fill(Theme.secondaryBackground))
-            }
-            
-            CompanyLogoView(symbol: symbol, size: 36)
-                .padding(.leading, 8)
-            
-            Spacer()
-            
-            // Asset Type Selector (Manual Override)
-            Menu {
-                Text("Varlık Türünü Seçin")
-                
-                ForEach(SafeAssetType.allCases, id: \.self) { type in
-                    Button(action: {
-                        Task {
-                            await viewModel.updateAssetType(for: symbol, to: type)
-                        }
-                    }) {
-                        Label(type.rawValue, systemImage: type.icon)
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    // Check actual detected/used type from decision if available, else standard detection
-                    if viewModel.argusDecisions[symbol] != nil {
-                        // We don't have assetType in Decision Result public struct, 
-                        // but we can infer or simpler: access User Override map or just default icon
-                        // Let's rely on SafeUniverseService check synchronously for UI state
-                        let currentType = SafeUniverseService.shared.getUserOverride(for: symbol) 
-                                          ?? SafeUniverseService.shared.getUniverseType(for: symbol) 
-                                          ?? .stock // Visual Fallback
-                        
-                        Image(systemName: currentType.icon)
-                            .font(.subheadline)
-                        Text(currentType.rawValue)
-                            .font(.caption)
-                            .bold()
-                    } else {
-                        // Loading State or Initial
-                        Image(systemName: "questionmark.circle")
-                        Text("Tanımla")
-                            .font(.caption)
-                    }
-                    
-                    Image(systemName: "chevron.down")
-                        .font(.caption2)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Theme.secondaryBackground)
-                .foregroundColor(Theme.tint)
-                .foregroundColor(Theme.tint)
-                .cornerRadius(16)
-            }
-            
-            // Data Health Indicator
-            if let health = viewModel.dataHealthBySymbol[symbol] {
-                DataHealthCapsule(health: health)
-                    .padding(.leading, 8)
-            }
-        }
-    }
-    
     // MARK: - Radar Chart Helpers
     
     private func buildRadarScores() -> RadarScores {
@@ -290,8 +210,7 @@ struct StockDetailContent: View {
         let athena = viewModel.athenaResults[symbol]?.factorScore ?? 50
         let phoenix = decision?.phoenixAdvice?.confidence ?? 50
         let hermes = viewModel.newsInsightsBySymbol[symbol]?.first?.impactScore ?? 50
-        let demeter: Double = 50 // Demeter skoru ayrı tutulmuyor, varsayılan
-        let cronos = decision?.cronosScore ?? 50
+        let demeter: Double = viewModel.demeterScores.first?.totalScore ?? 50
         
         return RadarScores(
             orion: orion,
@@ -300,8 +219,7 @@ struct StockDetailContent: View {
             athena: athena,
             phoenix: phoenix,
             hermes: hermes,
-            demeter: demeter,
-            cronos: cronos
+            demeter: demeter
         )
     }
     
@@ -318,11 +236,10 @@ struct StockDetailContent: View {
             atlasScore: viewModel.getFundamentalScore(for: symbol)?.totalScore,
             orionScore: viewModel.orionScores[symbol]?.score,
             aetherScore: viewModel.macroRating?.numericScore,
-            demeterScore: nil, // Demeter şu an ayrı takip edilmiyor
+            demeterScore: viewModel.demeterScores.first?.totalScore,
             phoenixScore: decision?.phoenixAdvice?.confidence,
             hermesScore: viewModel.newsInsightsBySymbol[symbol]?.first?.impactScore,
             athenaScore: viewModel.athenaResults[symbol]?.factorScore,
-            cronosScore: decision?.cronosScore,
             symbol: symbol,
             orionTrendStrength: nil,
             chopIndex: nil,
@@ -340,7 +257,6 @@ struct StockDetailContent: View {
         case .phoenix: showPhoenixSheet = true
         case .hermes: showHermesSheet = true
         case .demeter: break // Demeter sheet yok henüz
-        case .cronos: break // Cronos sheet yok henüz
         }
     }
     

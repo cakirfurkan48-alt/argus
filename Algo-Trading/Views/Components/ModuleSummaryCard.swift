@@ -102,7 +102,7 @@ struct ModuleSummaryCard: View {
                             name: "Chiron",
                             score: 100, 
                             tag: chiron.regime.descriptor,
-                            mode: .chronos, // Using Chronos mode
+                            mode: .demeter, // Using Demeter mode for Chiron visualization (or Generic)
                             hideScore: true
                         )
                         .onTapGesture { onChironTap?() }
@@ -111,7 +111,7 @@ struct ModuleSummaryCard: View {
                             name: "Chiron",
                             score: 62, 
                             tag: "Risk Dengeli",
-                            mode: .chronos,
+                            mode: .demeter,
                             isRawDecimal: true
                         )
                         .onTapGesture { onChironTap?() }
@@ -134,7 +134,7 @@ struct ModuleSummaryCard: View {
                         name: "Demeter",
                         score: demeter.totalScore,
                         tag: demeterTag(demeter.totalScore),
-                        mode: .poseidon // Or Scout
+                        mode: .demeter // Correct mapping
                     )
                     .onTapGesture { onDemeterTap?() }
                 }

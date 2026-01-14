@@ -21,77 +21,138 @@ actor ReportEngine {
         formatter.locale = Locale(identifier: "tr_TR")
         let dateStr = formatter.string(from: date)
         
-        var report = """
-        # 🦅 Argus GÜNLÜK RAPORU
-        **Tarih:** \(dateStr)
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "HH:mm"
+        let timeStr = timeFormatter.string(from: date)
         
-        ## 🌍 Piyasa Atmosferi
-        """
+        var report = """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ARGUS PİYASA ANALİZ RAPORU
+\(dateStr) | Kapanış Seansı
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. MAKRO ORTAM DEĞERLENDİRMESİ (AETHER)
+───────────────────────────────────────
+"""
         
         // 1. Atmosphere
         if let aether = atmosphere.aether {
-            let regime = aether > 60 ? "Pozitif (Risk İştahı Yüksek)" : (aether < 40 ? "Negatif (Riskten Kaçış)" : "Nötr / Belirsiz")
-            report += "\n- **Genel Rejim:** \(regime) (Skor: \(Int(aether)))"
+            let regime: String
+            let skorKategori: String
+            if aether > 60 {
+                regime = "Risk-On"
+                skorKategori = "Olumlu"
+            } else if aether < 40 {
+                regime = "Risk-Off"
+                skorKategori = "Olumsuz"
+            } else {
+                regime = "Nötr"
+                skorKategori = "Belirsiz"
+            }
+            
+            report += """
+
+Rejim: \(regime) | Skor: \(Int(aether))/100
+
+   Durum: \(skorKategori)
+   
+   Yorum: Makro ortam \(regime.lowercased()) modunda.
+   \(aether > 60 ? "Risk iştahı yüksek, agresif pozisyonlar değerlendirilebilir." : (aether < 40 ? "Defansif strateji öneriliyor." : "Temkinli seyir önerilir."))
+"""
         } else {
-            report += "\n- **Genel Rejim:** Veri Bekleniyor"
+            report += "\nRejim: Veri Bekleniyor"
         }
         
-        report += "\n\n## 📊 İşlem Özeti\n"
+        // 2. Trade Summary
+        report += """
+
+
+2. İŞLEM ÖZETİ
+───────────────────────────────────────
+"""
         
-        // 2. Trades
         let todayTrades = trades.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
         if todayTrades.isEmpty {
-            report += "Bugün gerçekleştirilen işlem bulunmamaktadır.\n"
+            report += "\nBugün gerçekleştirilen işlem bulunmamaktadır."
         } else {
-            let buys = todayTrades.filter { $0.type == .buy }.count
-            let sells = todayTrades.filter { $0.type == .sell }.count
+            let buys = todayTrades.filter { $0.type == .buy }
+            let sells = todayTrades.filter { $0.type == .sell }
             let totalVol = todayTrades.reduce(0.0) { $0 + $1.amount }
-            
-            // Para birimi: BIST varsa TL, yoksa $
             let hasBist = todayTrades.contains { $0.symbol.uppercased().hasSuffix(".IS") }
-            let currency = hasBist ? "₺" : "$"
+            let currency = hasBist ? "TL" : "USD"
             
-            report += "- **Toplam İşlem:** \(todayTrades.count) (Alış: \(buys), Satış: \(sells))\n"
-            report += "- **Hacim:** \(currency)\(String(format: "%.2f", totalVol))\n"
-            
-            report += "\n### Detaylar:\n"
-            for trade in todayTrades {
-                let icon = trade.type == .buy ? "🟢 AL" : "🔴 SAT"
+            report += """
+
+   Toplam İşlem:    \(todayTrades.count)
+   Alım:            \(buys.count)
+   Satım:           \(sells.count)
+   Toplam Hacim:    \(String(format: "%.2f", totalVol)) \(currency)
+
+   Saat    Tip    Sembol        Miktar       Fiyat
+   ─────────────────────────────────────────────────
+"""
+            for trade in todayTrades.prefix(10) {
+                let tip = trade.type == .buy ? "ALIM" : "SATIS"
                 let price = trade.price
                 let qty = price > 0 ? (trade.amount / price) : 0.0
-                let tradeCurrency = trade.symbol.uppercased().hasSuffix(".IS") ? "₺" : "$"
-                report += "- \(icon) **\(trade.symbol)**: \(String(format: "%.2f", price)) (\(tradeCurrency) üzerinden \(String(format: "%.4f", qty)) adet)\n"
+                let tradeCurrency = trade.symbol.uppercased().hasSuffix(".IS") ? "TL" : "$"
+                let timeF = DateFormatter()
+                timeF.dateFormat = "HH:mm"
+                let tradeTime = timeF.string(from: trade.date)
+                let symbolPadded = trade.symbol.padding(toLength: 10, withPad: " ", startingAt: 0)
+                report += "   \(tradeTime)   \(tip.padding(toLength: 5, withPad: " ", startingAt: 0))  \(symbolPadded)  \(String(format: "%8.2f", qty))  \(tradeCurrency)\(String(format: "%.2f", price))\n"
             }
         }
         
-        // 3. Decision Trace Statistics
-        report += "\n## 🧠 Karar Motoru (Argus Core)\n"
+        // 3. Decision Engine Stats
+        report += """
+
+3. KARAR MOTORU (ARGUS CORE)
+───────────────────────────────────────
+"""
         
         let todayDecisions = decisions.filter { Calendar.current.isDate($0.timestamp, inSameDayAs: date) }
-        // Fix: Use explicit .buy/.sell check instead of .noTrade which doesn't exist
         let approved = todayDecisions.filter { $0.finalDecision.action == .buy || $0.finalDecision.action == .sell }
         let vetoed = todayDecisions.filter { 
-            // Vetoed = Logic approved buy/sell but Governance/Risk blocked it, OR Logic leaned buy/sell but final was Hold
-            // Simplifying: Any Trace where 'debate' had strong claim but final was Hold.
             return $0.finalDecision.action == .hold && ($0.debate.claimant?.preferredAction == .buy || $0.debate.claimant?.preferredAction == .sell)
         }
         
-        report += "- **Toplam Analiz:** \(todayDecisions.count)\n"
-        report += "- **Onaylanan Fırsatlar:** \(approved.count)\n"
-        report += "- **Veto Edilen / Pas geçilen:** \(vetoed.count)\n"
+        report += """
+
+   Toplam Analiz:       \(todayDecisions.count)
+   Onaylanan Fırsat:    \(approved.count)
+   Veto Edilen:         \(vetoed.count)
+"""
         
         if !vetoed.isEmpty {
-            report += "\n### 🛡️ Veto ve Engeller (Neden İşlem Yapılmadı?)\n"
-            for d in vetoed.prefix(5) { // Top 5 interesting vetoes
+            report += """
+
+
+   VETO EDİLEN İŞLEMLER (Neden yapılmadı?)
+   ┌──────────┬────────────┬─────────────────────────┐
+   │ Sembol   │ Yön        │ Neden                   │
+   ├──────────┼────────────┼─────────────────────────┤
+"""
+            for d in vetoed.prefix(5) {
                 let direction = d.debate.claimant?.preferredAction == .buy ? "Alım" : "Satış"
-                // Fix: vetoTriggered property doesn't exist. Use risk evaluation reason or final rationale.
                 let reason = (!d.riskEvaluation.isApproved) ? d.riskEvaluation.reason : d.finalDecision.rationale
-                report += "- **\(d.symbol)** (\(direction) Fırsatı): \(reason)\n"
+                let shortReason = String(reason.prefix(23))
+                let symbolPad = d.symbol.padding(toLength: 8, withPad: " ", startingAt: 0)
+                let dirPad = direction.padding(toLength: 10, withPad: " ", startingAt: 0)
+                report += "   │ \(symbolPad) │ \(dirPad) │ \(shortReason.padding(toLength: 23, withPad: " ", startingAt: 0)) │\n"
             }
+            report += "   └──────────┴────────────┴─────────────────────────┘"
         }
         
         // 4. Closing
-        report += "\n---\n*Argus Otonom Sistem Tarafından Üretilmiştir.*"
+        report += """
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Rapor Üretim: Argus Terminal
+Bu rapor yatırım tavsiyesi içermez.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
         
         return report
     }

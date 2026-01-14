@@ -86,7 +86,7 @@ extension ArgusBacktestEngine {
         
         // 2. Build Input
         let currentResult = ChironRegimeEngine.shared.evaluate(context: ChironContext(
-            atlasScore: 50, orionScore: 50, aetherScore: 50, demeterScore: nil, phoenixScore: nil, hermesScore: nil, athenaScore: nil, cronosScore: nil,
+            atlasScore: 50, orionScore: 50, aetherScore: 50, demeterScore: nil, phoenixScore: nil, hermesScore: nil, athenaScore: nil,
             symbol: symbol, orionTrendStrength: nil, chopIndex: nil, volatilityHint: nil, isHermesAvailable: false
         ))
         
@@ -137,7 +137,8 @@ extension ArgusBacktestEngine {
                 phoenix: optimized.newArgusWeights.pulse.phoenix ?? 0.2,
                 aether: optimized.newArgusWeights.pulse.aether ?? 0.1,
                 hermes: optimized.newArgusWeights.pulse.hermes ?? 0.1,
-                cronos: 0.05,
+                demeter: optimized.newArgusWeights.pulse.demeter ?? 0.1,
+                athena: optimized.newArgusWeights.pulse.athena ?? 0.05,
                 updatedAt: Date(),
                 confidence: 0.8,
                 reasoning: "Backtest-based optimization"
@@ -269,7 +270,11 @@ extension ArgusBacktestEngine {
                 orionScoreAtEntry: nil,  // Backtest doesn't have these
                 atlasScoreAtEntry: nil,
                 aetherScoreAtEntry: nil,
-                phoenixScoreAtEntry: nil
+                phoenixScoreAtEntry: nil,
+                allModuleScores: nil,
+                systemDecision: nil,
+                ignoredWarnings: nil,
+                regime: nil
             )
             
             await ChironDataLakeService.shared.logTrade(record)

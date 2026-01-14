@@ -66,6 +66,13 @@ struct ArgusLabView: View {
                     .background(Theme.secondaryBackground)
                     .cornerRadius(12)
                     .padding(.horizontal)
+                
+                // Unlimited Mode Toggle (User Request)
+                Toggle("⚠️ Sınırsız Pozisyon Modu (Limit Yok)", isOn: $tradingViewModel.isUnlimitedPositions)
+                    .padding()
+                    .background(Theme.secondaryBackground)
+                    .cornerRadius(12)
+                    .padding(.horizontal)
 
                 // Voice & Flight Recorder Links
                 VStack(spacing: 12) {

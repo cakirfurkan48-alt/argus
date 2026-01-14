@@ -18,10 +18,9 @@ struct ArgusDecisionEngine {
         orionDetails: OrionScoreResult?,
         aether: Double?,
         hermes: Double?,
-        cronos: Double?,
         athena: Double?,
         phoenixAdvice: PhoenixAdvice?,
-        demeterScore: Double?, // New: Sector Score
+        demeterScore: Double?,
         marketData: (price: Double, equity: Double, currentRiskR: Double)?, 
         traceContext: (price: Double, freshness: Double, source: String)? = nil,
         portfolioContext: (
@@ -138,7 +137,6 @@ struct ArgusDecisionEngine {
             phoenixScore: phoenixOp.score,
             hermesScore: hermes,
             athenaScore: athena,
-            cronosScore: cronos,
             symbol: symbol,
             orionTrendStrength: orionDetails?.components.trend, // Extract from Details
             chopIndex: nil, // TODO: Add Chop to OrionDetails
@@ -169,10 +167,9 @@ struct ArgusDecisionEngine {
             case .orion: weight = activeWeights.orion
             case .aether: weight = activeWeights.aether
             case .demeter: weight = activeWeights.demeter ?? 0.0
-            // REMOVED: Phoenix weight case - Phoenix removed from decision system
+            case .phoenix: weight = activeWeights.phoenix ?? 0.0
             case .hermes: weight = activeWeights.hermes ?? 0.0
             case .athena: weight = activeWeights.athena ?? 0.0
-            case .cronos: weight = activeWeights.cronos ?? 0.0
             default: weight = 1.0
             }
             
@@ -431,7 +428,7 @@ struct ArgusDecisionEngine {
             "Orion": informationQuality(for: .orion),
             "Aether": informationQuality(for: .aether),
             "Hermes": informationQuality(for: .hermes),
-            "Cronos": informationQuality(for: .cronos)
+            "Demeter": informationQuality(for: .demeter)
         ]
 
         // Legacy Support
@@ -443,13 +440,40 @@ struct ArgusDecisionEngine {
             assetType: assetType,
             now: now,
             score: legacyScore,
-            scores: (atlas, orion, aether, hermes, athena, cronos),
+            scores: (atlas, orion, aether, hermes, athena, demeterScore),
             phoenixAdvice: phoenixAdvice,
             moduleWeights: iqWeights // Pass Weights
         )
         
         // --- CHIRON LOGGING (Memory) ---
         Task {
+            // Forward Test Ledger (Black Box V0)
+            let refs = ForwardTestLedger.shared.getSnapshotRefs(symbol: symbol)
+            let hashes = refs.values.map { $0 }
+            
+            ForwardTestLedger.shared.logDecision(
+                decisionId: trace.id.uuidString,
+                symbol: symbol,
+                action: finalAction.rawValue,
+                currentPrice: marketData?.price ?? 0,
+                moduleScores: [
+                    "orion": orion ?? 0,
+                    "atlas": atlas ?? 0,
+                    "aether": aether ?? 0,
+                    "hermes": hermes ?? 0,
+                    "phoenix": phoenixOp.score
+                ],
+                inputBlobHashes: hashes,
+                configHash: "default_v1",
+                weightsHash: "chiron_pulse_v1"
+            )
+            
+            // Also Log Module Opinions
+            for op in allOpinions {
+                 // We need a helper for logModuleOpinion or just generic event.
+                 // For V0, let's keep it simple or add if easy.
+            }
+
             await ChironJournalService.shared.logDecision(
                 trace: trace,
                 opinions: allOpinions,
@@ -613,7 +637,7 @@ struct ArgusDecisionEngine {
         assetType: SafeAssetType?,
         now: Date,
         score: Double,
-        scores: (atlas: Double?, orion: Double?, aether: Double?, hermes: Double?, athena: Double?, cronos: Double?),
+        scores: (atlas: Double?, orion: Double?, aether: Double?, hermes: Double?, athena: Double?, demeterScore: Double?),
         phoenixAdvice: PhoenixAdvice? = nil,
         moduleWeights: [String: Double]? = nil
     ) -> ArgusDecisionResult {
@@ -625,7 +649,7 @@ struct ArgusDecisionEngine {
          if let s = scores.orion { stdOutputs["Orion"] = StandardModuleOutput(direction: s > 50 ? "AL" : "SAT", strength: s, confidence: 100, timeframe: "1H", reasons: []) }
          if let s = scores.hermes { stdOutputs["Hermes"] = StandardModuleOutput(direction: s > 50 ? "AL" : "SAT", strength: s, confidence: 100, timeframe: "LIVE", reasons: []) }
          if let s = scores.aether { stdOutputs["Aether"] = StandardModuleOutput(direction: s > 50 ? "AL" : "SAT", strength: s, confidence: 100, timeframe: "MACRO", reasons: []) }
-         if let s = scores.cronos { stdOutputs["Cronos"] = StandardModuleOutput(direction: s > 50 ? "AL" : "SAT", strength: s, confidence: 100, timeframe: "CYCLE", reasons: []) }
+         if let s = scores.demeterScore { stdOutputs["Demeter"] = StandardModuleOutput(direction: s > 50 ? "AL" : "SAT", strength: s, confidence: 100, timeframe: "SECTOR", reasons: []) }
          
          return ArgusDecisionResult(
             id: UUID(),
@@ -636,7 +660,7 @@ struct ArgusDecisionEngine {
             orionScore: scores.orion ?? 0,
             athenaScore: scores.athena ?? 0,
             hermesScore: scores.hermes ?? 0,
-            cronosScore: scores.cronos ?? 0,
+            demeterScore: scores.demeterScore ?? 0,
             orionDetails: nil,
             chironResult: nil,
             phoenixAdvice: phoenixAdvice,
@@ -646,15 +670,15 @@ struct ArgusDecisionEngine {
             finalScoreCore: score,
             // FIX: Pulse skoru = Orion ağırlıklı (technical-focused)
             // Pulse: %60 Orion, %20 Cronos, %20 Aether
-            finalScorePulse: (scores.orion ?? 0) * 0.60 + (scores.cronos ?? 50) * 0.20 + (scores.aether ?? 50) * 0.20,
+            finalScorePulse: (scores.orion ?? 0) * 0.60 + (scores.demeterScore ?? 50) * 0.20 + (scores.aether ?? 50) * 0.20,
             letterGradeCore: finalAction == .buy ? "A" : (score > 40 ? "C" : "F"),
             letterGradePulse: "-",
             finalActionCore: finalAction,
             finalActionPulse: finalAction,
             isNewsBacked: (scores.hermes ?? 0) > 50,
-            isRegimeGood: (scores.aether ?? 0) > 50,
-            isFundamentallyStrong: (scores.atlas ?? 0) > 50,
-            isTimeAligned: (scores.cronos ?? 0) > 50,
+            isRegimeGood: scores.aether != nil ? scores.aether! >= 40.0 : false,
+            isFundamentallyStrong: scores.atlas != nil ? scores.atlas! >= 50.0 : false,
+            isDemeterStrong: scores.demeterScore != nil ? scores.demeterScore! >= 50.0 : false,
             generatedAt: now
          )
     }

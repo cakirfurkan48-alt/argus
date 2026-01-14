@@ -213,7 +213,8 @@ struct GlobalCockpitView: View {
                             CrystalWatchlistRow(
                                 symbol: symbol,
                                 quote: watchlistVM.quotes[symbol], // Yeni sistem
-                                candles: viewModel.candles[symbol] // Candles hala TradingVM'den
+                                candles: viewModel.candles[symbol], // Candles hala TradingVM'den
+                                forecast: viewModel.prometheusForecastBySymbol[symbol] // Prometheus
                             )
                             .padding(.horizontal, 16).padding(.vertical, 4)
                         }

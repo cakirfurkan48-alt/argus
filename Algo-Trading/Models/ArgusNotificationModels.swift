@@ -18,6 +18,8 @@ struct ArgusNotification: Identifiable, Codable, Sendable {
         case tradeExecuted = "İŞLEM GERÇEKLEŞTİ"
         case positionClosed = "POZİSYON KAPANDI"
         case alert = "UYARI"
+        case dailyReport = "GÜNLÜK RAPOR"
+        case weeklyReport = "HAFTALIK RAPOR"
     }
     
     init(

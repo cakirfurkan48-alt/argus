@@ -21,16 +21,15 @@ enum MarketRegime: String, Codable, Sendable {
     }
 }
 
-/// Dynamic weights for the Argus modules.
+/// Dynamic weights for the Argus modules (7 Modül - Cronos kaldırıldı).
 struct ModuleWeights: Codable, Sendable {
     let atlas: Double   // Fundamental (Stock)
     let orion: Double   // Technical (Stock)
     let aether: Double  // Macro (Global)
     let demeter: Double? // Sector (Flow)
-    let phoenix: Double? // Price Action (Trend) - Formerly Poseidon
+    let phoenix: Double? // Price Action (Trend)
     let hermes: Double?  // News
     let athena: Double?  // Factors
-    let cronos: Double?  // Timing
     
     /// Returns a normalized version where weights sum to 1.0.
     var normalized: ModuleWeights {
@@ -38,12 +37,11 @@ struct ModuleWeights: Codable, Sendable {
         let p = phoenix ?? 0.0
         let h = hermes ?? 0.0
         let ath = athena ?? 0.0
-        let c = cronos ?? 0.0
         
-        let sum = atlas + orion + aether + d + p + h + ath + c
+        let sum = atlas + orion + aether + d + p + h + ath
         guard sum > 0 else {
             // Fallback: Safe Fundamentals + Macro Dominance
-            return ModuleWeights(atlas: 0.3, orion: 0.2, aether: 0.2, demeter: 0.1, phoenix: 0.0, hermes: 0.0, athena: 0.2, cronos: 0.0)
+            return ModuleWeights(atlas: 0.3, orion: 0.2, aether: 0.2, demeter: 0.1, phoenix: 0.1, hermes: 0.05, athena: 0.05)
         }
         
         return ModuleWeights(
@@ -53,8 +51,7 @@ struct ModuleWeights: Codable, Sendable {
             demeter: d / sum,
             phoenix: p / sum,
             hermes: h / sum,
-            athena: ath / sum,
-            cronos: c / sum
+            athena: ath / sum
         )
     }
 }
@@ -64,11 +61,10 @@ struct ChironContext: Codable, Sendable {
     let atlasScore: Double?
     let orionScore: Double?
     let aetherScore: Double?
-    let demeterScore: Double? // NEW: Sector Score
-    let phoenixScore: Double? // NEW: PA Score
+    let demeterScore: Double?  // Sector Score
+    let phoenixScore: Double?  // PA Score
     let hermesScore: Double?
     let athenaScore: Double?
-    let cronosScore: Double?
     let symbol: String?
     
     // Detailed Context
@@ -152,6 +148,54 @@ final class ChironRegimeEngine: @unchecked Sendable {
         return dynamicConfig?.perSymbolOverrides ?? []
     }
     
+    // MARK: - Chiron Akıllı Öğrenme (NEW)
+    
+    /// Bileşen performansına dayalı öğrenilmiş Orion ağırlıklarını döndürür
+    /// ComponentPerformanceService üzerinden trade geçmişini analiz eder
+    func getLearnedOrionWeights(symbol: String) -> OrionWeightSnapshot? {
+        // Önce sembol özel performance'a bak
+        let symbolStats = ComponentPerformanceService.shared.analyzePerformance(for: symbol)
+        
+        // En az 5 trade ile sinyal olmalı
+        let hasEnoughData = symbolStats.reduce(0) { $0 + $1.signalCount } >= 5
+        
+        if hasEnoughData, let learned = ComponentPerformanceService.shared.calculateLearnedWeights(symbol: symbol) {
+            print("🧠 Chiron: \(symbol) için öğrenilmiş ağırlıklar kullanılıyor - \(learned.summary)")
+            return learned
+        }
+        
+        // Fallback: Global performance'a bak
+        let globalStats = ComponentPerformanceService.shared.analyzeGlobalPerformance()
+        let hasGlobalData = globalStats.reduce(0) { $0 + $1.signalCount } >= 10
+        
+        if hasGlobalData, let globalLearned = ComponentPerformanceService.shared.calculateLearnedWeights(symbol: nil) {
+            print("🧠 Chiron: Global öğrenilmiş ağırlıklar kullanılıyor - \(globalLearned.summary)")
+            return globalLearned
+        }
+        
+        return nil // Yeterli veri yok, default kullanılacak
+    }
+    
+    /// Belirli bir sembol için öğrenilmiş ağırlık var mı?
+    func hasLearnedWeights(symbol: String) -> Bool {
+        return getLearnedOrionWeights(symbol: symbol) != nil
+    }
+    
+    /// Öğrenme durumu özeti (UI için)
+    func getLearningStatus(symbol: String) -> (hasLearning: Bool, confidence: Double, note: String) {
+        let stats = ComponentPerformanceService.shared.analyzePerformance(for: symbol)
+        let totalSignals = stats.reduce(0) { $0 + $1.signalCount }
+        
+        if totalSignals >= 10 {
+            let avgReliability = stats.map { $0.reliability }.reduce(0, +) / Double(stats.count)
+            return (true, avgReliability, "\(totalSignals) trade analiz edildi")
+        } else if totalSignals >= 5 {
+            return (true, 0.5, "Öğrenme devam ediyor (\(totalSignals)/10 trade)")
+        } else {
+            return (false, 0.0, "Yeterli veri yok (\(totalSignals)/5 trade)")
+        }
+    }
+    
     func evaluate(context: ChironContext) -> ChironResult {
         // 1. Detect Regime
         let regime = detectRegime(context: context)
@@ -225,28 +269,28 @@ final class ChironRegimeEngine: @unchecked Sendable {
         switch regime {
         case .neutral:
             return (
-                core: ModuleWeights(atlas: 0.25, orion: 0.15, aether: 0.20, demeter: 0.15, phoenix: 0.05, hermes: 0.05, athena: 0.15, cronos: 0.0),
-                pulse: ModuleWeights(atlas: 0.05, orion: 0.25, aether: 0.10, demeter: 0.10, phoenix: 0.15, hermes: 0.20, athena: 0.05, cronos: 0.10)
+                core: ModuleWeights(atlas: 0.25, orion: 0.15, aether: 0.20, demeter: 0.15, phoenix: 0.05, hermes: 0.05, athena: 0.15),
+                pulse: ModuleWeights(atlas: 0.05, orion: 0.25, aether: 0.10, demeter: 0.10, phoenix: 0.15, hermes: 0.20, athena: 0.05)
             )
         case .trend:
             return (
-                core: ModuleWeights(atlas: 0.20, orion: 0.25, aether: 0.10, demeter: 0.15, phoenix: 0.20, hermes: 0.05, athena: 0.05, cronos: 0.0),
-                pulse: ModuleWeights(atlas: 0.0, orion: 0.35, aether: 0.05, demeter: 0.05, phoenix: 0.35, hermes: 0.10, athena: 0.0, cronos: 0.10)
+                core: ModuleWeights(atlas: 0.20, orion: 0.25, aether: 0.10, demeter: 0.15, phoenix: 0.20, hermes: 0.05, athena: 0.05),
+                pulse: ModuleWeights(atlas: 0.0, orion: 0.35, aether: 0.05, demeter: 0.05, phoenix: 0.35, hermes: 0.10, athena: 0.0)
             )
         case .chop:
             return (
-                core: ModuleWeights(atlas: 0.30, orion: 0.10, aether: 0.20, demeter: 0.20, phoenix: 0.05, hermes: 0.05, athena: 0.10, cronos: 0.0),
-                pulse: ModuleWeights(atlas: 0.10, orion: 0.10, aether: 0.20, demeter: 0.15, phoenix: 0.10, hermes: 0.10, athena: 0.10, cronos: 0.15)
+                core: ModuleWeights(atlas: 0.30, orion: 0.10, aether: 0.20, demeter: 0.20, phoenix: 0.05, hermes: 0.05, athena: 0.10),
+                pulse: ModuleWeights(atlas: 0.10, orion: 0.10, aether: 0.20, demeter: 0.15, phoenix: 0.10, hermes: 0.10, athena: 0.10)
             )
         case .riskOff:
             return (
-                core: ModuleWeights(atlas: 0.35, orion: 0.05, aether: 0.30, demeter: 0.15, phoenix: 0.0, hermes: 0.0, athena: 0.15, cronos: 0.0),
-                pulse: ModuleWeights(atlas: 0.20, orion: 0.05, aether: 0.40, demeter: 0.15, phoenix: 0.05, hermes: 0.05, athena: 0.10, cronos: 0.0)
+                core: ModuleWeights(atlas: 0.35, orion: 0.05, aether: 0.30, demeter: 0.15, phoenix: 0.0, hermes: 0.0, athena: 0.15),
+                pulse: ModuleWeights(atlas: 0.20, orion: 0.05, aether: 0.40, demeter: 0.15, phoenix: 0.05, hermes: 0.05, athena: 0.10)
             )
         case .newsShock:
             return (
-                core: ModuleWeights(atlas: 0.20, orion: 0.10, aether: 0.15, demeter: 0.10, phoenix: 0.05, hermes: 0.30, athena: 0.10, cronos: 0.0),
-                pulse: ModuleWeights(atlas: 0.0, orion: 0.10, aether: 0.10, demeter: 0.05, phoenix: 0.05, hermes: 0.50, athena: 0.0, cronos: 0.10)
+                core: ModuleWeights(atlas: 0.20, orion: 0.10, aether: 0.15, demeter: 0.10, phoenix: 0.05, hermes: 0.30, athena: 0.10),
+                pulse: ModuleWeights(atlas: 0.0, orion: 0.10, aether: 0.10, demeter: 0.05, phoenix: 0.05, hermes: 0.50, athena: 0.0)
             )
         }
     }
@@ -259,7 +303,6 @@ final class ChironRegimeEngine: @unchecked Sendable {
         var wPhoenix = weights.phoenix ?? 0.0
         var wHermes = weights.hermes ?? 0.0
         var wAthena = weights.athena ?? 0.0
-        var wCronos = weights.cronos ?? 0.0
         
         // 1. Missing Hermes
         if !context.isHermesAvailable || context.hermesScore == nil {
@@ -278,9 +321,8 @@ final class ChironRegimeEngine: @unchecked Sendable {
         if context.demeterScore == nil { wDemeter = 0 }
         if context.phoenixScore == nil { wPhoenix = 0 }
         if context.athenaScore == nil { wAthena = 0 }
-        if context.cronosScore == nil { wCronos = 0 }
         
-        return ModuleWeights(atlas: wAtlas, orion: wOrion, aether: wAether, demeter: wDemeter, phoenix: wPhoenix, hermes: wHermes, athena: wAthena, cronos: wCronos)
+        return ModuleWeights(atlas: wAtlas, orion: wOrion, aether: wAether, demeter: wDemeter, phoenix: wPhoenix, hermes: wHermes, athena: wAthena)
     }
     
     private func generateExplanation(regime: MarketRegime, context: ChironContext, finalCore: ModuleWeights) -> (String, String) {
@@ -343,8 +385,6 @@ final class ChironRegimeEngine: @unchecked Sendable {
         let h2 = w2.hermes ?? 0.0
         let ath1 = w1.athena ?? 0.0
         let ath2 = w2.athena ?? 0.0
-        let c1 = w1.cronos ?? 0.0
-        let c2 = w2.cronos ?? 0.0
         
         return ModuleWeights(
             atlas: w1.atlas * (1 - factor) + w2.atlas * factor,
@@ -353,8 +393,7 @@ final class ChironRegimeEngine: @unchecked Sendable {
             demeter: d1 * (1 - factor) + d2 * factor,
             phoenix: p1 * (1 - factor) + p2 * factor,
             hermes: h1 * (1 - factor) + h2 * factor,
-            athena: ath1 * (1 - factor) + ath2 * factor,
-            cronos: c1 * (1 - factor) + c2 * factor
+            athena: ath1 * (1 - factor) + ath2 * factor
         )
     }
 
@@ -384,8 +423,7 @@ final class ChironRegimeEngine: @unchecked Sendable {
                 demeter: pulse.demeter,
                 phoenix: pulse.phoenix,
                 hermes: (pulse.hermes ?? 0.0) * penaltyFactor,
-                athena: pulse.athena,
-                cronos: pulse.cronos
+                athena: pulse.athena
             ).normalized
         }
 
@@ -459,8 +497,7 @@ final class ChironRegimeEngine: @unchecked Sendable {
             demeter: wDemeter,
             phoenix: targetPhoenix,
             hermes: wHermes,
-            athena: wAthena,
-            cronos: 0.0
+            athena: wAthena
         ).normalized
         
         let pulse = ModuleWeights(
@@ -470,8 +507,7 @@ final class ChironRegimeEngine: @unchecked Sendable {
             demeter: wDemeter,
             phoenix: targetPhoenix + 0.1,
             hermes: wHermes + 0.1,
-            athena: wAthena,
-            cronos: 0.0
+            athena: wAthena
         ).normalized
         
         return (core, pulse)

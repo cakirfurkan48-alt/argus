@@ -28,45 +28,67 @@ struct AtlasV2DetailView: View {
                     
                     // Bölüm Kartları
                     sectionCard(
-                        title: "💰 Değerleme",
+                        title: "Değerleme",
+                        icon: "dollarsign.circle.fill",
+                        iconColor: .green,
                         score: result.valuationScore,
                         metrics: result.valuation.allMetrics,
                         sectionId: "valuation"
                     )
                     
                     sectionCard(
-                        title: "📈 Karlılık",
+                        title: "Karlılık",
+                        icon: "chart.line.uptrend.xyaxis",
+                        iconColor: .blue,
                         score: result.profitabilityScore,
                         metrics: result.profitability.allMetrics,
                         sectionId: "profitability"
                     )
                     
                     sectionCard(
-                        title: "🚀 Büyüme",
+                        title: "Büyüme",
+                        icon: "arrow.up.right.circle.fill",
+                        iconColor: .purple,
                         score: result.growthScore,
                         metrics: result.growth.allMetrics,
                         sectionId: "growth"
                     )
                     
                     sectionCard(
-                        title: "🛡️ Finansal Sağlık",
+                        title: "Finansal Sağlık",
+                        icon: "shield.checkered",
+                        iconColor: .cyan,
                         score: result.healthScore,
                         metrics: result.health.allMetrics,
                         sectionId: "health"
                     )
                     
                     sectionCard(
-                        title: "💵 Nakit Kalitesi",
+                        title: "Nakit Kalitesi",
+                        icon: "banknote.fill",
+                        iconColor: .green,
                         score: result.cashScore,
                         metrics: result.cash.allMetrics,
                         sectionId: "cash"
                     )
                     
                     sectionCard(
-                        title: "🎁 Temettü",
+                        title: "Temetü",
+                        icon: "gift.fill",
+                        iconColor: .pink,
                         score: result.dividendScore,
                         metrics: result.dividend.allMetrics,
                         sectionId: "dividend"
+                    )
+                    
+                    // YENİ: Risk Kartı
+                    sectionCard(
+                        title: "Risk Analizi",
+                        icon: "exclamationmark.triangle.fill",
+                        iconColor: .orange,
+                        score: 100 - (result.risk.beta.value ?? 1.0) * 20,
+                        metrics: result.risk.allMetrics,
+                        sectionId: "risk"
                     )
                     
                     // Özet
@@ -91,9 +113,23 @@ struct AtlasV2DetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(result.profile.name)
                         .font(.title2.bold())
-                    Text(result.symbol)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.primary)
+                    HStack(spacing: 8) {
+                        Text(result.symbol)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        // Sektör Badge
+                        if let sector = result.profile.sector {
+                            Text(sector)
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.2))
+                                .foregroundColor(.blue)
+                                .cornerRadius(4)
+                        }
+                    }
                 }
                 Spacer()
                 
@@ -104,6 +140,19 @@ struct AtlasV2DetailView: View {
                     Text(result.profile.marketCapTier)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+            }
+            
+            // Endüstri Bilgisi (varsa)
+            if let industry = result.profile.industry {
+                HStack {
+                    Image(systemName: "building.2.fill")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(industry)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
                 }
             }
             
@@ -120,7 +169,11 @@ struct AtlasV2DetailView: View {
                     Circle()
                         .trim(from: 0, to: result.totalScore / 100)
                         .stroke(
-                            scoreColor(result.totalScore),
+                            LinearGradient(
+                                colors: [scoreColor(result.totalScore), scoreColor(result.totalScore).opacity(0.6)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
                             style: StrokeStyle(lineWidth: 8, lineCap: .round)
                         )
                         .frame(width: 80, height: 80)
@@ -160,7 +213,15 @@ struct AtlasV2DetailView: View {
             }
         }
         .padding()
-        .background(cardBackground)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .shadow(color: scoreColor(result.totalScore).opacity(0.2), radius: 10, x: 0, y: 5)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(scoreColor(result.totalScore).opacity(0.3), lineWidth: 1)
+        )
     }
     
     // MARK: - Highlights Card
@@ -194,19 +255,22 @@ struct AtlasV2DetailView: View {
     
     // MARK: - Section Card
     
-    private func sectionCard(title: String, score: Double, metrics: [AtlasMetric], sectionId: String) -> some View {
+    private func sectionCard(title: String, icon: String = "", iconColor: Color = .white, score: Double, metrics: [AtlasMetric], sectionId: String) -> some View {
         VStack(spacing: 0) {
             // Header
             Button {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    if expandedSections.contains(sectionId) {
-                        expandedSections.remove(sectionId)
-                    } else {
-                        expandedSections.insert(sectionId)
-                    }
+                // FIX: withAnimation kaldırıldı - main thread blocking önleniyor
+                if expandedSections.contains(sectionId) {
+                    expandedSections.remove(sectionId)
+                } else {
+                    expandedSections.insert(sectionId)
                 }
             } label: {
                 HStack {
+                    if !icon.isEmpty {
+                        Image(systemName: icon)
+                            .foregroundColor(iconColor)
+                    }
                     Text(title)
                         .font(.headline)
                     
@@ -237,7 +301,7 @@ struct AtlasV2DetailView: View {
                 }
                 .padding(.horizontal)
                 .padding(.bottom)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                // transition kaldırıldı - performans optimizasyonu
             }
         }
         .background(cardBackground)
@@ -280,8 +344,9 @@ struct AtlasV2DetailView: View {
             // Eğitici not (varsa)
             if !metric.educationalNote.isEmpty {
                 HStack(alignment: .top, spacing: 4) {
-                    Text("📖")
+                    Image(systemName: "book.fill")
                         .font(.caption)
+                        .foregroundColor(.blue)
                     Text(metric.educationalNote)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -298,8 +363,12 @@ struct AtlasV2DetailView: View {
     
     private func summaryCard(_ result: AtlasV2Result) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("🎓 Yatırımcı İçin Özet")
-                .font(.headline)
+            HStack(spacing: 4) {
+                Image(systemName: "graduationcap.fill")
+                    .foregroundColor(.orange)
+                Text("Yatırımcı İçin Özet")
+                    .font(.headline)
+            }
             
             Text(result.summary)
                 .font(.subheadline)
@@ -409,12 +478,68 @@ struct AtlasV2DetailView: View {
     // MARK: - Data Loading
     
     private func loadData() async {
-        do {
-            result = try await AtlasV2Engine.shared.analyze(symbol: symbol)
-            isLoading = false
-        } catch {
-            self.error = error.localizedDescription
-            isLoading = false
+        // FIX: Timeout ekleyerek sonsuz beklemeyi önle
+        let symbolToAnalyze = symbol
+        
+        // 30 saniye timeout ile analiz yap
+        let loadTask = Task { () -> Result<AtlasV2Result, Error> in
+            do {
+                // Timeout protection
+                let result = try await withTimeout(seconds: 30) {
+                    try await AtlasV2Engine.shared.analyze(symbol: symbolToAnalyze)
+                }
+                return .success(result)
+            } catch {
+                // Timeout veya diğer hatalar
+                if error is TimeoutError {
+                    return .failure(NSError(domain: "AtlasV2", code: -1, userInfo: [NSLocalizedDescriptionKey: "Analiz zaman aşımına uğradı. Lütfen tekrar deneyin."]))
+                }
+                return .failure(error)
+            }
+        }
+        
+        let taskResult = await loadTask.value
+        
+        await MainActor.run {
+            switch taskResult {
+            case .success(let analysisResult):
+                self.result = analysisResult
+                self.isLoading = false
+            case .failure(let err):
+                self.error = err.localizedDescription
+                self.isLoading = false
+            }
+        }
+    }
+    
+    // MARK: - Timeout Helper
+    
+    private enum TimeoutError: Error {
+        case timeout
+    }
+    
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            // Ana işlem
+            group.addTask {
+                try await operation()
+            }
+            
+            // Timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError.timeout
+            }
+            
+            // İlk tamamlanan task'ı al
+            guard let result = try await group.next() else {
+                throw TimeoutError.timeout
+            }
+            
+            // Diğer task'ı iptal et
+            group.cancelAll()
+            
+            return result
         }
     }
 }

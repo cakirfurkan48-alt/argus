@@ -10,6 +10,20 @@ struct AutoPilotConfig {
     // Thresholds
     static let minDataQualityCorse: Double = 80.0
     static let minDataQualityPulse: Double = 60.0
+    
+    // MARK: - Churn Prevention (Flip-Flop Önleme)
+    /// Minimum tutma süresi: Alımdan sonra bu süre geçmeden satış yapılmaz (hard stop hariç)
+    static let minimumHoldingSeconds: TimeInterval = 30 * 60 // 30 dakika (was 10)
+    
+    /// Tekrar giriş bekleme süresi: Satıştan sonra aynı sembole bu süre beklemeden tekrar girilmez
+    static let entryCooldownSeconds: TimeInterval = 4 * 60 * 60 // 4 SAAT (was 15 min)
+    
+    /// Hysteresis buffer: Giriş eşiği ile çıkış eşiği arasındaki fark
+    static let entryScoreThreshold: Double = 65.0  // Giriş için minimum puan
+    static let exitScoreThreshold: Double = 55.0   // Çıkış için minimum puan (10 puan buffer)
+    
+    /// Minimum Güven Filtresi: Bu değerin altındaki sinyaller reddedilir
+    static let minimumConfidencePercent: Double = 40.0 // %40 (NEW)
 }
 
 enum AutoPilotStrategy: String {
@@ -91,8 +105,7 @@ final class ArgusAutoPilotEngine: Sendable {
     // MARK: - Main Evaluation Loop
     
     /// Main entry point to evaluate a symbol for potential trading action.
-    /// Handles both New Entry and Existing Position Management.
-    // MARK: - Main Evaluation Loop (SNIPER MODE)
+    /// Handles both New Entry and Existing Position Management.\n    // MARK: - Main Evaluation Loop (SNIPER MODE)
     
     /// Main entry point to evaluate a symbol for potential trading action.
     /// Handles both New Entry and Existing Position Management (Sniper Logic).
@@ -111,7 +124,10 @@ final class ArgusAutoPilotEngine: Sendable {
         aetherRating: MacroEnvironmentRating?,
         hermesInsight: NewsInsight?,
         argusFinalScore: Double?,
-        cronosScore: Double?
+        demeterScore: Double?,
+        
+        // Churn Prevention (NEW)
+        lastExitTime: Date? = nil // Son çıkış zamanı (cooldown kontrolü için)
     ) async -> (signal: AutoPilotSignal?, log: ScoutLog) {
         
         // Context
@@ -155,6 +171,22 @@ final class ArgusAutoPilotEngine: Sendable {
              
              // Determine Strategy Mode (Default to Pulse if legacy/missing)
              let mode = existingTrade.engine ?? .pulse
+             
+             // ==========================================
+             // CHURN PREVENTION: Minimum Holding Time
+             // ==========================================
+             let holdingDuration = Date().timeIntervalSince(existingTrade.entryDate)
+             let isHoldingPeriodActive = holdingDuration < AutoPilotConfig.minimumHoldingSeconds
+             
+             // Hard Stop eşikleri (bu eşiklerin altında minimum holding bypass edilir)
+             let hardStopThreshold = mode == .corse ? -16.0 : -8.0 // Corse: -16%, Pulse: -8%
+             
+             if isHoldingPeriodActive && pnlPercent > hardStopThreshold {
+                 // Minimum holding süresi dolmadı ve hard stop tetiklenmedi
+                 let remainingMinutes = Int((AutoPilotConfig.minimumHoldingSeconds - holdingDuration) / 60)
+                 let reason = "⏳ Minimum Tutma Süresi: \(remainingMinutes) dk kaldı (Kâr: %\(String(format: "%.1f", pnlPercent)))"
+                 return (nil, ScoutLog(symbol: symbol, status: "TUT", reason: reason, score: overallScore))
+             }
              
              // ==========================================
              // MODE 1: CORSE (SWING / MEDIUM TERM) 🦅
@@ -229,11 +261,11 @@ final class ArgusAutoPilotEngine: Sendable {
                                   ScoutLog(symbol: symbol, status: "SATIŞ", reason: reason, score: overallScore))
                      }
                  }
-                                     // 3. MOMENTUM DECAY (New: Faster Exit) 📉
-                     // If we have some profit (+2%), don't let it turn to loss just because Trend says "Wait for 45".
-                     // If Score drops below 62 (Neutral-Weak) after being high, it means Momentum is gone.
-                     if pnlPercent > 2.0 && overallScore < 62.0 {
-                         let reason = "Momentum Kaybı: Kârdayken Puan Düştü (%2 Kâr, Puan: \(Int(overallScore)) < 62). Erken Çıkış. 📉"
+                                     // 3. MOMENTUM DECAY (DISABLED - Churn Prevention)
+                     // Bu kontrol çok agresifti ve flip-flop'a neden oluyordu.
+                     // Hysteresis buffer: Sadece puan çok düşükse (%4+ kâr ve puan < 50) çıkış yap
+                     if pnlPercent > 4.0 && overallScore < AutoPilotConfig.exitScoreThreshold - 5 {
+                         let reason = "Momentum Kaybı: Kâr koruma (Kâr: %\(String(format: "%.1f", pnlPercent)), Puan: \(Int(overallScore)) < \(Int(AutoPilotConfig.exitScoreThreshold - 5))). 📉"
                          return (AutoPilotSignal(action: .sell, quantity: existingTrade.quantity, reason: reason, stopLoss: nil, takeProfit: nil, strategy: mode, trimPercentage: nil),
                                  ScoutLog(symbol: symbol, status: "SATIŞ", reason: reason, score: overallScore))
                      }
@@ -245,7 +277,7 @@ final class ArgusAutoPilotEngine: Sendable {
                           // FIXED: Dynamic Threshold
                           // If Overall Thesis (Trend) is Strong (> 65), allow more breathing room (Threshold 40).
                           // If weak, be strict (Threshold 48).
-                          let momentumThreshold = overallScore >= 65.0 ? 40.0 : 48.0
+                          let momentumThreshold = overallScore >= 70.0 ? 50.0 : 55.0 // RAISED from 48/40 to prevent churn
                           
                           if localScore < momentumThreshold {
                                let reason = "Anlık Momentum Kaybı (Yerel: \(Int(localScore)) < \(Int(momentumThreshold))). Çıkış. 🚪"
@@ -254,8 +286,9 @@ final class ArgusAutoPilotEngine: Sendable {
                           }
                       }
                      
-                     // 5. THESIS BREAK (Final Safety Net)
-                     if overallScore < 50.0 { // Lowered slightly since Decay catches early exits
+                     // 5. THESIS BREAK (Final Safety Net) - Hysteresis Applied
+                     // Giriş eşiği: 65, Çıkış eşiği: 45 (20 puan buffer)
+                     if overallScore < AutoPilotConfig.exitScoreThreshold - 10 { // 45
                           // Granular Reason for Debugging
                           let components = "Atlas: \(Int(overallScore)), Orion: \(Int(orionScore ?? 0)), Aether: \(Int(aetherRating?.numericScore ?? 0))"
                           let reason = "Argus Tezi Tamamen Bitti (Puan: \(Int(overallScore)) < 50 | \(components)). 🚪"
@@ -279,9 +312,22 @@ final class ArgusAutoPilotEngine: Sendable {
         // PART 2: NEW ENTRIES (The Hunter)
         // ----------------------------------------------------------------
         
-        // 0. Cronos Veto
-        if let cr = cronosScore, cr < 30 {
-            return (nil, ScoutLog(symbol: symbol, status: "RED", reason: "Cronos (Zamanlama) Kötü: \(Int(cr))", score: overallScore))
+        // ==========================================
+        // CHURN PREVENTION: Entry Cooldown
+        // ==========================================
+        if let exitTime = lastExitTime {
+            let timeSinceExit = Date().timeIntervalSince(exitTime)
+            if timeSinceExit < AutoPilotConfig.entryCooldownSeconds {
+                let remainingMinutes = Int((AutoPilotConfig.entryCooldownSeconds - timeSinceExit) / 60)
+                let reason = "⏳ Tekrar Giriş Beklemesi: \(remainingMinutes) dk kaldı (Son çıkıştan bu yana)"
+                return (nil, ScoutLog(symbol: symbol, status: "COOLDOWN", reason: reason, score: overallScore))
+            }
+        }
+        
+        // 0. Demeter Veto (Sector Check) - Optional
+        if let dm = demeterScore, dm < 30 {
+             // Optional: Sector is bad, avoid?
+             // return (nil, ScoutLog(symbol: symbol, status: "RED", reason: "Demeter (Sektör) Kötü: \(Int(dm))", score: overallScore))
         }
         
         // 1. Data Quality
@@ -343,6 +389,12 @@ final class ArgusAutoPilotEngine: Sendable {
                      return (nil, ScoutLog(symbol: symbol, status: "BEKLE", reason: "🏛️ Konsey Kararı: İZLE / NÖTR", score: overallScore))
                     
                 case .aggressiveBuy, .accumulate:
+                    // CHURN PREVENTION: Minimum Confidence Filter
+                    if gd.confidence * 100 < AutoPilotConfig.minimumConfidencePercent {
+                        let reason = "⚠️ Düşük Güven Reddi: %\(Int(gd.confidence * 100)) < %\(Int(AutoPilotConfig.minimumConfidencePercent))"
+                        return (nil, ScoutLog(symbol: symbol, status: "RED", reason: reason, score: gd.confidence * 100))
+                    }
+                    
                     // REFORM: Konsey AL dediyse DOĞRUDAN al! Kendi kriterlerini BYPASS et.
                     let multiplier = gd.allocationMultiplier
                     let isAggressive = gd.action == .aggressiveBuy
@@ -392,7 +444,7 @@ final class ArgusAutoPilotEngine: Sendable {
     private func checkCorseEntry(
         symbol: String, price: Double, equity: Double, buyingPower: Double,
         atlas: Double?, orion: Double?, aether: MacroEnvironmentRating?, hermes: NewsInsight?,
-        cronosScore: Double?,
+        demeterScore: Double?,
         dqScore: Double, candles: [Candle]?, overallScore: Double,
         argusMultiplier: Double = 1.0 // ARGUS V3 MULTIPLIER
     ) -> AutoPilotSignal? {
@@ -418,8 +470,8 @@ final class ArgusAutoPilotEngine: Sendable {
             print("📰 Corse Entry: Hermes nil for \(symbol), proceeding without news confirmation")
         }
         
-        // 6. Cronos (Timing) - Lenient
-        guard (cronosScore ?? 50) >= 35 else { return nil }  // Lowered from 40
+        // 6. Demeter (Sector) - Optional for now
+        // guard (demeterScore ?? 50) >= 35 else { return nil }
         
         // Calculate Volatility (ATR)
         let atr = candles != nil ? OrionAnalysisService.shared.calculateATR(candles: candles!) : 0.0
@@ -432,7 +484,7 @@ final class ArgusAutoPilotEngine: Sendable {
         )
         
         if qty > 0 {
-            logDecision(symbol: symbol, mode: .corse, action: "buy", qty: qty, price: price, sl: sl, tp: tp, riskMult: riskMult, dq: dqScore, scores: (atlas, or, ae.numericScore, hermes?.confidence, cronosScore))
+            logDecision(symbol: symbol, mode: .corse, action: "buy", qty: qty, price: price, sl: sl, tp: tp, riskMult: riskMult, dq: dqScore, overallScore: overallScore, scores: (atlas, or, ae.numericScore, hermes?.confidence, demeterScore))
             return AutoPilotSignal(action: .buy, quantity: qty, reason: "Corse Swing: Güçlü Trend Başlangıcı (Volatilite: \(String(format:"%.2f", atr)))", stopLoss: sl, takeProfit: tp, strategy: .corse, trimPercentage: nil)
         }
         return nil
@@ -441,8 +493,8 @@ final class ArgusAutoPilotEngine: Sendable {
     private func checkPulseEntry(
         symbol: String, price: Double, equity: Double, buyingPower: Double,
         orion: Double?, orionDetails: OrionComponentScores?, aether: MacroEnvironmentRating?, hermes: NewsInsight?,
-        cronosScore: Double?,
-        dqScore: Double, candles: [Candle]?,
+        demeterScore: Double?,
+        dqScore: Double, overallScore: Double?, candles: [Candle]?,
         argusMultiplier: Double = 1.0 // ARGUS V3 MULTIPLIER
     ) -> AutoPilotSignal? {
         
@@ -459,8 +511,8 @@ final class ArgusAutoPilotEngine: Sendable {
               let or = orion, or >= 55,
               let ae = aether, ae.numericScore >= 40 else { return nil }
         
-        // Cronos Check: Pulse needs good timing!
-        guard (cronosScore ?? 50) >= 50 else { return nil }
+        // Demeter Check: Pulse needs good sector?
+        // guard (demeterScore ?? 50) >= 50 else { return nil }
         
         // Calculate Volatility (ATR)
         let atr = candles != nil ? OrionAnalysisService.shared.calculateATR(candles: candles!) : 0.0
@@ -474,7 +526,7 @@ final class ArgusAutoPilotEngine: Sendable {
         
         if qty > 0 {
             let reason = "Pulse Scalp: Anlık Trend Takibi ve Momentum Alımı"
-            logDecision(symbol: symbol, mode: .pulse, action: "buy", qty: qty, price: price, sl: sl, tp: tp, riskMult: riskMult, dq: dqScore, scores: (nil, or, ae.numericScore, hm.confidence, cronosScore))
+            logDecision(symbol: symbol, mode: .pulse, action: "buy", qty: qty, price: price, sl: sl, tp: tp, riskMult: riskMult, dq: dqScore, overallScore: overallScore, scores: (nil, or, ae.numericScore, hm.confidence, demeterScore))
              return AutoPilotSignal(action: .buy, quantity: qty, reason: reason, stopLoss: sl, takeProfit: tp, strategy: .pulse, trimPercentage: nil)
         }
         return nil
@@ -599,7 +651,7 @@ final class ArgusAutoPilotEngine: Sendable {
     
     private func logDecision(
         symbol: String, mode: AutoPilotStrategy, action: String, qty: Double, price: Double,
-        sl: Double?, tp: Double?, riskMult: Double?, dq: Double,
+        sl: Double?, tp: Double?, riskMult: Double?, dq: Double, overallScore: Double?,
         scores: (Double?, Double?, Double?, Double?, Double?)
     ) {
         // Fire-and-forget to allow async query
@@ -626,7 +678,8 @@ final class ArgusAutoPilotEngine: Sendable {
                 orionScore: scores.1,
                 aetherScore: scores.2,
                 hermesScore: scores.3,
-                argusFinalScore: scores.4,
+                demeterScore: scores.4,
+                argusFinalScore: overallScore,
                 dataQualityScore: dq,
                 fundamentalsPartial: scores.0 == nil,
                 technicalPartial: scores.1 == nil,

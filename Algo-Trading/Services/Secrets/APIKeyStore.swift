@@ -35,7 +35,7 @@ class APIKeyStore: ObservableObject {
                 case .alphaVantage: keys[.alphaVantage] = Secrets.alphaVantageKey
                 case .eodhd: keys[.eodhd] = Secrets.eodhdKey
                 case .gemini: keys[.gemini] = Secrets.geminiKey
-                case .fred: keys[.fred] = "placeholder" // Fred key secrets'ta yoksa
+                case .fred: break // Fred key dinamik yüklenir
                 }
             }
         }

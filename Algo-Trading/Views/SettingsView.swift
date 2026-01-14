@@ -6,7 +6,9 @@ struct SettingsView: View {
     @Environment(\.presentationMode) var presentationMode
     @FocusState private var isInputFocused: Bool
     @ObservedObject private var safeService = SafeUniverseService.shared
-    @State private var showRoadmap = false // Added state
+    @State private var showRoadmap = false
+    @State private var showShareSheet = false
+    @State private var shareItems: [Any] = []
 
     
     var body: some View {
@@ -200,6 +202,12 @@ struct SettingsView: View {
                                 }
                                 Divider().padding(.leading, 56)
                                 
+                                // Chiron Öğrenme (NEW)
+                                NavigationLink(destination: ChironInsightsView(symbol: nil)) {
+                                    SettingsRow(icon: "brain.head.profile", title: "Chiron Öğrenme", iconColor: .cyan, hasChevron: true)
+                                }
+                                Divider().padding(.leading, 56)
+                                
                                 // Data Health / Mimir
                                 NavigationLink(destination: ArgusDataHealthView()) {
                                     SettingsRow(icon: "eye.fill", title: "Mimir Intelligence", iconColor: .indigo, hasChevron: true)
@@ -216,7 +224,30 @@ struct SettingsView: View {
                             .clipped()
                         }
                         
-                        // 6. Danger Zone
+                        // 6. Data Management
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("DATA MANAGEMENT")
+                                .font(.caption)
+                                .bold()
+                                .foregroundColor(Theme.textSecondary)
+                                .padding(.leading, 12)
+                            
+                            VStack(spacing: 2) {
+                                Button(action: {
+                                    Task {
+                                        if let url = try? await ForwardTestExport.shared.exportLogBundle() {
+                                            self.shareItems = [url]
+                                            self.showShareSheet = true
+                                        }
+                                    }
+                                }) {
+                                    SettingsRow(icon: "airplane.departure", title: "Flight Recorder Dışa Aktar", iconColor: .green, hasChevron: true)
+                                }
+                            }
+                            .background(Theme.cardBackground)
+                            .cornerRadius(20)
+                            .clipped()
+                        }
 
                         
                         // Footer
@@ -248,6 +279,9 @@ struct SettingsView: View {
         .preferredColorScheme(settingsViewModel.isDarkMode ? .dark : .light)
         .sheet(isPresented: $showRoadmap) {
             RoadmapView()
+        }
+        .sheet(isPresented: $showShareSheet) {
+            ShareSheet(activityItems: shareItems)
         }
 
     }
@@ -341,6 +375,7 @@ struct LegalDocumentView: View {
             }
             .padding()
         }
-        .navigationTitle(document.title)
     }
 }
+
+

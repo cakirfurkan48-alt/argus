@@ -168,7 +168,6 @@ final class ArgusScoutService: Sendable {
             orionDetails: orionResult,
             aether: aether,
             hermes: nil,
-            cronos: nil,
             athena: nil,
             phoenixAdvice: nil,
             demeterScore: nil,

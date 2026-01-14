@@ -53,12 +53,26 @@ final class HermesCacheStore {
         do {
             let data = try Data(contentsOf: url)
             cache = try JSONDecoder().decode([String: HermesSummary].self, from: data)
-            
-            // Clean up old entries? (Optional: > 30 days)
-            // cleanupOldEntries() 
+            cleanupOldEntries()
         } catch {
             // First run or corrupt
             cache = [:]
+        }
+    }
+    
+    private func cleanupOldEntries() {
+        queue.async(flags: .barrier) { [weak self] in
+            guard let self = self else { return }
+            let limit: TimeInterval = 7 * 24 * 60 * 60 // 7 days
+            let now = Date()
+            
+            let originalCount = self.cache.count
+            self.cache = self.cache.filter { now.timeIntervalSince($0.value.createdAt) < limit }
+            
+            if self.cache.count < originalCount {
+                self.persist()
+                print("🧹 HermesCache: \(originalCount - self.cache.count) eski kayıt temizlendi.")
+            }
         }
     }
     

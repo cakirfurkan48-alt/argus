@@ -1,173 +1,207 @@
 import SwiftUI
+import UIKit
 
-/// A Netflix-Quality Cinematic Intro for Argus.
-/// Features: Canvas Rendering, Particle System, Chromatic Aberration, Typography.
+/// 💎 THE PRISM INTRO 💎
+/// A high-end, holographic reveal of the Argus identity.
 struct ArgusCinematicIntro: View {
     var onFinished: () -> Void
     
-    // Animation State
-    @State private var startTime: Date = Date()
+    // Animation States
+    @State private var phase = 0 // 0: Start, 1: Prism Rise, 2: Eye Open, 3: Flash, 4: Text, 5: End
+    
+    // Geometry States
+    @State private var rotation: Double = 30
+    @State private var prismScale: CGFloat = 0.5
+    @State private var prismOpacity: Double = 0.0
+    @State private var eyeScale: CGFloat = 0.01
+    @State private var eyeOpacity: Double = 0.0
+    @State private var flashOpacity: Double = 0.0
+    @State private var textOpacity: Double = 0.0
+    @State private var textSpacing: CGFloat = 20
     
     // Haptics
-    private let engineHaptics = UIImpactFeedbackGenerator(style: .soft)
-    private let boomHaptics = UIImpactFeedbackGenerator(style: .rigid)
+    private let impact = UIImpactFeedbackGenerator(style: .heavy)
+    private let softImpact = UIImpactFeedbackGenerator(style: .light)
+    
+    // Colors
+    let voidBlack = Color(hex: "050505")
+    let hologramGold = Color(hex: "FFD700") // Pure Gold
+    let hologramCore = Color(hex: "FFF8E7") // Bright Core
     
     var body: some View {
-        TimelineView(.animation) { timeline in
-            CinematicRenderer(time: timeline.date.timeIntervalSince(startTime))
-                .onChange(of: timeline.date) { newDate in
-                    let t = newDate.timeIntervalSince(startTime)
+        ZStack {
+            // 1. VOID CANVAS
+            voidBlack.ignoresSafeArea()
+            
+            // Nebula / Ambient Glow
+            Circle()
+                .fill(hologramGold.opacity(0.1))
+                .frame(width: 400, height: 400)
+                .blur(radius: 100)
+                .scaleEffect(phase >= 1 ? 1.0 : 0.5)
+                .opacity(phase >= 1 ? 0.3 : 0.0)
+            
+            VStack(spacing: 60) {
+                // 2. THE PRISM ARTIFACT
+                ZStack {
+                    // Outer Triangle (The Shell)
+                    PrismShape()
+                        .stroke(
+                            LinearGradient(
+                                colors: [.clear, hologramGold, .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
+                        .frame(width: 180, height: 160)
+                        .scaleEffect(prismScale)
+                        .opacity(prismOpacity)
+                        .rotation3DEffect(.degrees(rotation), axis: (x: 0, y: 1, z: 0))
+                        .shadow(color: hologramGold.opacity(0.5), radius: 20)
                     
-                    // Haptic Triggers
-                    if t > 0.5 && t < 0.6 { engineHaptics.impactOccurred() } // Typography
-                    if t > 3.0 && t < 3.1 { engineHaptics.impactOccurred() } // Charge
-                    if t > 4.5 && t < 4.6 { boomHaptics.impactOccurred() }   // BOOM (Warp)
+                    // Inner Triangle (The Core Reflection)
+                    PrismShape()
+                        .fill(hologramGold.opacity(0.05))
+                        .frame(width: 160, height: 140)
+                        .scaleEffect(prismScale)
+                        .opacity(prismOpacity * 0.5)
+                        .rotation3DEffect(.degrees(-rotation), axis: (x: 0, y: 1, z: 0))
+                        .blur(radius: 2)
                     
-                    if t > 5.5 {
-                        onFinished()
+                    // THE EYE (All-Seeing)
+                    ZStack {
+                        // Pupil
+                        Capsule()
+                            .fill(hologramCore)
+                            .frame(width: 8, height: 24)
+                        
+                        // Iris Ring
+                        Circle()
+                            .stroke(hologramGold, lineWidth: 2)
+                            .frame(width: 40, height: 40)
+                        
+                        // Rays
+                        ForEach(0..<8) { i in
+                            Rectangle()
+                                .fill(hologramGold)
+                                .frame(width: 1, height: 10)
+                                .offset(y: -28)
+                                .rotationEffect(.degrees(Double(i) * 45))
+                        }
                     }
+                    .scaleEffect(eyeScale)
+                    .opacity(eyeOpacity)
+                    // Offset to Optical Center of Triangle (approx 1/3 from bottom, but geometrically focused)
+                    // Triangle Height 160. Centroid is at 1/3 height from base.
+                    // Visual center usually feels better slightly higher.
+                    .offset(y: 15) 
+                    .shadow(color: hologramGold, radius: 15)
                 }
+                .overlay(
+                    // FLASH EFFECT
+                    Color.white
+                        .opacity(flashOpacity)
+                        .mask(Circle().blur(radius: 20))
+                        .frame(width: 300, height: 300)
+                )
+                
+                // 3. THE IDENTITY
+                Text("A R G U S")
+                    .font(.system(size: 28, weight: .bold, design: .serif))
+                    .tracking(textSpacing)
+                    .foregroundColor(hologramCore)
+                    .shadow(color: hologramGold, radius: 10)
+                    .opacity(textOpacity)
+                    .overlay(
+                        // Shine across text
+                        Rectangle()
+                            .fill(LinearGradient(colors: [.clear, .white.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing))
+                            .rotationEffect(.degrees(20))
+                            .offset(x: phase >= 4 ? 200 : -200)
+                            .mask(Text("A R G U S").font(.system(size: 28, weight: .bold, design: .serif)).tracking(textSpacing))
+                            .animation(phase >= 4 ? .easeInOut(duration: 1.5) : .default, value: phase)
+                    )
+            }
         }
-        .background(Color.black)
-        .ignoresSafeArea()
         .onAppear {
-            startTime = Date()
-            engineHaptics.prepare()
-            boomHaptics.prepare()
+            runSequence()
+        }
+    }
+    
+    private func runSequence() {
+        // Step 1: Initialize
+        impact.prepare()
+        
+        // Step 2: Prism Rise (0.0s -> 1.5s)
+        withAnimation(.easeOut(duration: 1.5)) {
+            phase = 1
+            prismOpacity = 1.0
+            prismScale = 1.0
+            rotation = 0 // Align to flat
+        }
+        
+        // Step 3: Eye Open (1.5s -> 2.0s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            softImpact.impactOccurred()
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                phase = 2
+                eyeOpacity = 1.0
+                eyeScale = 1.0
+            }
+        }
+        
+        // Step 4: The Flash (Ignition) (2.0s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            impact.impactOccurred()
+            
+            // Flash Burst
+            withAnimation(.easeIn(duration: 0.1)) {
+                flashOpacity = 1.0
+            }
+            
+            // Flash Fade
+            withAnimation(.easeOut(duration: 0.5).delay(0.1)) {
+                flashOpacity = 0.0
+            }
+        }
+        
+        // Step 5: Text Reveal (2.1s -> 3.5s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.1) {
+            withAnimation(.easeOut(duration: 1.2)) {
+                phase = 4
+                textOpacity = 1.0
+                textSpacing = 12 // Condense slightly
+            }
+        }
+        
+        // Step 6: Completion (4.5s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+            withAnimation(.easeInOut(duration: 0.8)) {
+                phase = 5
+                onFinished()
+            }
         }
     }
 }
 
-/// Extracted Renderer to solve Shader/Canvas Type Inference issues
-struct CinematicRenderer: View {
-    let time: Double
-    
-    var body: some View {
-        Canvas { context, size in
-            let frame = Int(time * 60)
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            
-            // MARK: - Orchestration Logic (The Director)
-            // 0.0s - 0.5s: Void
-            // 0.5s - 2.5s: Typography
-            // 2.5s - 4.5s: Formation & Pulse
-            // 4.5s - 5.5s: Warp
-            
-            // 1. Typography Phase (ARGUS text)
-            if time > 0.5 && time < 3.0 {
-                let textOpacity = time < 1.0 ? (time - 0.5) * 2 : (time > 2.5 ? (3.0 - time) * 2 : 1.0)
-                let tracking = 5.0 + (Double(frame) * 0.1) // Letters drifting apart slowly
-                
-                let text = Text("ARGUS")
-                    .font(.system(size: 42, weight: .black, design: .monospaced))
-                    .tracking(tracking)
-                    .foregroundColor(.white.opacity(textOpacity))
-                
-                // Add subtle glow
-                context.addFilter(.shadow(color: .cyan.opacity(0.5), radius: 8))
-                context.draw(text, at: center)
-                
-                // Reset filters for next layer
-                context.addFilter(.shadow(color: .clear, radius: 0))
-            }
-            
-            // 2. The Eye Formation (Particles)
-            if time > 2.0 {
-                // Draw the Eye Shape with "Electric" effect
-                // We simulate "Living Aether" by shaking the path slightly
-                let shake = time > 3.5 ? sin(time * 50) * 2 : 0
-                
-                context.translateBy(x: center.x, y: center.y)
-                context.translateBy(x: shake, y: 0) // Glitch shake
-                
-                // Chromatic Aberration Effect (RGB Split)
-                // Draw Red Channel slightly offset
-                // Chromatic Aberration Effect (RGB Split)
-                // Draw Red Channel slightly offset
-                if time > 3.5 {
-                    var redContext = context
-                    redContext.translateBy(x: -4, y: 0)
-                    drawEye(context: redContext, color: .red.opacity(0.5), scale: 1.0)
-                    
-                    var blueContext = context
-                    blueContext.translateBy(x: 4, y: 0)
-                    drawEye(context: blueContext, color: .blue.opacity(0.5), scale: 1.0)
-                } 
-                
-                // Main White/Cyan Channel
-                drawEye(context: context, color: .white, scale: 1.0)
-                
-                // Outer Glow
-                if time > 3.0 {
-                    let pulse = abs(sin(time * 5))
-                    drawEye(context: context, color: .cyan.opacity(0.4 * pulse), scale: 1.1)
-                }
-            }
-            
-            // 3. Hyperspace Warp (Particle Starfield)
-            if time > 4.0 {
-                let warpProgress = time - 4.0 // 0.0 to 1.5
-                
-                // Speed increases exponentially
-                let speed = pow(warpProgress, 3) * 50
-                
-                // Draw thousands of stars flying past
-                // We simulate this statelesly for Canvas performance by hashing frame index
-                // This creates a deterministic but chaotic "fly through" effect
-                // Simulating 200 "stars"
-                for i in 0..<200 {
-                    // Deterministic random positions based on index
-                    let angle = Double(i * 137) // Golden angle to disperse
-                    let distBase = Double(i % 50) * 10
-                    
-                    // Distance moves closer to 0 (center) inversed, or outward
-                    // For Warp, we want things starting center and flying OUT
-                    let currentDist = (distBase + (Double(frame) * speed * 0.5)).truncatingRemainder(dividingBy: 1000)
-                    
-                    let x = cos(angle) * currentDist
-                    let y = sin(angle) * currentDist
-                    
-                    // Trail effect (lenghts increases with speed)
-                    let length = speed * 2
-                    
-                    let start = CGPoint(x: x, y: y)
-                    let end = CGPoint(x: cos(angle) * (currentDist + length), y: sin(angle) * (currentDist + length))
-                    
-                    let opacity = min(1.0, currentDist / 200) // Fade in from center
-                    
-                    let path = Path { p in
-                        p.move(to: start)
-                        p.addLine(to: end)
-                    }
-                    
-                    context.stroke(path, with: .color(.cyan.opacity(opacity)), lineWidth: 2)
-                }
-            }
-        }
-    }
-    
-    // MARK: - Helper Drawing
-    func drawEye(context: GraphicsContext, color: Color, scale: Double) {
-        let size = CGSize(width: 150 * scale, height: 150 * scale)
-        let rect = CGRect(x: -size.width/2, y: -size.height/2, width: size.width, height: size.height)
-        
+// MARK: - GEOMETRY
+struct PrismShape: Shape {
+    func path(in rect: CGRect) -> Path {
         var path = Path()
+        let width = rect.width
+        let height = rect.height
         
-        // Triangle
-        path.move(to: CGPoint(x: 0, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY * 0.8))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY * 0.8))
+        // Equilateral Triangle Logic
+        let topPoint = CGPoint(x: width / 2, y: 0)
+        let bottomLeft = CGPoint(x: 0, y: height)
+        let bottomRight = CGPoint(x: width, y: height)
+        
+        path.move(to: bottomLeft)
+        path.addLine(to: topPoint)
+        path.addLine(to: bottomRight)
         path.closeSubpath()
-        
-        // Eye
-        path.move(to: CGPoint(x: rect.minX * 0.6, y: 0))
-        path.addQuadCurve(to: CGPoint(x: rect.maxX * 0.6, y: 0), control: CGPoint(x: 0, y: rect.minY * 0.6))
-        path.addQuadCurve(to: CGPoint(x: rect.minX * 0.6, y: 0), control: CGPoint(x: 0, y: rect.maxY * 0.6))
-        
-        // Pupil
-        path.addEllipse(in: CGRect(x: -10, y: -10, width: 20, height: 20))
-        
-        context.stroke(path, with: .color(color), lineWidth: 4)
+        return path
     }
 }
 

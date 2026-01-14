@@ -83,9 +83,9 @@ final class SignalTrackerService: ObservableObject, @unchecked Sendable {
             atlas: decision.atlasScore,
             orion: decision.orionScore,
             aether: decision.aetherScore,
-            hermes: decision.hermesScore,
-            athena: decision.athenaScore,
-            cronos: decision.cronosScore
+                hermes: decision.hermesScore,
+                athena: decision.athenaScore,
+                demeter: decision.demeterScore
         )
         
         let snapshot = SignalSnapshot(

@@ -130,21 +130,73 @@ extension TradingViewModel {
     }
     
     // MARK: - Transaction History Management
+    
+    /// Transaction'lar için dosya URL'i (UserDefaults limiti 1MB, bu yeterli değil)
+    private var transactionsFileURL: URL {
+        let paths = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+        let dir = paths[0].appendingPathComponent("ArgusTerminal", isDirectory: true)
+        
+        // Dizin yoksa oluştur
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        
+        return dir.appendingPathComponent("transactions_v3.json")
+    }
+    
     func loadTransactions() {
+        // V3: Dosya bazlı storage (öncelikli)
+        if FileManager.default.fileExists(atPath: transactionsFileURL.path) {
+            do {
+                let data = try Data(contentsOf: transactionsFileURL)
+                let decoded = try JSONDecoder().decode([Transaction].self, from: data)
+                self.transactionHistory = decoded
+                print("✅ Transactions loaded from file: \(decoded.count) işlem")
+                return
+            } catch {
+                print("❌ Transaction dosya okuma hatası: \(error)")
+            }
+        }
+        
+        // V2 Migration: UserDefaults'tan dosyaya taşı
         if let data = UserDefaults.standard.data(forKey: "transactions_v2"),
            let decoded = try? JSONDecoder().decode([Transaction].self, from: data) {
             self.transactionHistory = decoded
+            print("📦 Migration: \(decoded.count) transaction UserDefaults'tan dosyaya taşınıyor...")
+            saveTransactions() // Dosyaya kaydet
+            // Eski veriyi temizle (opsiyonel)
+            // UserDefaults.standard.removeObject(forKey: "transactions_v2")
         } else if let data = UserDefaults.standard.data(forKey: "transactions"),
                   let decoded = try? JSONDecoder().decode([Transaction].self, from: data) {
-            // Migration
+            // Legacy Migration
             self.transactionHistory = decoded
             saveTransactions()
         }
     }
     
     func saveTransactions() {
-        if let encoded = try? JSONEncoder().encode(transactionHistory) {
-            UserDefaults.standard.set(encoded, forKey: "transactions_v2")
+        // Rolling Window: Son 500 işlemi tut, eskilerini sil
+        let maxTransactions = 500
+        if transactionHistory.count > maxTransactions {
+            let excessCount = transactionHistory.count - maxTransactions
+            transactionHistory.removeFirst(excessCount)
+            print("🧹 Eski işlemler temizlendi: \(excessCount) adet silindi, \(maxTransactions) kaldı")
+        }
+        
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            encoder.dateEncodingStrategy = .iso8601
+            
+            let data = try encoder.encode(transactionHistory)
+            try data.write(to: transactionsFileURL, options: .atomic)
+            
+            let sizeKB = Double(data.count) / 1024.0
+            print("✅ Transactions saved: \(transactionHistory.count) işlem (\(String(format: "%.1f", sizeKB)) KB)")
+        } catch {
+            print("❌ Transaction kaydetme HATASI: \(error)")
+            print("   Dosya: \(transactionsFileURL.path)")
+            print("   İşlem sayısı: \(transactionHistory.count)")
         }
     }
     

@@ -95,8 +95,12 @@ struct TuningResultSheet: View {
     
     private var performanceComparison: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("📊 Performans Karşılaştırma")
-                .font(.headline)
+            HStack(spacing: 4) {
+                Image(systemName: "chart.bar.fill")
+                    .foregroundColor(.cyan)
+                Text("Performans Karşılaştırma")
+                    .font(.headline)
+            }
             
             HStack(spacing: 0) {
                 Text("")
@@ -251,8 +255,12 @@ struct TuningResultSheet: View {
     
     private var thresholdComparison: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("🎯 Threshold Değişimleri")
-                .font(.headline)
+            HStack(spacing: 4) {
+                Image(systemName: "target")
+                    .foregroundColor(.purple)
+                Text("Threshold Değişimleri")
+                    .font(.headline)
+            }
             
             thresholdRow("Entry ≥", current: currentConfig.entryThreshold, proposed: result.bestConfig.entryThreshold)
             thresholdRow("Exit <", current: currentConfig.exitThreshold, proposed: result.bestConfig.exitThreshold)

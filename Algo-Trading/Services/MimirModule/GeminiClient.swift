@@ -37,7 +37,8 @@ actor GeminiClient {
             throw URLError(.userAuthenticationRequired)
         }
         
-        let urlString = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=\(apiKey)"
+        // Use gemini-pro as it's generally more stable/available
+        let urlString = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=\(apiKey)"
         guard let url = URL(string: urlString) else { throw URLError(.badURL) }
         
         var request = URLRequest(url: url)
@@ -56,7 +57,7 @@ actor GeminiClient {
         
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             if let errorText = String(data: data, encoding: .utf8) {
-                print("Gemini API Error Body: \(errorText)")
+                print("❌ Gemini API Error (\((response as? HTTPURLResponse)?.statusCode ?? 0)): \(errorText)")
                 throw NSError(domain: "GeminiClient", code: (response as? HTTPURLResponse)?.statusCode ?? 500, userInfo: [NSLocalizedDescriptionKey: "Gemini Error: \(errorText)"])
             }
             throw URLError(.badServerResponse)

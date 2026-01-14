@@ -9,7 +9,7 @@ struct ArgusGuideView: View {
                 mode: .argus,
                 title: "ARGUS",
                 subtitle: "Karar Mekanizması",
-                description: "Argus, sistemin beynidir. Atlas, Orion, Aether, Cronos ve Hermes'ten gelen sinyalleri toplar, Core (Uzun Vade) ve Pulse (Kısa Vade) olarak iki ayrı boyutta işler. Son kararı o verir: Al, Sat, Bekle."
+                description: "Argus, sistemin beynidir. Atlas, Orion, Aether, Demeter ve Hermes'ten gelen sinyalleri toplar, Core (Uzun Vade) ve Pulse (Kısa Vade) olarak iki ayrı boyutta işler. Son kararı o verir: Al, Sat, Bekle."
             )
             
             guidePage(
@@ -34,10 +34,10 @@ struct ArgusGuideView: View {
             )
             
             guidePage(
-                mode: .chronos,
-                title: "CHRONOS",
-                subtitle: "Zaman Döngüleri",
-                description: "Chronos, zamanı büker. Mevsimsellik, tarihsel döngüler ve takvim etkilerini analiz eder. 'Hisse Mayıs'ta düşer mi?', 'Yıl sonu rallisi olur mu?' sorularının cevabı onda saklıdır."
+                mode: .demeter,
+                title: "DEMETER",
+                subtitle: "Sektör Rotasyonu",
+                description: "Demeter, sermayenin akış yönünü izler. Hangi sektörün (Teknoloji, Enerji, Bankacılık) güçlendiğini ve hangisinin zayıfladığını analiz eder. Paranın gittiği yerde olmanızı sağlar, ölü sektörlerden korur."
             )
             
             guidePage(

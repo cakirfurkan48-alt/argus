@@ -5,75 +5,194 @@ import Foundation
 final class HermesLLMService: Sendable {
     static let shared = HermesLLMService()
     
-    private init() {}
+    // Cache: Article ID -> Summary
+    private var cache: [String: HermesSummary] = [:]
+    
+    private init() {
+        // Load cache
+        Task {
+            if let loaded: [String: HermesSummary] = await ArgusDataStore.shared.load(key: "argus_hermes_cache") {
+                self.cache = loaded
+                print("🧠 Hermes: Loaded \(loaded.count) items from disk cache.")
+            }
+        }
+    }
     
     /// Batched Analysis using Groq
-    func analyzeBatch(_ articles: [NewsArticle]) async throws -> [HermesSummary] {
+    /// - Parameter isGeneral: Global feed için true geçin, sembol tespiti yapılır
+    func analyzeBatch(_ articles: [NewsArticle], isGeneral: Bool = false) async throws -> [HermesSummary] {
         if articles.isEmpty { return [] }
         
-        // 1. Prepare Prompt
-        // 1. Prepare Prompt
-        // Limit to 3 articles to prevent context overflow and reduce cost/latency
-        let topArticles = Array(articles.prefix(3))
-        let promptText = buildBatchPrompt(topArticles)
+        var results: [HermesSummary] = []
+        var articlesToProcess: [NewsArticle] = []
+        
+        // 1. Check Cache
+        for article in articles {
+            if let cached = cache[article.id] {
+                // Check if cache entry is fresh (e.g. within 24 hours)? 
+                // Currently indefinite cache for immutable news analysis.
+                results.append(cached)
+            } else {
+                articlesToProcess.append(article)
+            }
+        }
+        
+        if articlesToProcess.isEmpty {
+            return results
+        }
+        
+        print("🧠 Hermes: Processing \(articlesToProcess.count) new articles (Cached: \(results.count))")
+        
+        // 2. Prepare Prompt for MISSING articles
+        // Limit to 3 articles per batch (pagination logic should handle rest)
+        let chunkedArticles = Array(articlesToProcess.prefix(3))
+        let promptText = buildBatchPrompt(chunkedArticles, isGeneral: isGeneral)
         
         let messages: [GroqClient.ChatMessage] = [
             .init(role: "system", content: "You are a financial news analyst JSON generator. Always output valid JSON matching the schema."),
             .init(role: "user", content: promptText)
         ]
         
-        // 2. Request via GroqClient (Handles Rate Limit & Fallback internally)
-        // Use 'llama-3.1-8b-instant' for High Volume / Low Intelligence tasks (Summarization)
-        // This saves the 70b TPM for Argus Voice.
+        // 3. Request via GroqClient
         do {
             let responseDTO: HermesBatchResponse = try await GroqClient.shared.generateJSON(
                 messages: messages
             )
             
-            // 3. Map to Model
-            return responseDTO.results.compactMap { (item: HermesBatchItem) -> HermesSummary? in
-                guard let original = articles.first(where: { $0.id == item.id }) else { return nil }
+            // 4. Map to Model & Update Cache
+            let newSummaries = responseDTO.results.compactMap { (item: HermesBatchItem) -> HermesSummary? in
+                let originalArticle = chunkedArticles.first(where: { $0.id == item.id })
                 
-                // v2.2: Sentiment-Score Alignment Check (The "Sallamasyon" Fix)
+                let resolvedSymbol: String
+                if isGeneral, let detectedSymbol = item.detected_symbol, !detectedSymbol.isEmpty {
+                    resolvedSymbol = detectedSymbol
+                } else {
+                    resolvedSymbol = originalArticle?.symbol ?? "MARKET"
+                }
+                
                 var correctedScore = item.impact_score
-                
                 if let sentiment = item.sentiment?.uppercased() {
                     if sentiment == "POSITIVE" && correctedScore < 55 {
-                        // Hallucination Fix: Text says Positive but Score is low. Boost it.
-                        correctedScore = max(70.0, correctedScore + 30.0) 
+                        correctedScore = min(65.0, correctedScore + 10.0)
                     } else if sentiment == "NEGATIVE" && correctedScore > 45 {
-                        // Hallucination Fix: Text says Negative but Score is high. Crush it.
-                         correctedScore = min(30.0, correctedScore - 30.0)
-                    } else if sentiment == "NEUTRAL" {
-                        // Pull towards 50
+                        correctedScore = max(35.0, correctedScore - 10.0)
+                    } else if sentiment == "NEUTRAL" && (correctedScore > 55 || correctedScore < 45) {
                         correctedScore = 50.0
                     }
                 }
                 
-                return HermesSummary(
+                let summary = HermesSummary(
                     id: item.id,
-                    symbol: original.symbol,
+                    symbol: resolvedSymbol,
                     summaryTR: item.summary_tr,
                     impactCommentTR: item.impact_comment_tr,
-                    impactScore: Int(correctedScore), // Cast to Int
+                    impactScore: Int(correctedScore),
                     relatedSectors: item.related_sectors,
-                    rippleEffectScore: Int(item.ripple_effect_score), // Cast to Int
+                    rippleEffectScore: Int(item.ripple_effect_score),
                     createdAt: Date(),
-                    mode: .full
+                    mode: .full,
+                    publishedAt: originalArticle?.publishedAt,
+                    sourceReliability: originalArticle?.sourceReliability
                 )
+                
+                // Save to Cache
+                self.cache[item.id] = summary
+                return summary
             }
+            
+            self.persistCache()
+            
+            results.append(contentsOf: newSummaries)
+            return results
+            
         } catch {
             print("❌ Hermes Analysis Failed: \(error)")
-            // Map Groq Rate Limit to logical error
+            // Return whatever we have from cache if API fails
+            if !results.isEmpty { return results }
+            
             let nsError = error as NSError
             if nsError.code == 429 {
                 throw HermesError.quotaExhausted
             }
-            throw error // Rethrow to let Coordinator handle Fallback
+            throw error
         }
     }
     
-    private func buildBatchPrompt(_ articles: [NewsArticle]) -> String {
+    // MARK: - Hermes V2: Quick Sentiment (Cache-Based)
+    
+    /// Gets quick sentiment score for a symbol using cached Hermes analysis
+    /// Returns a score from 0-100 (50 = neutral)
+    /// - Parameter symbol: Stock symbol (e.g. "AAPL", "THYAO.IS")
+    /// - Returns: HermesQuickSentiment with score and news count
+    func getQuickSentiment(for symbol: String) async -> HermesQuickSentiment {
+        // Get all cached summaries for this symbol
+        let symbolSummaries = cache.values.filter { 
+            $0.symbol.uppercased() == symbol.uppercased() ||
+            $0.symbol.uppercased() == symbol.replacingOccurrences(of: ".IS", with: "").uppercased()
+        }
+        
+        guard !symbolSummaries.isEmpty else {
+            // No cached data - return neutral
+            return HermesQuickSentiment(
+                symbol: symbol,
+                score: 50,
+                bullishPercent: 50,
+                bearishPercent: 50,
+                newsCount: 0,
+                source: .fallback,
+                lastUpdated: Date()
+            )
+        }
+        
+        // Calculate average sentiment from cached summaries
+        let totalScore = symbolSummaries.reduce(0.0) { $0 + Double($1.impactScore) }
+        let avgScore = totalScore / Double(symbolSummaries.count)
+        
+        // Calculate bullish/bearish percentages
+        let positiveCount = symbolSummaries.filter { $0.impactScore >= 55 }.count
+        let negativeCount = symbolSummaries.filter { $0.impactScore <= 45 }.count
+        let total = symbolSummaries.count
+        
+        let bullishPercent = Double(positiveCount) / Double(total) * 100
+        let bearishPercent = Double(negativeCount) / Double(total) * 100
+        
+        return HermesQuickSentiment(
+            symbol: symbol,
+            score: avgScore,
+            bullishPercent: bullishPercent,
+            bearishPercent: bearishPercent,
+            newsCount: symbolSummaries.count,
+            source: .llm,
+            lastUpdated: symbolSummaries.first?.createdAt ?? Date()
+        )
+    }
+    
+    /// Gets recent news summaries for a symbol from cache
+    func getCachedSummaries(for symbol: String, count: Int = 5) -> [HermesSummary] {
+        let symbolSummaries = cache.values.filter { 
+            $0.symbol.uppercased() == symbol.uppercased() ||
+            $0.symbol.uppercased() == symbol.replacingOccurrences(of: ".IS", with: "").uppercased()
+        }
+        .sorted { ($0.publishedAt ?? $0.createdAt) > ($1.publishedAt ?? $1.createdAt) }
+        
+        return Array(symbolSummaries.prefix(count))
+    }
+    
+    /// Gets recent news with sentiment for a symbol (deprecated - use getCachedSummaries)
+    func getNewsWithSentiment(for symbol: String, count: Int = 5) async -> [FinnhubSentimentNews] {
+        // Finnhub API is not available - return empty
+        // Use getCachedSummaries instead for cached Hermes analysis
+        return []
+    }
+    
+    private func persistCache() {
+        let snapshot = self.cache
+        Task {
+            await ArgusDataStore.shared.save(snapshot, key: "argus_hermes_cache")
+        }
+    }
+    
+    private func buildBatchPrompt(_ articles: [NewsArticle], isGeneral: Bool = false) -> String {
         var articlesText = ""
         for (index, article) in articles.enumerated() {
             articlesText += """
@@ -86,20 +205,22 @@ final class HermesLLMService: Sendable {
             """
         }
         
+        // Global feed için ek talimat
+        let symbolInstruction = isGeneral ? """
+        
+        ÖNEMLİ - SEMBOL TESPİTİ:
+        Bu haberler genel piyasa haberleri. Her haber için:
+        1. Haberde bahsedilen ANA şirketi/ticker'ı tespit et (örn: "Apple" → "AAPL", "Tesla" → "TSLA")
+        2. Eğer haber birden fazla şirketi ilgilendiriyorsa, en çok etkilenen şirketi seç
+        3. Eğer belirli bir şirket yoksa, sektörü belirle (örn: "Tech", "Energy", "Crypto")
+        4. JSON'da "detected_symbol" alanına tespit ettiğin ticker'ı yaz
+        
+        """ : ""
+        
         return """
-        Sen Argus Terminal içindeki Hermes v2.1 modülüsün.
+        Sen Argus Terminal içindeki Hermes v2.3 modülüsün.
         Görevin aşağıdaki haberleri finansal ve BAĞLAMSAL açıdan analiz etmek.
-        
-        GİRDİ:
-        \(articlesText)
-        
-        GÖREV:
-        Her bir haber için analiz yap ve JSON üret.
-        
-        KURALLAR:
-        Sen Argus Terminal içindeki Hermes v2.2 modülüsün.
-        Görevin aşağıdaki haberleri finansal ve BAĞLAMSAL açıdan analiz etmek.
-        
+        \(symbolInstruction)
         GİRDİ:
         \(articlesText)
         
@@ -119,12 +240,14 @@ final class HermesLLMService: Sendable {
         4. impact_score: Yukarıdaki aralıklara göre bir tamsayı.
         5. related_sectors: İngilizce sektör etiketleri (Örn: "Energy", "Tech").
         6. ripple_effect_score: Piyasaya yayılma potansiyeli (0-100).
+        7. detected_symbol: Haberin ilgili olduğu ticker (örn: "AAPL", "TSLA"). Belirsizse boş bırak.
         
         ÇIKTI FORMATI (JSON OBJE):
         {
           "results": [
             {
               "id": "Haber ID'si aynen kopyalanmalı",
+              "detected_symbol": "AAPL",
               "summary_tr": "...",
               "impact_comment_tr": "...",
               "sentiment": "POSITIVE",
@@ -137,5 +260,6 @@ final class HermesLLMService: Sendable {
         """
     }
 }
+
 
 

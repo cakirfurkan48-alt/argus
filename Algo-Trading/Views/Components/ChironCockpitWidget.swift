@@ -93,6 +93,7 @@ struct ChironEventChip: View {
         case .ruleRemoved: return .red
         case .analysisCompleted: return .cyan
         case .anomalyDetected: return .orange
+        case .forwardTest: return .purple
         }
     }
     

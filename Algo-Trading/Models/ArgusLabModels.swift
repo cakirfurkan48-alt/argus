@@ -23,7 +23,7 @@ struct ArgusDecisionLogEntry: Identifiable, Codable {
     let atlasScore: Double
     let orionScore: Double
     let aetherScore: Double
-    let cronosScore: Double
+    let demeterScore: Double
     let hermesScore: Double
     
     // Performance Metrics (Ex-Post)
@@ -58,7 +58,7 @@ struct ArgusDecisionLogEntry: Identifiable, Codable {
         self.atlasScore = decision.atlasScore
         self.orionScore = decision.orionScore
         self.aetherScore = decision.aetherScore
-        self.cronosScore = decision.cronosScore
+        self.demeterScore = decision.demeterScore ?? 0.0
         self.hermesScore = decision.hermesScore
     }
 }

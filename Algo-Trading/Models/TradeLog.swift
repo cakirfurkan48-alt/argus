@@ -21,6 +21,29 @@ struct TradeLog: Codable, Identifiable, Sendable {
     
     // Who made the decision?
     let engine: String // "AutoPilot", "Manual", "Scout"
+    
+    // NEW: Orion Bileşen Detayları (Chiron Öğrenme için)
+    var entryOrionSnapshot: OrionComponentSnapshot?
+    var exitOrionSnapshot: OrionComponentSnapshot?
+    
+    // MARK: - Computed Properties
+    
+    var isWin: Bool { pnlPercent > 0 }
+    
+    /// Bileşen bazlı performans analizi için yardımcı
+    var componentPerformance: [String: Bool]? {
+        guard let entry = entryOrionSnapshot else { return nil }
+        
+        // Hangi bileşenler yüksek skor verdi ve trade kazandı mı?
+        var result: [String: Bool] = [:]
+        for (component, score) in entry.componentDict {
+            // Eğer bileşen skoru > 60 ise "sinyal verdi" sayılır
+            if score > 60 {
+                result[component] = isWin // Sinyal verdi ve kazandı mı?
+            }
+        }
+        return result
+    }
 }
 
 /// Store for TradeLogs

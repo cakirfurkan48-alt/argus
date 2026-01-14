@@ -5,7 +5,7 @@ enum ArgusModule: String, CaseIterable {
     case atlas = "Atlas"
     case orion = "Orion"
     case aether = "Aether"
-    case cronos = "Cronos"
+    case demeter = "Demeter"
     case hermes = "Hermes"
     
     var icon: String {
@@ -13,7 +13,7 @@ enum ArgusModule: String, CaseIterable {
         case .atlas: return "building.columns.fill"
         case .orion: return "chart.xyaxis.line"
         case .aether: return "cloud.sun.fill"
-        case .cronos: return "clock.arrow.circlepath"
+        case .demeter: return "leaf.fill"
         case .hermes: return "newspaper.fill"
         }
     }
@@ -23,7 +23,7 @@ enum ArgusModule: String, CaseIterable {
         case .atlas: return .blue
         case .orion: return .purple
         case .aether: return .orange
-        case .cronos: return .teal
+        case .demeter: return .green
         case .hermes: return .pink
         }
     }
@@ -36,7 +36,7 @@ extension ArgusModule {
         case .atlas: return .atlas
         case .orion: return .orion
         case .aether: return .aether
-        case .cronos: return .chronos
+        case .demeter: return .demeter
         case .hermes: return .hermes
         }
     }
@@ -272,7 +272,7 @@ struct ArgusSolarCardView: View {
         case .atlas: return decision.atlasScore
         case .orion: return decision.orionScore
         case .aether: return decision.aetherScore
-        case .cronos: return decision.cronosScore
+        case .demeter: return decision.demeterScore ?? 0
         case .hermes: return decision.hermesScore
         }
     }
@@ -282,7 +282,7 @@ struct ArgusSolarCardView: View {
         case .atlas: return "Temel Analiz (Atlas): Bilanço, karlılık ve borç yapısının puanı."
         case .orion: return "Teknik Analiz (Orion): Trend, momentum ve volatilite göstergeleri."
         case .aether: return "Makro Rejim (Aether): Piyasanın genel risk iştahı ve hava durumu."
-        case .cronos: return "Zamanlama (Cronos): Hissenin dönemsel performansı ve döngüleri."
+        case .demeter: return "Sektör Analizi (Demeter): Sektörel güç ve göreceli performans."
         case .hermes: return "Haber Akışı (Hermes): Güncel haberlerin yatırımcı algısına etkisi."
         }
     }

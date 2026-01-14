@@ -106,7 +106,7 @@ actor ArgusBacktestEngine {
                     orionDetails: orionResult,
                     aether: dailyAether,
                     hermes: nil,
-                    cronos: nil,
+                // cronos: nil, REMOVED
                     athena: nil,
                     phoenixAdvice: nil,
                     demeterScore: nil,

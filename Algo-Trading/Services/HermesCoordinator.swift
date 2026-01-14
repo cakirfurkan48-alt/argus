@@ -11,6 +11,10 @@ final class HermesCoordinator: Sendable {
     // State
     private var isLiteMode = false
     
+    // P2: Rate Limiting & Weighted Average states
+    private var lastRequestTime: [String: Date] = [:]
+    private let rateLimitSeconds: TimeInterval = 60 // 1 dakika
+    
     private init() {}
     
     func getHermesSummaries(for symbol: String) async -> [HermesSummary] {
@@ -20,19 +24,24 @@ final class HermesCoordinator: Sendable {
     /// On-Demand Analysis (Triggered by UI)
     /// Fetches news and runs AI analysis, returning average score.
     func analyzeOnDemand(symbol: String) async -> Double? {
-        // 1. Fetch News (Using Heimdall - FMP/Finnhub/Yahoo)
+        // Rate Limit Check
+        if let last = lastRequestTime[symbol], Date().timeIntervalSince(last) < rateLimitSeconds {
+            print("⏳ Hermes Rate Limit: \(symbol) için bekleme süresi dolmadı.")
+            return nil
+        }
+        lastRequestTime[symbol] = Date()
+        
+        // 1. Fetch News
         do {
             let articles = try await HeimdallOrchestrator.shared.requestNews(symbol: symbol, context: .interactive)
             
-            // 2. Process with AI (Grok) - Force AI Mode
+            // 2. Process with AI
             let summaries = await processNews(articles: articles, allowAI: true)
             
             if summaries.isEmpty { return nil }
             
-            // 3. Calculate Average Score
-            let total = summaries.map { Double($0.impactScore) }.reduce(0.0, +)
-            let avg = total / Double(summaries.count)
-            return avg
+            // 3. Calculated Weighted Score (P2 Feature)
+            return calculateWeightedScore(summaries: summaries, articles: articles)
         } catch {
             print("❌ Hermes On-Demand Error: \(error)")
             return nil
@@ -40,7 +49,8 @@ final class HermesCoordinator: Sendable {
     }
     
     /// Main Entry Point
-    func processNews(articles: [NewsArticle], allowAI: Bool = false) async -> [HermesSummary] {
+    /// - Parameter isGeneral: Global feed için true geçin
+    func processNews(articles: [NewsArticle], allowAI: Bool = false, isGeneral: Bool = false) async -> [HermesSummary] {
         var finalSummaries: [HermesSummary] = []
         var articlesToProcess: [NewsArticle] = []
         
@@ -70,17 +80,21 @@ final class HermesCoordinator: Sendable {
         } else {
             // Try Batch AI
             do {
-                let batchedResults = try await llmService.analyzeBatch(articlesToProcess)
+                let batchedResults = try await llmService.analyzeBatch(articlesToProcess, isGeneral: isGeneral)
                 finalSummaries.append(contentsOf: batchedResults)
                 cache.saveSummaries(batchedResults)
             } catch {
                 print("Hermes AI Error: \(error)")
                 if case HermesError.quotaExhausted = error {
-                    print("⚠️ Quota exhausted.")
+                    print("⚠️ Quota exhausted. Switching to Lite mode.")
+                    // V2.3 FIX: Fallback to Lite mode instead of returning empty
+                    isLiteMode = true
                 }
                 
-                // Fallback DISABLED per user request (If Groq fails, return 0/Empty)
-                // We return empty results so Argus treats Hermes as unavailable (nil score)
+                // V2.3 FIX: Fallback etkinleştirildi - Lite mode kullan
+                let liteResults = runLiteMode(articles: articlesToProcess)
+                finalSummaries.append(contentsOf: liteResults)
+                cache.saveSummaries(liteResults)
             }
         }
         
@@ -122,7 +136,9 @@ final class HermesCoordinator: Sendable {
                 impactCommentTR: comment,
                 impactScore: score,
                 createdAt: Date(),
-                mode: .lite
+                mode: .lite,
+                publishedAt: article.publishedAt,
+                sourceReliability: article.sourceReliability
             )
         }
     }
@@ -132,7 +148,57 @@ final class HermesCoordinator: Sendable {
         return isLiteMode ? .lite : .full
     }
     
+    // P2: Public Accessor for Argus Engine
+    func getStoredWeightedScore(for symbol: String) -> Double? {
+        let summaries = cache.getSummaries(for: symbol)
+        if summaries.isEmpty { return nil }
+        // Calculate based on cached metadata
+        return calculateWeightedScore(summaries: summaries, articles: [])
+    }
+
     func resetQuota() {
         self.isLiteMode = false
+    }
+    
+    // MARK: - Weighted Average Logic (Hermes P2)
+    
+    private func calculateWeightedScore(summaries: [HermesSummary], articles: [NewsArticle]) -> Double {
+        var totalWeightedScore = 0.0
+        var totalWeight = 0.0
+        let now = Date()
+        
+        // Map for O(1) fallback access
+        let articleMap = Dictionary(uniqueKeysWithValues: articles.map { ($0.id, $0) })
+        
+        for summary in summaries {
+            // Priority: Summary Fields (New Cache) > Article Map (Fallback)
+            var pDate: Date? = summary.publishedAt
+            var sRel: Double? = summary.sourceReliability
+            
+            if pDate == nil || sRel == nil {
+                if let article = articleMap[summary.id] {
+                    pDate = article.publishedAt
+                    sRel = article.sourceReliability
+                }
+            }
+            
+            // Defaults
+            let publishedAt = pDate ?? now
+            let sourceReliability = sRel ?? 0.5
+            
+            // 1. Time Decay (Half-Life: 24h)
+            let hoursOld = max(0, now.timeIntervalSince(publishedAt) / 3600.0)
+            let timeWeight = 1.0 / (1.0 + (hoursOld / 24.0))
+            
+            // 2. Source Reliability
+            // Time is dominant, Source is modifier (min 0.4 impact)
+            let finalWeight = timeWeight * (0.4 + (sourceReliability * 0.6))
+            
+            totalWeightedScore += Double(summary.impactScore) * finalWeight
+            totalWeight += finalWeight
+        }
+        
+        guard totalWeight > 0 else { return 50.0 }
+        return totalWeightedScore / totalWeight
     }
 }

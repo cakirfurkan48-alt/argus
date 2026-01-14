@@ -250,7 +250,6 @@ enum RadarModule: String, CaseIterable {
     case phoenix = "Phoenix"
     case hermes = "Hermes"
     case demeter = "Demeter"
-    case cronos = "Cronos"
     
     var shortName: String {
         switch self {
@@ -261,7 +260,6 @@ enum RadarModule: String, CaseIterable {
         case .phoenix: return "PHX"
         case .hermes: return "HRM"
         case .demeter: return "DMT"
-        case .cronos: return "CRN"
         }
     }
     
@@ -274,7 +272,6 @@ enum RadarModule: String, CaseIterable {
         case .phoenix: return "flame.fill"
         case .hermes: return "newspaper.fill"
         case .demeter: return "leaf.fill"
-        case .cronos: return "clock.fill"
         }
     }
     
@@ -287,7 +284,6 @@ enum RadarModule: String, CaseIterable {
         case .phoenix: return .orange
         case .hermes: return .green
         case .demeter: return .brown
-        case .cronos: return .gray
         }
     }
 }
@@ -300,7 +296,6 @@ struct RadarScores {
     var phoenix: Double = 50
     var hermes: Double = 50
     var demeter: Double = 50
-    var cronos: Double = 50
     
     func score(for module: RadarModule) -> Double {
         switch module {
@@ -311,7 +306,6 @@ struct RadarScores {
         case .phoenix: return phoenix
         case .hermes: return hermes
         case .demeter: return demeter
-        case .cronos: return cronos
         }
     }
     
@@ -328,7 +322,6 @@ struct ChironWeightsData {
     var phoenix: Double = 0.10
     var hermes: Double = 0.10
     var demeter: Double = 0.10
-    var cronos: Double = 0.10
     
     func weight(for module: RadarModule) -> Double {
         switch module {
@@ -339,7 +332,6 @@ struct ChironWeightsData {
         case .phoenix: return phoenix
         case .hermes: return hermes
         case .demeter: return demeter
-        case .cronos: return cronos
         }
     }
     
@@ -351,8 +343,7 @@ struct ChironWeightsData {
             athena: weights.athena ?? 0.1,
             phoenix: weights.phoenix ?? 0.1,
             hermes: weights.hermes ?? 0.1,
-            demeter: weights.demeter ?? 0.1,
-            cronos: weights.cronos ?? 0.1
+            demeter: weights.demeter ?? 0.1
         )
     }
 }
@@ -371,8 +362,7 @@ struct ChironWeightsData {
                 athena: 66,
                 phoenix: 45,
                 hermes: 85,
-                demeter: 50,
-                cronos: 45
+                demeter: 50
             ),
             chironWeights: nil,
             onModuleTap: { module in

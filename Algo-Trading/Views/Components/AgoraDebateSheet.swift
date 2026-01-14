@@ -139,8 +139,10 @@ struct AgoraDebateSheet: View {
     // MARK: - Animated Debate Section
     private var animatedDebateSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("📜 Canlı Tartışma")
+            HStack(spacing: 6) {
+                Image(systemName: "scroll.fill")
+                    .foregroundColor(.cyan)
+                Text("Canlı Tartışma")
                     .font(.headline)
                     .foregroundColor(.white)
                 
@@ -257,9 +259,13 @@ struct AgoraDebateSheet: View {
     // MARK: - All Modules with "Why?" Buttons
     private var allModulesWithWhySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("🔍 Modül Detayları")
-                .font(.headline)
-                .foregroundColor(.white)
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.cyan)
+                Text("Modül Detayları")
+                    .font(.headline)
+                    .foregroundColor(.white)
+            }
             
             Text("Her modülün neden böyle düşündüğünü öğrenmek için 'Neden?' butonuna tıklayın")
                 .font(.caption2)
@@ -405,10 +411,15 @@ struct AgoraDebateSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Divider().background(color.opacity(0.3))
                     
-                    Text("📚 Detaylı Açıklama:")
-                        .font(.caption)
-                        .bold()
-                        .foregroundColor(color)
+                    HStack(spacing: 4) {
+                        Image(systemName: "book.fill")
+                            .font(.caption)
+                            .foregroundColor(color)
+                        Text("Detaylı Açıklama:")
+                            .font(.caption)
+                            .bold()
+                            .foregroundColor(color)
+                    }
                     
                     Text(whyExplanation)
                         .font(.caption2)
@@ -473,9 +484,13 @@ struct AgoraDebateSheet: View {
     // MARK: - Claim vs Objection Summary
     private var claimObjectionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("📊 Oylama Özeti")
-                .font(.caption)
-                .foregroundColor(.gray)
+            HStack(spacing: 6) {
+                Image(systemName: "chart.bar.fill")
+                    .foregroundColor(.cyan)
+                Text("Oylama Özeti")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
             
             HStack(spacing: 12) {
                 voteSummaryCard(count: supportCount, label: "DESTEK", color: .green)
@@ -510,10 +525,14 @@ struct AgoraDebateSheet: View {
             HStack {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundColor(.red)
-                Text("🚫 VETOLAR")
-                    .font(.caption)
-                    .bold()
-                    .foregroundColor(.red)
+                HStack(spacing: 4) {
+                    Image(systemName: "nosign")
+                        .foregroundColor(.red)
+                    Text("VETOLAR")
+                        .font(.caption)
+                        .bold()
+                        .foregroundColor(.red)
+                }
             }
             
             Text("Bu modüller karara VETO koydu - işlem engellendi:")
@@ -549,7 +568,7 @@ struct AgoraDebateSheet: View {
             HStack {
                 Image(systemName: "book.fill")
                     .foregroundColor(.blue)
-                Text("📖 Terim Sözlüğü")
+                Text("Terim Sözlüğü")
                     .font(.headline)
                     .foregroundColor(.white)
             }
@@ -592,7 +611,7 @@ struct AgoraDebateSheet: View {
             HStack {
                 Image(systemName: "lightbulb.fill")
                     .foregroundColor(.yellow)
-                Text("💡 Ne Öğrendik?")
+                Text("Ne Öğrendik?")
                     .font(.headline)
                     .foregroundColor(.white)
             }

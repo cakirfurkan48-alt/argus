@@ -24,18 +24,19 @@ final class ArgusDataService {
         print("📡 Batch Quote: \(symbols.count) sembol")
         var result: [String: Quote] = [:]
         
-        // Chunk'lar halinde çek (8'li gruplar)
-        let chunks = symbols.chunked(into: 8)
+        // 50'lik gruplar halinde batch çek (Yahoo limiti ~50-100 sembol)
+        let chunks = symbols.chunked(into: 50)
         for chunk in chunks {
-            try await withThrowingTaskGroup(of: (String, Quote).self) { group in
+            do {
+                let batchResult = try await yahoo.fetchBatchQuotes(symbols: chunk)
+                result.merge(batchResult) { _, new in new }
+            } catch {
+                print("⚠️ Batch failed, falling back to single requests: \(error)")
+                // Fallback: Tek tek çek (eski yöntem)
                 for symbol in chunk {
-                    group.addTask {
-                        let quote = try await self.yahoo.fetchQuote(symbol: symbol)
-                        return (symbol, quote)
+                    if let quote = try? await yahoo.fetchQuote(symbol: symbol) {
+                        result[symbol] = quote
                     }
-                }
-                for try await (sym, quote) in group {
-                    result[sym] = quote
                 }
             }
         }

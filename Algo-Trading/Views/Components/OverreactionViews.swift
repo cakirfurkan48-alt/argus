@@ -40,9 +40,13 @@ struct OverreactionCardView: View {
             }
             
             if let result = viewModel.overreactionResult {
-                 Text("⚠️ \(result.shockType.rawValue) Tespiti: Skor \(Int(result.score))/100")
-                    .font(.subheadline)
-                    .foregroundColor(.orange)
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("\(result.shockType.rawValue) Tespiti: Skor \(Int(result.score))/100")
+                        .font(.subheadline)
+                        .foregroundColor(.orange)
+                }
             } else {
                  Text("Şu an aşırı tepki fırsatı/kriteri oluşmadı.")
                     .font(.caption)
@@ -62,11 +66,7 @@ struct OverreactionCardView: View {
             }
         }
         .contextMenu {
-             Button {
-                 Task { await viewModel.simulateOverreactionTest(symbol: symbol) }
-             } label: {
-                 Label("Simülasyon Testi (Crash)", systemImage: "hammer.fill")
-             }
+             // Simülasyon testi kaldırıldı (Prod için)
         }
         .sheet(isPresented: $showDetail) {
             if let res = viewModel.overreactionResult {
@@ -193,10 +193,15 @@ struct OverreactionDetailSheet: View {
                         .padding(.horizontal)
                         
                         // Disclaimer
-                        Text("⚠️ Bu modül 'Lab Mode' kapsamındadır. Argus ana skorunu etkilemez. Sunulan trade planı istatistiksel overreaction modeline dayanır ve kesinlikle yatırım tavsiyesi değildir.")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                            Text("Bu modül 'Lab Mode' kapsamındadır. Argus ana skorunu etkilemez. Sunulan trade planı istatistiksel overreaction modeline dayanır ve kesinlikle yatırım tavsiyesi değildir.")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .multilineTextAlignment(.center)
+                        }
                             .padding(.horizontal)
                             .padding(.bottom, 40)
                     }

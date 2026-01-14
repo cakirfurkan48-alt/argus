@@ -150,6 +150,7 @@ class AutoPilotExecutionManager {
             orionScore: p.scores.orion,
             aetherScore: p.scores.aether,
             hermesScore: p.scores.hermes,
+            demeterScore: nil,
             argusFinalScore: context.argusFinalScore,
             dataQualityScore: p.dataQualityScore,
             fundamentalsPartial: false,

@@ -44,6 +44,36 @@ enum NewsSentiment: String, Codable, CaseIterable, Sendable {
     case neutral = "neutral"
     case weakNegative = "weak_negative"
     case strongNegative = "strong_negative"
+    
+    var displayTitle: String {
+        switch self {
+        case .strongPositive: return "Çok Olumlu"
+        case .weakPositive: return "Olumlu"
+        case .neutral: return "Nötr"
+        case .weakNegative: return "Olumsuz"
+        case .strongNegative: return "Çok Olumsuz"
+        }
+    }
+    
+    var emoji: String {
+        switch self {
+        case .strongPositive: return "🚀"
+        case .weakPositive: return "📈"
+        case .neutral: return "😐"
+        case .weakNegative: return "📉"
+        case .strongNegative: return "🚨"
+        }
+    }
+    
+    var colorName: String {
+        switch self {
+        case .strongPositive: return "Green"
+        case .weakPositive: return "Mint" // Veya Blue
+        case .neutral: return "Gray"
+        case .weakNegative: return "Orange"
+        case .strongNegative: return "Red"
+        }
+    }
 }
 
 // MARK: - 1.3 NewsInsight

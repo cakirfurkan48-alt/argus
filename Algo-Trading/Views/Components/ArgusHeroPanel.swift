@@ -14,7 +14,7 @@ struct ArgusHeroPanel: View {
     var hermesScore: Double { decision?.hermesScore ?? 0 }
     var orionScore: Double { decision?.orionScore ?? 0 }
     var aetherScore: Double { decision?.aetherScore ?? 0 }
-    var cronosScore: Double { decision?.cronosScore ?? 0 }
+    var demeterScore: Double { decision?.demeterScore ?? 0 }
     var athenaScore: Double { decision?.athenaScore ?? 0 }
     
     var finalScore: Double { decision?.finalScoreCore ?? 0 }
@@ -325,7 +325,7 @@ struct SystemScoreCard: View {
         case .aether: return .aether
         case .hermes: return .hermes
         case .orion: return .orion
-        case .chronos: return .cronos
+        case .demeter: return .demeter
         case .athena: return .athena
         case .poseidon: return .poseidon
         case .phoenix: return .phoenix

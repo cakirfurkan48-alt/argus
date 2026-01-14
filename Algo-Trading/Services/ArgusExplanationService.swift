@@ -21,7 +21,15 @@ final class ArgusExplanationService: Sendable {
     // In-Memory Cache: Key = "SYMBOL_FINAL_SCORE_DATE_HOUR"
     private var cache: [String: ArgusExplanation] = [:]
     
-    private init() {}
+    private init() {
+        // Load cache from disk
+        Task {
+            if let loaded: [String: ArgusExplanation] = await ArgusDataStore.shared.load(key: "argus_explanation_cache") {
+                self.cache = loaded
+                print("🧠 ArgusExplanation: Loaded \(loaded.count) items from disk cache.")
+            }
+        }
+    }
     
     // MARK: - Chat Functionality
     
@@ -78,13 +86,13 @@ final class ArgusExplanationService: Sendable {
     }
     
     func generateExplanation(for decision: ArgusDecisionResult) async throws -> ArgusExplanation {
-        // 1. Check Cache (Throttling: 1 Hour Rule)
+        // 1. Check Cache (Throttling: 6 Hour Rule - Extended to save LLM quota)
         // Prevent API spam by reusing valid explanations for the same symbol
         let cacheKey = "\(decision.symbol)_v2"
         if let cached = cache[cacheKey], !cached.isOffline {
              let age = Date().timeIntervalSince(cached.createdAt)
-             if age < 3600 { // 1 Hour
-                 print("♻️ Argus: Using Cached Explanation for \(decision.symbol) (\(Int(age))s old)")
+             if age < 21600 { // 6 Hours (was 1 hour)
+                 print("♻️ Argus: Using Cached Explanation for \(decision.symbol) (\(Int(age/3600))h old)")
                  return cached
              }
         }
@@ -102,14 +110,17 @@ final class ArgusExplanationService: Sendable {
             explanation.createdAt = Date()
             
             // Cache & Return
-            cache[cacheKey] = explanation
+            self.cache[cacheKey] = explanation
+            self.persistCache()
+            
             return explanation
             
         } catch {
             print("❌ Groq Explanation Failed: \(error)")
             // Fallback with Real Error Reason
             let fallback = generateOfflineExplanation(for: decision, reason: error.localizedDescription)
-            cache[cacheKey] = fallback
+            self.cache[cacheKey] = fallback
+            self.persistCache()
             return fallback
         }
     }
@@ -170,30 +181,19 @@ final class ArgusExplanationService: Sendable {
         let decisionString = String(data: decisionData, encoding: .utf8) ?? "{}"
         
         return """
-        Sen Argus Trading Asistanı'nın beynisin. Aşağıda bir hisse senedi için hesaplanmış detaylı KARAR OBJESİ (JSON) var.
-        
-        BAĞLAM: \(decision.symbol)
-        
-        ÖZET SKORLAR:
-        - CORE: \(Int(decision.finalScoreCore))/100 -> \(decision.finalActionCore.rawValue)
-        - PULSE: \(Int(decision.finalScorePulse))/100 -> \(decision.finalActionPulse.rawValue)
-        
-        BİLEŞENLER:
-        1. ATLAS (Fundamental): \(Int(decision.atlasScore))
-        2. ORION (Teknik): \(Int(decision.orionScore))
-        3. AETHER (Makro): \(Int(decision.aetherScore))
-        4. HERMES (Haber): \(Int(decision.hermesScore))
-        
-        GÖREV:
-        Kullanıcıya bütüncül yorum üret.
+        SEN 'ARGUS'SUN. Bu algoritmik ticaret sisteminin YÖNETİCİ ZEKASISIN.
+        GÖREVİN: Aşağıdaki 'Karar JSON' verisini analiz ederek kullanıcıya YATIRIMCI GÖZÜYLE NET, PROFESYONEL VE ETKİLEYİCİ bir açıklama yapmak.
         
         KURALLAR:
-        1. YANIT SADECE TÜRKÇE OLACAK. (Asla İngilizce veya Çince karakter kullanma).
-        2. Profesyonel ve net ol.
+        1. Asla JSON yapısından bahsetme. Doğrudan analiz yap.
+        2. ToneTag 'balanced' ise objektif, 'bullish' ise heyecanlı, 'bearish' ise uyarıcı ol.
+        3. En fazla 3 madde işareti (bullet) kullan.
+        4. Summary kısmı 2 cümleyi geçmesin.
+        5. Eğer Orion (Teknik) veya Atlas (Temel) skorları zayıfsa bunu belirt.
         
-        ÇIKTI (JSON):
+        ÇIKTI FORMATI (JSON):
         {
-          "title": "Kısa Başlık",
+          "title": "Kısa Çarpıcı Başlık",
           "summary": "2-3 cümlelik özet.",
           "bullets": ["Madde 1", "Madde 2", "Madde 3"],
           "riskNote": "Varsa risk uyarısı yoksa null",
@@ -203,5 +203,12 @@ final class ArgusExplanationService: Sendable {
         VERİLER:
         \(decisionString)
         """
+    }
+    
+    private func persistCache() {
+        let snapshot = self.cache
+        Task {
+            await ArgusDataStore.shared.save(snapshot, key: "argus_explanation_cache")
+        }
     }
 }

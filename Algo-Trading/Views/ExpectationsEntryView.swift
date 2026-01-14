@@ -117,9 +117,14 @@ struct ExpectationsEntryView: View {
                 ScheduleRow(indicator: "GDP", timing: "Çeyreklik - Ocak, Nisan, Temmuz, Ekim", icon: "chart.bar.fill", color: .mint)
             }
             
-            Text("💡 Veriler genellikle 15:30 veya 16:00 TSİ'de açıklanır")
-                .font(.caption2)
-                .foregroundColor(Theme.textSecondary)
+            HStack(spacing: 4) {
+                Image(systemName: "lightbulb.fill")
+                    .font(.caption2)
+                    .foregroundColor(.yellow)
+                Text("Veriler genellikle 15:30 veya 16:00 TSİ'de açıklanır")
+                    .font(.caption2)
+                    .foregroundColor(Theme.textSecondary)
+            }
                 .padding(.top, 4)
         }
         .padding()
@@ -201,7 +206,9 @@ struct ExpectationsEntryView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Link(destination: URL(string: "https://www.investing.com/economic-calendar/")!) {
                     HStack {
-                        Text("📊 Investing.com Ekonomik Takvim")
+                        Image(systemName: "chart.bar.fill")
+                            .font(.caption)
+                        Text("Investing.com Ekonomik Takvim")
                             .font(.caption)
                         Image(systemName: "arrow.up.right.square")
                             .font(.caption2)
@@ -211,7 +218,9 @@ struct ExpectationsEntryView: View {
                 
                 Link(destination: URL(string: "https://tradingeconomics.com/calendar")!) {
                     HStack {
-                        Text("📈 Trading Economics Takvim")
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(.caption)
+                        Text("Trading Economics Takvim")
                             .font(.caption)
                         Image(systemName: "arrow.up.right.square")
                             .font(.caption2)

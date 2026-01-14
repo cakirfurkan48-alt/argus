@@ -271,7 +271,11 @@ actor PaperBroker: BrokerProtocol {
                     orionScoreAtEntry: existing.orionScoreAtEntry,
                     atlasScoreAtEntry: existing.atlasScoreAtEntry,
                     aetherScoreAtEntry: existing.aetherScoreAtEntry,
-                    phoenixScoreAtEntry: existing.phoenixScoreAtEntry
+                    phoenixScoreAtEntry: existing.phoenixScoreAtEntry,
+                    allModuleScores: nil,
+                    systemDecision: nil,
+                    ignoredWarnings: nil,
+                    regime: nil
                 )
                 
                 // Save to Chiron DataLake

@@ -29,6 +29,7 @@ struct AutoPilotDecision: Identifiable, Codable, Sendable {
     let orionScore: Double?        // Technical
     let aetherScore: Double?       // Macro
     let hermesScore: Double?       // News/Sentiment
+    let demeterScore: Double?      // Sector
     let argusFinalScore: Double?   // Aggregated
     
     // Data Quality

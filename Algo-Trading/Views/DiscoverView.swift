@@ -66,25 +66,6 @@ struct DiscoverView: View {
                             .padding(.horizontal)
                         }
                         
-                        // MARK: - 4. Wall Street Radar
-                        if !viewModel.radarFeed.isEmpty {
-                            VStack(alignment: .leading, spacing: 16) {
-                                DiscoverSectionHeader(title: "Wall Street Radarı 📡", subtitle: "Büyük Bankaların Analizleri")
-                                
-                                LazyVStack(spacing: 12) {
-                                    ForEach(viewModel.radarFeed) { item in
-                                        RadarCardView(item: item)
-                                            .onTapGesture {
-                                                if let url = URL(string: item.url) {
-                                                    UIApplication.shared.open(url)
-                                                }
-                                            }
-                                    }
-                                }
-                                .padding(.horizontal)
-                            }
-                        }
-                        
                         // Bottom Padding for TabBar
                         Color.clear.frame(height: 100)
                     }

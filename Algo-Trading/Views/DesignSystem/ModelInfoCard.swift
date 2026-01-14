@@ -9,9 +9,9 @@ struct SystemInfoCard: View {
             Color.black.opacity(0.4).ignoresSafeArea()
                 .onTapGesture { withAnimation { isPresented = false } }
             
-            GlassCard(cornerRadius: 24, brightness: 0.1) {
-                VStack(spacing: 20) {
-                    // Header
+            // Card Container (No GlassCard, use Direct Background)
+            VStack(spacing: 20) {
+                // Header
                     HStack {
                         Image(systemName: entity.icon)
                             .font(.title)
@@ -34,8 +34,8 @@ struct SystemInfoCard: View {
                     
                     // Description
                     Text(entity.description)
-                        .font(.body)
-                        .foregroundColor(Theme.textSecondary)
+                        .font(.custom("Menlo", size: 14)) // Monospaced for terminal feel
+                        .foregroundColor(SanctumTheme.ghostGrey)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(4)
                     
@@ -46,23 +46,27 @@ struct SystemInfoCard: View {
                     }
                 }
                 .padding(24)
-            }
+
+            .background(SanctumTheme.bg) // Deep Navy Background
+            .cornerRadius(12) // FIXED: Geometric Standard 12px
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(color(for: entity).opacity(0.3), lineWidth: 1)
+            )
             .frame(maxWidth: 340)
-            .shadow(color: color(for: entity).opacity(0.3), radius: 20)
+            .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
             .transition(.scale.combined(with: .opacity))
         }
     }
     
     private func color(for entity: ArgusSystemEntity) -> Color {
-        // Map string colors to Color
         switch entity {
-        case .argus, .corse, .atlas: return .blue
-        case .aether: return .cyan
-        case .orion, .pulse: return .purple
-        case .chronos, .hermes: return .orange
-        case .shield: return .green
-        case .poseidon: return .indigo
-        case .council: return .yellow
+        case .atlas: return SanctumTheme.atlasColor      // Titan Gold
+        case .orion: return SanctumTheme.orionColor      // Hologram Blue
+        case .aether: return SanctumTheme.aetherColor    // Ghost Grey
+        case .hermes: return SanctumTheme.hermesColor    // Orange
+        case .demeter: return SanctumTheme.demeterColor  // Aurora Green
+        case .argus, .council, .corse, .pulse, .shield, .poseidon: return SanctumTheme.chironColor // White/System
         }
     }
     

@@ -6,7 +6,6 @@ struct ArgusSimulatorView: View {
     @State private var orionScore: Double = 50
     @State private var aetherScore: Double = 50
     @State private var athenaScore: Double = 50
-    @State private var cronosScore: Double = 50
     @State private var hermesScore: Double = 50
     @State private var demeterScore: Double = 50
     
@@ -54,7 +53,6 @@ struct ArgusSimulatorView: View {
                     sliderRow(label: "ATHENA (Faktör)", value: $athenaScore, color: .cyan)
                     sliderRow(label: "ORION (Teknik)", value: $orionScore, color: .purple)
                     sliderRow(label: "AETHER (Makro)", value: $aetherScore, color: .orange)
-                    sliderRow(label: "CRONOS (Zaman)", value: $cronosScore, color: .teal)
                     sliderRow(label: "HERMES (Haber)", value: $hermesScore, color: .pink)
                     sliderRow(label: "DEMETER (Sektör)", value: $demeterScore, color: .green)
                 }
@@ -143,7 +141,6 @@ struct ArgusSimulatorView: View {
             orionDetails: nil,
             aether: aetherScore,
             hermes: hermesScore,
-            cronos: cronosScore,
             athena: athenaScore,
             phoenixAdvice: nil,
             demeterScore: demeterScore,
@@ -156,8 +153,8 @@ struct ArgusSimulatorView: View {
             atlasScore = 50
             orionScore = 50
             aetherScore = 50
+            aetherScore = 50
             athenaScore = 50
-            cronosScore = 50
             hermesScore = 50
             demeterScore = 50
         }

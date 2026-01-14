@@ -36,7 +36,7 @@ final class MacroRegimeService: @unchecked Sendable {
     // Internal Cache
     private var cachedResult: MacroResult?
     private var lastFetchTime: Date?
-    private let cacheDuration: TimeInterval = 15 * 60 // 15 Minutes
+    private let cacheDuration: TimeInterval = 5 * 60 // 5 Minutes (reduced for faster updates)
     
     private init() {
         // Startup Protection
@@ -48,11 +48,11 @@ final class MacroRegimeService: @unchecked Sendable {
     func evaluate(forceRefresh: Bool = false) async -> MacroResult {
         // 1. Check Cache
         if !forceRefresh, let cached = cachedResult, let last = lastFetchTime, -last.timeIntervalSinceNow < cacheDuration {
-            print("✅ Aether: Using Valid Cached Result (Score: \(cached.output.score10))")
+            // DEBUG: print("✅ Aether: Using Valid Cached Result (Score: \(cached.output.score10))")
             return cached
         }
         
-        print("DEBUG: Aether 4.0 - Evaluating Deterministic Macro Regime...")
+        // DEBUG: print("DEBUG: Aether 4.0 - Evaluating Deterministic Macro Regime...")
         let startTime = Date()
         
         // 2. Fetch Data (Parallel)
@@ -188,17 +188,17 @@ final class MacroRegimeService: @unchecked Sendable {
         self.saveWidgetData(rating: legacy, market: marketData)
         
         // 🔍 AETHER FORENSIC REPORT
-        print("\n=== 🔍 AETHER FORENSIC CARD REPORT ===")
-        print("[01] Enflasyon (CPI):   \(breakdown["cpi"] ?? 0)/100 [Status: \(detResult.statuses["cpi"] ?? "MISSING")]")
-        print("[02] İstihdam (Labor):  \(breakdown["labor"] ?? 0)/100 [Status: \(detResult.statuses["labor"] ?? "MISSING")]")
-        print("[03] Faizler (Rates):   \(breakdown["rates"] ?? 0)/100 [Status: \(detResult.statuses["rates"] ?? "MISSING")]")
-        print("[04] Büyüme (Growth):   \(breakdown["growth"] ?? 0)/100 [Status: \(detResult.statuses["growth"] ?? "MISSING")]")
-        print("[05] Trend (Equity):    \(breakdown["trend"] ?? 0)/100 [Status: \(detResult.statuses["trend"] ?? "MISSING")]")
-        print("[06] Volatilite (VIX):  \(breakdown["vix"] ?? 0)/100 [Status: \(detResult.statuses["vix"] ?? "MISSING")]")
-        print("[07] Altın (GLD):       \(breakdown["gld"] ?? 0)/100 [Status: \(detResult.statuses["gld"] ?? "MISSING")]")
-        print("[08] Kripto (BTC):      \(breakdown["btc"] ?? 0)/100 [Status: \(detResult.statuses["btc"] ?? "MISSING")]")
-        print("=== GRADE: \(MacroEnvironmentRating.letterGrade(for: detResult.totalScore)) ===")
-        print("=== END REPORT ===\n")
+        // DEBUG: print("\n=== 🔍 AETHER FORENSIC CARD REPORT ===")
+        // DEBUG: print("[01] Enflasyon (CPI):   \(breakdown["cpi"] ?? 0)/100 [Status: \(detResult.statuses["cpi"] ?? "MISSING")]")
+        // DEBUG: print("[02] İstihdam (Labor):  \(breakdown["labor"] ?? 0)/100 [Status: \(detResult.statuses["labor"] ?? "MISSING")]")
+        // DEBUG: print("[03] Faizler (Rates):   \(breakdown["rates"] ?? 0)/100 [Status: \(detResult.statuses["rates"] ?? "MISSING")]")
+        // DEBUG: print("[04] Büyüme (Growth):   \(breakdown["growth"] ?? 0)/100 [Status: \(detResult.statuses["growth"] ?? "MISSING")]")
+        // DEBUG: print("[05] Trend (Equity):    \(breakdown["trend"] ?? 0)/100 [Status: \(detResult.statuses["trend"] ?? "MISSING")]")
+        // DEBUG: print("[06] Volatilite (VIX):  \(breakdown["vix"] ?? 0)/100 [Status: \(detResult.statuses["vix"] ?? "MISSING")]")
+        // DEBUG: print("[07] Altın (GLD):       \(breakdown["gld"] ?? 0)/100 [Status: \(detResult.statuses["gld"] ?? "MISSING")]")
+        // DEBUG: print("[08] Kripto (BTC):      \(breakdown["btc"] ?? 0)/100 [Status: \(detResult.statuses["btc"] ?? "MISSING")]")
+        // DEBUG: print("=== GRADE: \(MacroEnvironmentRating.letterGrade(for: detResult.totalScore)) ===")
+        // DEBUG: print("=== END REPORT ===\n")
         
         return result
     }
@@ -330,10 +330,10 @@ final class MacroRegimeService: @unchecked Sendable {
     private func fetchSeriesSafe(instrument: CanonicalInstrument) async -> [(Date, Double)] {
         do {
             let result = try await HeimdallOrchestrator.shared.requestMacroSeries(instrument: instrument, limit: 12)
-            print("✅ FRED: \(instrument.internalId) -> \(result.count) observations")
+            // DEBUG: print("✅ FRED: \(instrument.internalId) -> \(result.count) observations")
             return result
         } catch {
-            print("❌ FRED FAIL: \(instrument.internalId) -> \(error.localizedDescription)")
+            // DEBUG: print("❌ FRED FAIL: \(instrument.internalId) -> \(error.localizedDescription)")
             return []
         }
     }
@@ -437,10 +437,18 @@ final class MacroRegimeService: @unchecked Sendable {
             } else {
                 cpiScore = 100.0 - ((yoyInflation - 2.0) / 3.0 * 100.0)
             }
-            print("📊 AETHER CPI: YoY=\(String(format: "%.2f", yoyInflation))% -> Score=\(Int(cpiScore))")
+            // DEBUG: print("📊 AETHER CPI: YoY=\(String(format: "%.2f", yoyInflation))% -> Score=\(Int(cpiScore))")
         } else if fred.cpi.count > 0 {
             // Not enough for YoY but have some data
-            print("⚠️ AETHER CPI: Only \(fred.cpi.count) observations, need 12 for YoY")
+            // DEBUG: print("⚠️ AETHER CPI: Only \(fred.cpi.count) observations, need 12 for YoY")
+        }
+        
+        // AETHER v5.1: Beklenti Sürprizi Etkisi
+        // Kullanıcının girdiği beklentilerden sapma skora etki eder (±10 puan)
+        let cpiSurprise = ExpectationsStore.shared.getSurpriseImpactSync(for: .cpi)
+        if cpiSurprise != 0 {
+            cpiScore = min(100, max(0, cpiScore + cpiSurprise))
+            print("📊 AETHER: CPI Sürpriz Etkisi = \(String(format: "%+.1f", cpiSurprise)) puan → Yeni Skor: \(Int(cpiScore))")
         }
         process("cpi", cpiScore, fred.cpi.last?.0, "Monthly", config.weights.cpi)
         
@@ -459,7 +467,14 @@ final class MacroRegimeService: @unchecked Sendable {
             } else {
                 laborScore = 10 // Crisis
             }
-            print("📊 AETHER LABOR: Unemployment=\(String(format: "%.1f", ur))% -> Score=\(Int(laborScore))")
+            // DEBUG: print("📊 AETHER LABOR: Unemployment=\(String(format: "%.1f", ur))% -> Score=\(Int(laborScore))")
+        }
+        
+        // AETHER v5.1: Beklenti Sürprizi - İşsizlik
+        let laborSurprise = ExpectationsStore.shared.getSurpriseImpactSync(for: .unemployment)
+        if laborSurprise != 0 {
+            laborScore = min(100, max(0, laborScore + laborSurprise))
+            print("📊 AETHER: Labor Sürpriz Etkisi = \(String(format: "%+.1f", laborSurprise)) puan → Yeni Skor: \(Int(laborScore))")
         }
         process("labor", laborScore, fred.unrate.last?.0, "Monthly", config.weights.labor)
         
@@ -479,7 +494,7 @@ final class MacroRegimeService: @unchecked Sendable {
             } else {
                 ratesScore = max(10, 30 + (spread * 20)) // < -0.5 = 10-30
             }
-            print("📊 AETHER RATES: 10Y-2Y Spread=\(String(format: "%.2f", spread))% -> Score=\(Int(ratesScore))")
+            // DEBUG: print("📊 AETHER RATES: 10Y-2Y Spread=\(String(format: "%.2f", spread))% -> Score=\(Int(ratesScore))")
         }
         process("rates", ratesScore, fred.dgs10.last?.0, "Daily", config.weights.rates)
         
@@ -501,7 +516,7 @@ final class MacroRegimeService: @unchecked Sendable {
             } else {
                 growthScore = max(5, 40 + (momChange * 0.15)) // < -100K = 5-20
             }
-            print("📊 AETHER GROWTH: Payrolls MoM=\(String(format: "%.0f", momChange))K -> Score=\(Int(growthScore))")
+            // DEBUG: print("📊 AETHER GROWTH: Payrolls MoM=\(String(format: "%.0f", momChange))K -> Score=\(Int(growthScore))")
         }
         process("growth", growthScore, fred.payems.last?.0, "Monthly", config.weights.growth)
         
@@ -585,7 +600,7 @@ final class MacroRegimeService: @unchecked Sendable {
                     gldScore = 85 // Gold weak = risk on
                 }
                 statuses["gld"] = "OK"
-                print("📊 AETHER GLD: Deviation=\(String(format: "%.1f", deviation))% -> Score=\(Int(gldScore))")
+                // DEBUG: print("📊 AETHER GLD: Deviation=\(String(format: "%.1f", deviation))% -> Score=\(Int(gldScore))")
             } else {
                 statuses["gld"] = "FLASH (\(count))"
             }
@@ -618,7 +633,7 @@ final class MacroRegimeService: @unchecked Sendable {
                     btcScore = 10 // Crypto crash = risk off
                 }
                 statuses["btc"] = "OK"
-                print("📊 AETHER BTC: Deviation=\(String(format: "%.1f", deviation))% -> Score=\(Int(btcScore))")
+                // DEBUG: print("📊 AETHER BTC: Deviation=\(String(format: "%.1f", deviation))% -> Score=\(Int(btcScore))")
             } else {
                 statuses["btc"] = "FLASH (\(count))"
             }
@@ -666,7 +681,7 @@ final class MacroRegimeService: @unchecked Sendable {
                 } else {
                     claimsScore = 50 - min(40, trend.strength * 0.6) // 10-50
                 }
-                print("📊 AETHER CLAIMS: Trend=\(trend.direction) (\(String(format: "%.1f", trend.percentChange))%) -> Score=\(Int(claimsScore))")
+                // DEBUG: print("📊 AETHER CLAIMS: Trend=\(trend.direction) (\(String(format: "%.1f", trend.percentChange))%) -> Score=\(Int(claimsScore))")
                 statuses["claims"] = "OK"
             }
         } else {
@@ -707,14 +722,14 @@ final class MacroRegimeService: @unchecked Sendable {
         let totalCatWeight = 1.5 + 1.0 + 0.8
         let categorizedScore = (leadingAvg * 1.5 + coincidentAvg * 1.0 + laggingAvg * 0.8) / totalCatWeight
         
-        print("═══════════════════════════════════════════════════════════════")
-        print("📊 AETHER v5 KATEGORİ SKORLARI:")
-        print("   🟢 Öncü (x1.5):     \(String(format: "%.0f", leadingAvg))")
-        print("   🟡 Eşzamanlı (x1.0): \(String(format: "%.0f", coincidentAvg))")
-        print("   🔴 Gecikmeli (x0.8): \(String(format: "%.0f", laggingAvg))")
-        print("   ══════════════════════════════════")
-        print("   📈 FİNAL SKOR:      \(String(format: "%.0f", categorizedScore))/100")
-        print("═══════════════════════════════════════════════════════════════")
+        // DEBUG: print("═══════════════════════════════════════════════════════════════")
+        // DEBUG: print("📊 AETHER v5 KATEGORİ SKORLARI:")
+        // DEBUG: print("   🟢 Öncü (x1.5):     \(String(format: "%.0f", leadingAvg))")
+        // DEBUG: print("   🟡 Eşzamanlı (x1.0): \(String(format: "%.0f", coincidentAvg))")
+        // DEBUG: print("   🔴 Gecikmeli (x0.8): \(String(format: "%.0f", laggingAvg))")
+        // DEBUG: print("   ══════════════════════════════════")
+        // DEBUG: print("   📈 FİNAL SKOR:      \(String(format: "%.0f", categorizedScore))/100")
+        // DEBUG: print("═══════════════════════════════════════════════════════════════")
         
         return DeterministicResult(totalScore: categorizedScore, breakdown: breakdown, statuses: statuses, penalty: penaltyFlag)
     }

@@ -210,7 +210,6 @@ struct ArgusSanctumView: View {
                             .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
                             .shadow(radius: 5)
                     }
-                    .allowsHitTesting(true) // Sadece buton dokunulabilir olsun
                     
                     Spacer()
                 }
@@ -219,7 +218,7 @@ struct ArgusSanctumView: View {
             .padding(.top, 60) // Dynamic Island Safe Area
             .padding(.leading, 16)
             .zIndex(1000)
-            .allowsHitTesting(false) // Container dokunmaları engellemesin
+
             
             VStack {
                 // Header with Price Info

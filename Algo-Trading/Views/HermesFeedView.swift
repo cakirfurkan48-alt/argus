@@ -140,8 +140,8 @@ struct DiscoveryNewsCard: View {
     let insight: NewsInsight
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header: Symbol & Hype
+        VStack(alignment: .leading, spacing: 10) {
+            // Header: Symbol & Sentiment Badge
             HStack {
                 Text(insight.symbol)
                     .font(.caption)
@@ -154,10 +154,17 @@ struct DiscoveryNewsCard: View {
                 
                 Spacer()
                 
-                // Sentiment Dot
-                Circle()
-                    .fill(colorForSentiment(insight.sentiment))
-                    .frame(width: 8, height: 8)
+                // Enhanced Sentiment Badge
+                HStack(spacing: 4) {
+                    Text(insight.sentiment.displayTitle) // Türkçe Başlık
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(colorForSentiment(insight.sentiment).opacity(0.15))
+                .foregroundColor(colorForSentiment(insight.sentiment))
+                .cornerRadius(8)
             }
             
             // Headline
@@ -168,23 +175,40 @@ struct DiscoveryNewsCard: View {
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
             
+            // Impact Comment (Detay)
+            // Kullanıcı bu detayı istedi
+            if !insight.impactSentenceTR.isEmpty {
+                Text(insight.impactSentenceTR)
+                    .font(.caption)
+                    .italic()
+                    .foregroundColor(Theme.textSecondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+            }
+            
             Spacer(minLength: 0)
             
-            // Footer: Impact or Time
+            // Footer: Time & Viral
             HStack {
                 Text(timeAgo(insight.createdAt))
                     .font(.caption2)
                     .foregroundColor(.gray)
+                
                 Spacer()
+                
                 if HermesHypeEngine.shared.isViral(symbol: insight.symbol) {
-                    Image(systemName: "flame.fill")
-                        .font(.caption2)
-                        .foregroundColor(.orange)
+                    HStack(spacing: 2) {
+                        Image(systemName: "flame.fill")
+                        Text("Viral")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.orange)
                 }
             }
         }
         .padding(12)
-        .frame(minHeight: 140)
+        .frame(minHeight: 160) // Kart yüksekliği biraz artırıldı
         .background(Theme.cardBackground)
         .cornerRadius(16)
         .overlay(

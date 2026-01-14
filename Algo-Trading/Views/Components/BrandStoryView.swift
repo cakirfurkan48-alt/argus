@@ -134,28 +134,28 @@ struct BrandStoryView: View {
                     Divider()
                         .background(Theme.secondaryBackground)
                     
-                    // Chronos Section (New)
+                    // Demeter Section (New)
                     VStack(spacing: 16) {
-                        ArgusEyeView(mode: .chronos, size: 80)
+                        ArgusEyeView(mode: .demeter, size: 80)
                         
                         HStack {
-                            Text("CHRONOS")
+                            Text("DEMETER")
                                 .font(.system(size: 32, weight: .bold, design: .rounded))
-                                .foregroundColor(ArgusMode.chronos.color)
+                                .foregroundColor(ArgusMode.demeter.color) // Mode enum updated
                                 .tracking(4)
                             
-                            Button(action: { showInfo(.chronos) }) {
+                            Button(action: { showInfo(.demeter) }) {
                                 Image(systemName: "info.circle")
-                                    .foregroundColor(ArgusMode.chronos.color)
+                                    .foregroundColor(ArgusMode.demeter.color)
                                     .font(.title2)
                             }
                         }
                         
-                        Text("The Time Traveler")
+                        Text("The Harvest Guardian")
                             .font(.headline)
                             .foregroundColor(Theme.textSecondary)
                         
-                        Text("Mitolojide zamanın tanrısı. Geçmiş veriler üzerinde yolculuk yaparak algoritmik stratejileri test eder.\n\n'Tarih tekerrürden ibarettir' ilkesiyle çalışır. Hangi stratejinin (RSI, MACD, Bollinger) bu hissede geçmişte daha iyi çalıştığını analiz eder.")
+                        Text("Yunan mitolojisinde tarım ve bereket tanrıçası. Piyasada sermayenin nereye aktığını (Sector Rotation) analiz eder.\n\nChronos zamanı ölçerdi, Demeter ise verimi ölçer. Hangi sektörün 'hasat zamanı' geldiğini ve hangisinin nadasa bırakılması gerektiğini söyler.")
                             .font(.body)
                             .foregroundColor(Theme.textPrimary)
                             .multilineTextAlignment(.center)

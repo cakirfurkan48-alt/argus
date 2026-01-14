@@ -26,8 +26,9 @@ final class AutoPilotService: Sendable {
     func scanMarket(
         symbols: [String], 
         equity: Double, 
+        bistEquity: Double, // NEW: TL Equity for BIST
         buyingPower: Double, 
-        bistBuyingPower: Double, // NEW: TL Balance for BIST
+        bistBuyingPower: Double,
         portfolio: [String: Trade]
     ) async -> (signals: [TradeSignal], logs: [ScoutLog]) {
         guard !isScanning else { return ([], []) }
@@ -51,11 +52,38 @@ final class AutoPilotService: Sendable {
         
         print("🤖 Auto-Pilot: Argus Engine Scanning \(symbols.count) symbols (Regime: \(aether?.regime.displayName ?? "Unknown"))...")
         
+        // GLOBAL MARKET: Hafta sonu ve piyasa kapalıyken işlem yapma
+        let canTradeGlobal = MarketStatusService.shared.canTrade()
+        if !canTradeGlobal {
+            let status = MarketStatusService.shared.getMarketStatus()
+            let reason: String
+            switch status {
+            case .closed(let r): reason = r
+            case .preMarket: reason = "Pre-Market"
+            case .afterHours: reason = "After-Hours"
+            default: reason = "Piyasa Kapalı"
+            }
+            print("🛑 Auto-Pilot: Global piyasa kapalı (\(reason)). Sadece BIST taraması yapılacak.")
+        }
+        
         for symbol in symbols {
             do {
-                // 1. Determine Correct Buying Power based on Market
+                // 1. Determine Correct Context based on Market
                 let isBist = symbol.uppercased().hasSuffix(".IS")
                 let effectiveBuyingPower = isBist ? bistBuyingPower : buyingPower
+                let effectiveEquity = isBist ? bistEquity : equity
+                
+                // GLOBAL MARKET CLOSED CHECK: Hafta sonu/kapalı saatlerde global işlem yapma
+                if !isBist && !canTradeGlobal {
+                    logs.append(ScoutLog(symbol: symbol, status: "ATLA", reason: "Global piyasa kapalı", score: 0))
+                    continue
+                }
+                
+                // BIST MARKET CLOSED CHECK: Hafta sonu/kapalı saatlerde BIST işlem yapma
+                if isBist && !MarketStatusService.shared.isBistOpen() {
+                    logs.append(ScoutLog(symbol: symbol, status: "ATLA", reason: "BIST piyasası kapalı", score: 0))
+                    continue
+                }
                 
                 // 1. Fetch Data
                 // Priority: Realtime Quote > Candle Close
@@ -85,7 +113,7 @@ final class AutoPilotService: Sendable {
                 let decision = await ArgusAutoPilotEngine.shared.evaluate(
                     symbol: symbol,
                     currentPrice: currentPrice,
-                    equity: equity, // Total Equity (approx)
+                    equity: effectiveEquity, // CORRECT CURRENCY EQUITY
                     buyingPower: effectiveBuyingPower, // CORRECT CURRENCY BALANCE
                     portfolioState: portfolio,
                     candles: candles,
@@ -95,7 +123,7 @@ final class AutoPilotService: Sendable {
                     aetherRating: aether,
                     hermesInsight: nil, // Skipping News for speed/cost in loop
                     argusFinalScore: nil, 
-                    cronosScore: 50.0 
+                    demeterScore: 50.0 
                 )
                 
                 // Capture Log

@@ -26,8 +26,8 @@ final class ChironLearningJob {
         
         // 1. Load trade history
         let trades = await dataLake.loadTradeHistory(symbol: symbol)
-        guard trades.count >= 5 else {
-            print("⏳ Not enough trades for \(symbol) (min 5)")
+        guard trades.count >= 3 else {
+            print("⏳ Not enough trades for \(symbol) (min 3)")
             return
         }
         
@@ -38,7 +38,7 @@ final class ChironLearningJob {
         let pulseAnalysis = analyzeEngine(trades: pulseTrades)
         
         // 3. Generate weight recommendations (LLM for 10+ trades, deterministic otherwise)
-        if corseTrades.count >= 10 {
+        if corseTrades.count >= 5 {
             // Use LLM for intelligent analysis
             let currentCorse = weightStore.getWeights(symbol: symbol, engine: .corse)
             if let llmWeights = await ChironLLMAdapter.shared.recommendWeights(
@@ -56,7 +56,7 @@ final class ChironLearningJob {
             await logLearningEvent(symbol: symbol, engine: .corse, weights: corseWeights)
         }
         
-        if pulseTrades.count >= 10 {
+        if pulseTrades.count >= 5 {
             // Use LLM for intelligent analysis
             let currentPulse = weightStore.getWeights(symbol: symbol, engine: .pulse)
             if let llmWeights = await ChironLLMAdapter.shared.recommendWeights(
@@ -165,7 +165,7 @@ final class ChironLearningJob {
         engine: AutoPilotEngine,
         analysis: EngineAnalysis
     ) -> ChironModuleWeights? {
-        guard analysis.tradeCount >= 5 else { return nil }
+        guard analysis.tradeCount >= 3 else { return nil }
         
         // Get current weights as baseline
         let current = weightStore.getWeights(symbol: symbol, engine: engine)
@@ -175,8 +175,9 @@ final class ChironLearningJob {
         var atlas = current.atlas
         var phoenix = current.phoenix
         var aether = current.aether
-        let hermes = current.hermes
-        let cronos = current.cronos
+        var hermes = current.hermes
+        var demeter = current.demeter
+        var athena = current.athena
         
         // Increase weight for modules that correlate with wins
         let learningRate = 0.1 // Conservative adjustment
@@ -196,18 +197,62 @@ final class ChironLearningJob {
         // Adjust aether based on overall win rate
         if analysis.winRate < 0.4 {
             aether += 0.05 // More macro awareness when losing
+            demeter += 0.03 // Sector awareness too
         }
         
         // Clamp weights to reasonable bounds
-        orion = max(0.1, min(0.5, orion))
-        atlas = max(0.1, min(0.5, atlas))
+        orion = max(0.05, min(0.5, orion))
+        atlas = max(0.05, min(0.5, atlas))
         phoenix = max(0.05, min(0.4, phoenix))
         aether = max(0.05, min(0.3, aether))
+        hermes = max(0.02, min(0.25, hermes))
+        demeter = max(0.02, min(0.25, demeter))
+        athena = max(0.02, min(0.2, athena))
         
-        let reasoning = """
-        Analiz: \(analysis.tradeCount) trade, WinRate: \(Int(analysis.winRate * 100))%, AvgPnL: \(String(format: "%.1f", analysis.avgPnl))%
-        Modül performansı: Orion=\(analysis.modulePerformance["orion"] ?? 0), Atlas=\(analysis.modulePerformance["atlas"] ?? 0)
-        """
+        // Anlaşılır Türkçe açıklama oluştur
+        let winRateInt = Int(analysis.winRate * 100)
+        let avgPnlStr = String(format: "%.1f", analysis.avgPnl)
+        
+        // Özet cümle oluştur
+        var summaryParts: [String] = []
+        
+        // Performans özeti
+        let performanceDesc: String
+        if winRateInt >= 60 {
+            performanceDesc = "🎯 Harika performans"
+        } else if winRateInt >= 50 {
+            performanceDesc = "✅ İyi performans"
+        } else if winRateInt >= 40 {
+            performanceDesc = "⚠️ Geliştirilebilir"
+        } else {
+            performanceDesc = "🔴 Dikkat gerekli"
+        }
+        summaryParts.append("\(performanceDesc) (\(analysis.tradeCount) işlemde %\(winRateInt) başarı)")
+        
+        // Modül değerlendirmesi
+        let orionPerf = analysis.modulePerformance["orion"] ?? 0
+        let atlasPerf = analysis.modulePerformance["atlas"] ?? 0
+        
+        if orionPerf > 2 {
+            summaryParts.append("Orion teknik sinyalleri isabetli 📈")
+        } else if orionPerf < -2 {
+            summaryParts.append("Orion sinyallerinde düzeltme yapıldı")
+        }
+        
+        if atlasPerf > 2 {
+            summaryParts.append("Atlas temel analizi güçlü 💹")
+        } else if atlasPerf < -2 {
+            summaryParts.append("Atlas ağırlığı azaltıldı")
+        }
+        
+        // PnL durumu
+        if analysis.avgPnl > 2 {
+            summaryParts.append("Ortalama kazanç: +%\(avgPnlStr)")
+        } else if analysis.avgPnl < -2 {
+            summaryParts.append("Ortalama kayıp: %\(avgPnlStr)")
+        }
+        
+        let reasoning = summaryParts.joined(separator: ". ")
         
         return ChironModuleWeights(
             orion: orion,
@@ -215,7 +260,8 @@ final class ChironLearningJob {
             phoenix: phoenix,
             aether: aether,
             hermes: hermes,
-            cronos: cronos,
+            demeter: demeter,
+            athena: athena,
             updatedAt: Date(),
             confidence: min(0.9, 0.5 + Double(analysis.tradeCount) * 0.02),
             reasoning: reasoning

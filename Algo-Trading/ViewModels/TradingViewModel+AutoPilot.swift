@@ -35,8 +35,8 @@ extension TradingViewModel {
     
     func runAutoPilot() async {
         // Capture State on Main Thread to avoid racing
-        let (symbols, currentPortfolio, currentBalance, currentBistBalance, currentEquity, enabled) = await MainActor.run {
-             return (self.watchlist, self.portfolio, self.balance, self.bistBalance, self.getEquity(), self.isAutoPilotEnabled)
+        let (symbols, currentPortfolio, currentBalance, currentBistBalance, currentEquity, currentBistEquity, enabled) = await MainActor.run {
+             return (self.watchlist, self.portfolio, self.balance, self.bistBalance, self.getEquity(), self.getBistEquity(), self.isAutoPilotEnabled)
         }
         
         guard enabled else { return }
@@ -54,6 +54,7 @@ extension TradingViewModel {
             return await AutoPilotService.shared.scanMarket(
                 symbols: symbols,
                 equity: currentEquity,
+                bistEquity: currentBistEquity, // Fix: Pass BIST Equity
                 buyingPower: currentBalance,
                 bistBuyingPower: currentBistBalance, // Fix: Pass BIST Balance
                 portfolio: portfolioMap
@@ -141,274 +142,44 @@ extension TradingViewModel {
                     }
                 }
                 
+                // TRADE BRAIN EXECUTOR: Yeni alım/satım sistemi
+                Task {
+                    await TradeBrainExecutor.shared.evaluateDecisions(
+                        decisions: self.grandDecisions,
+                        portfolio: self.portfolio,
+                        quotes: self.quotes,
+                        balance: self.balance,
+                        bistBalance: self.bistBalance,
+                        orionScores: self.orionScores,
+                        candles: self.candles
+                    )
+                }
+                
+                // TRADE BRAIN PLAN EXECUTION: Pozisyon planlarını kontrol et
+                Task {
+                    await self.checkPlanTriggers()
+                }
+                
                 // CHIRON: EXECUTION GOVERNOR
+                // CHIRON: EXECUTION GOVERNOR - REDUNDANT LOOP REMOVED
+                // İşlem mantığı TradeBrainExecutor içine taşındı.
                 Task { @MainActor in
                     for signal in signals {
-                        let currentPrice = self.quotes[signal.symbol]?.currentPrice ?? 0.0
-                        guard currentPrice > 0 else { continue }
-                        
-                        if signal.action == .buy {
-                            // Prevent piling up on same symbol
-                            if self.portfolio.contains(where: { $0.symbol == signal.symbol && $0.isOpen }) {
-                                continue
-                            }
-                            
-                            // 2. Dynamic Sizing based on Market
-                            let isBist = signal.symbol.uppercased().hasSuffix(".IS")
-                            let allocation: Double
-                            let minTradeAmount: Double
-                            
-                            if isBist {
-                                // BIST Logic: Use TL Balance (Use 5% of BIST balance for diversification within 1M budget)
-                                allocation = currentBistBalance * 0.05
-                                minTradeAmount = 1000.0 // Min 1000 TL
-                            } else {
-                                // Global Logic: Use USD Balance
-                                allocation = currentBalance * 0.10
-                                minTradeAmount = 50.0 // Min 50 USD
-                            }
-                            
-                            guard allocation >= minTradeAmount else { continue }
-                            let proposedQuantity = allocation / currentPrice
-                            
-                            // Get Fresh Scores for Governor
-                            // Fix: Cache full Orion result for Argus Voice
-                            let orionResult = await OrionAnalysisService.shared.calculateOrionScoreAsync(
-                                symbol: signal.symbol,
-                                candles: self.candles[signal.symbol] ?? [],
-                                spyCandles: self.candles["SPY"]
-                            )
-                            if let res = orionResult {
-                                self.orionScores[signal.symbol] = res
-                            }
-                            
-                            let scores = (
-                                atlas: FundamentalScoreStore.shared.getScore(for: signal.symbol)?.totalScore,
-                                orion: orionResult?.score,
-                                aether: self.macroRating?.numericScore, 
-                                hermes: nil as Double?
-                            )
-                            
-                            // Construct AutoPilotSignal for Governor
-                            // Determine engine from signal source (if available) or default
-                            let signalEngine: AutoPilotEngine = signal.reason.lowercased().contains("corse") ? .corse : .pulse
-                            
-                            let apSignal = AutoPilotSignal(
-                                action: signal.action,
-                                quantity: proposedQuantity,
-                                reason: signal.reason,
-                                stopLoss: signal.stopLoss,
-                                takeProfit: signal.takeProfit,
-                                strategy: signalEngine,
-                                trimPercentage: nil
-                            )
-                            
-                            // BIST vs GLOBAL - Different Governors
-                            let decision: ExecutionDecision
-                            
-                            if isBist {
-                                // BIST: Use Yerli Vali (BistExecutionGovernor)
-                                if let bistDecision = self.grandDecisions[signal.symbol]?.bistDetails {
-                                    let snapshot = BistExecutionGovernor.shared.audit(
-                                        decision: bistDecision,
-                                        grandDecisionID: bistDecision.id,
-                                        currentPrice: currentPrice,
-                                        portfolio: self.portfolio,
-                                        lastTradeTime: nil
-                                    )
-                                    
-                                    // Convert Snapshot to GovernorDecision
-                                    if snapshot.action == .buy {
-                                        decision = .approved(signal: apSignal, adjustedQuantity: proposedQuantity)
-                                        print("🇹🇷 BIST Vali ONAY: \(signal.symbol)")
-                                    } else {
-                                        decision = .rejected(reason: snapshot.reason)
-                                        print("🇹🇷 BIST Vali VETO: \(signal.symbol) -> \(snapshot.reason)")
-                                    }
-                                } else {
-                                    // No BIST Decision yet - skip
-                                    print("⚠️ BIST: \(signal.symbol) için Grand Council kararı bekleniyor...")
-                                    continue
-                                }
-                            } else {
-                                // Global: Use Original Governor
-                                decision = await ExecutionGovernor.shared.review(
-                                    signal: apSignal,
-                                    symbol: signal.symbol,
-                                    quantity: proposedQuantity,
-                                    portfolio: self.portfolio,
-                                    equity: self.getEquity(),
-                                    scores: (scores.atlas, scores.orion, scores.aether, nil)
-                                )
-                            }
-                            
-                            switch decision {
-                            case .approved(let finalSignal, let adjustedQty):
-                                // CRITICAL FIX: Update Central Decision Store with FRESH reasons to avoid "Phantom Hold" logs
-                                // We simulate a "BUY" decision for the records since Governor approved it.
-                                // Fetch Phoenix for UI consistency
-                                let pAdvice = await PhoenixScenarioEngine.shared.analyze(symbol: signal.symbol, timeframe: .h1)
-
-                                let freshDecision = ArgusDecisionResult(
-                                    id: UUID(),
-                                    symbol: signal.symbol,
-                                    assetType: .stock,
-                                    atlasScore: scores.atlas ?? 0,
-                                    aetherScore: scores.aether ?? 0,
-                                    orionScore: scores.orion ?? 0,
-                                    athenaScore: 0,
-                                    hermesScore: 0,
-                                    cronosScore: 0,
-                                    orionDetails: nil,
-                                    chironResult: nil,
-                                    phoenixAdvice: pAdvice,
-                                    bistDetails: nil,
-                                    standardizedOutputs: [:],
-                                    moduleWeights: nil, // UI Weights
-                                    finalScoreCore: 85.0, // Forced High Score for Approved AutoPilot
-                                    finalScorePulse: 0,
-                                    letterGradeCore: "A",
-                                    letterGradePulse: "-",
-                                    finalActionCore: .buy, // ENSURE BUY
-                                    finalActionPulse: .buy,
-                                    isNewsBacked: false,
-                                    isRegimeGood: (scores.aether ?? 0) > 50,
-                                    isFundamentallyStrong: (scores.atlas ?? 0) > 50,
-                                    isTimeAligned: true,
-                                    generatedAt: Date()
-                                )
-                                self.argusDecisions[signal.symbol] = freshDecision
-                                
-                                // NEW: Sync with Sanctum UI (Grand Decision)
-                                let grandDecision = ArgusGrandDecision(
-                                    id: UUID(),
-                                    symbol: signal.symbol,
-                                    action: .aggressiveBuy, // AutoPilot Entry is always a committed Buy
-                                    strength: .strong,
-                                    confidence: 0.95,
-                                    reasoning: "🤖 OTO PİLOT İŞLEMİ: \(signal.reason)",
-                                    contributors: [
-                                        ModuleContribution(module: "Orion", action: .buy, confidence: 0.9, reasoning: "AutoPilot Trigger"),
-                                        ModuleContribution(module: "Chiron", action: .buy, confidence: 1.0, reasoning: "Governor Approved")
-                                    ],
-                                    vetoes: [],
-                                    orionDecision: CouncilDecision(
-                                        symbol: signal.symbol,
-                                        action: .buy,
-                                        netSupport: 0.9,
-                                        approveWeight: 0.9,
-                                        vetoWeight: 0.0,
-                                        isStrongSignal: true,
-                                        isWeakSignal: false,
-                                        winningProposal: nil,
-                                        allProposals: [],
-                                        votes: [],
-                                        vetoReasons: [],
-                                        timestamp: Date()
-                                    ),
-                                    atlasDecision: nil,
-                                    aetherDecision: AetherDecision(
-                                        stance: .riskOn,
-                                        marketMode: .greed,
-                                        netSupport: 0.8,
-                                        isStrongSignal: true,
-                                        winningProposal: nil,
-                                        votes: [],
-                                        warnings: [],
-                                        timestamp: Date()
-                                    ),
-                                    hermesDecision: nil,
-                                    orionDetails: nil,
-                                    financialDetails: nil,
-                                    bistDetails: nil,
-                                    timestamp: Date()
-                                )
-                                self.grandDecisions[signal.symbol] = grandDecision
-                                
-                                // Execute Real Spot Buy - USE CORRECT ENGINE FROM SIGNAL
-                                self.buy(
-                                    symbol: signal.symbol,
-                                    quantity: adjustedQty, // Use Adjusted
-                                    source: .autoPilot,
-                                    engine: signalEngine,  // FIX: Use correct engine (Corse or Pulse)
-                                    stopLoss: finalSignal.stopLoss,
-                                    takeProfit: finalSignal.takeProfit,
-                                    rationale: "OTO ALIM (\(signalEngine.rawValue)): \(finalSignal.reason)" // Include engine in rationale
-                                )
-                                self.autoPilotLogs.append("🤖 OTO ALIM: \(signal.symbol) Başarılı. (\(finalSignal.reason))")
-                                
-                                // Notify Chiron Journal
-                                let tradeRef = Trade(
-                                    id: UUID(),
-                                    symbol: signal.symbol,
-                                    entryPrice: currentPrice,
-                                    quantity: adjustedQty,
-                                    entryDate: Date(),
-                                    isOpen: true,
-                                    engine: signalEngine, // FIX: Trade ownership
-                                    stopLoss: finalSignal.stopLoss,
-                                    takeProfit: finalSignal.takeProfit
-                                )
-                                await ExecutionGovernor.shared.didExecute(
-                                    trade: tradeRef,
-                                    scores: (scores.atlas ?? 0, scores.orion ?? 0, scores.aether ?? 0, 0, nil)
-                                )
-                                
-                                // ARGUS VOICE: Proactive Report Generation
-                                Task {
-                                    let trace = DecisionTraceBuilder.build(
-                                        symbol: signal.symbol,
-                                        action: "BUY",
-                                        fillPrice: currentPrice,
-                                        quantity: adjustedQty,
-                                        orion: self.orionScores[signal.symbol],
-                                        atlas: FundamentalScoreStore.shared.getScore(for: signal.symbol),
-                                        aether: self.macroRating,
-                                        hermes: nil
-                                    )
-                                    await self.generateVoiceReport(for: signal.symbol, tradeId: tradeRef.id, existingTrace: trace)
-                                }
-                                
-                            case .rejected(let reason):
-                                print("🛑 Chiron Governor VETO: \(signal.symbol) -> \(reason)")
-                                self.autoPilotLogs.append("🛡️ CHIRON RED: \(signal.symbol) engellendi. (\(reason))")
-                            }
-
-                            
-                        } else if signal.action == .sell {
-                            // Handle Sell Signal (Exit)
-                            if let trade = self.portfolio.first(where: { $0.symbol == signal.symbol && $0.isOpen }) {
-                                print("🤖 OTO SATIŞ: \(signal.symbol) -> \(signal.reason)")
-                                
-                                // Calculate Quantity (Full or Trim)
-                                var quantityToSell: Double? = nil
-                                if let trimPct = signal.trimPercentage {
-                                    quantityToSell = trade.quantity * trimPct
-                                }
-                                
-                                // FIX: Explicitly set source to .autoPilot to avoid "MANUAL" label
-                                self.sell(tradeId: trade.id, currentPrice: currentPrice, quantity: quantityToSell, reason: signal.reason, source: .autoPilot)
-                                
-                                if let trim = signal.trimPercentage {
-                                    self.autoPilotLogs.append("✂️ OTO AZALT: \(signal.symbol) %\(Int(trim * 100)) satıldı. (\(signal.reason))")
-                                } else {
-                                    self.autoPilotLogs.append("🤖 OTO SATIŞ: \(signal.symbol) kapatıldı. (\(signal.reason))")
-                                }
-                                
-                                // Log Exit to Journal
-                                await TradeJournal.shared.logExit(
-                                    tradeId: trade.id,
-                                    exitPrice: currentPrice,
-                                    exitDate: Date(),
-                                    exitReason: signal.reason
-                                )
-                            }
+                        // Sadece Orion Puanlarını Hesapla ve Kaydet
+                        let orionResult = await OrionAnalysisService.shared.calculateOrionScoreAsync(
+                            symbol: signal.symbol,
+                            candles: self.candles[signal.symbol] ?? [],
+                            spyCandles: self.candles["SPY"]
+                        )
+                        if let res = orionResult {
+                            self.orionScores[signal.symbol] = res
                         }
                     }
                 }
             }
-        }
-    }
+        } // END if !signals.isEmpty
+    } // END runAutoPilot
+                        
     
     // MARK: - AGORA Execution Logic (Protected Trading)
     
@@ -635,12 +406,12 @@ extension TradingViewModel {
          let aetherRating = MacroRegimeService.shared.getCachedRating()
          let atlasScore = FundamentalScoreStore.shared.getScore(for: symbol)?.totalScore
          let techScore = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: candidatesCandles ?? [], spyCandles: nil)?.score ?? 0
-         let cronosScore = CronosTimeEngine.shared.calculateTimingScore(candles: candidatesCandles ?? [])
+         let demeterScore: Double = 50.0 // TODO: Demeter entegrasyonu
          
          let evaluation = await ArgusAutoPilotEngine.shared.evaluate(
              symbol: symbol,
              currentPrice: quote.currentPrice,
-             equity: self.getEquity(),
+             equity: isBist ? self.getBistEquity() : self.getEquity(),
              buyingPower: effectiveBuyingPower,
              portfolioState: self.buildPortfolioState(),
              candles: candidatesCandles,
@@ -649,7 +420,7 @@ extension TradingViewModel {
              aetherRating: aetherRating,
              hermesInsight: nil,
              argusFinalScore: score,
-             cronosScore: cronosScore
+             demeterScore: demeterScore
          )
          
          if let validSignal = evaluation.signal, validSignal.action == SignalAction.buy {
@@ -710,14 +481,14 @@ extension TradingViewModel {
                 // Tech: Calculate Orion Score
                 guard let orionResult = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: candles, spyCandles: nil) else { continue }
                 
-                // Cronos: Calculate Timing Score directly (requires candles)
-                let cronosScore = CronosTimeEngine.shared.calculateTimingScore(candles: candles)
+                // Demeter: Placeholder score
+                let demeterScore: Double = 50.0 // TODO: Demeter entegrasyonu
                 
                 // Run AutoPilot Evaluation
                 let evaluation = await ArgusAutoPilotEngine.shared.evaluate(
                     symbol: symbol,
                     currentPrice: quote.currentPrice,
-                    equity: self.getEquity(),
+                    equity: (symbol.uppercased().hasSuffix(".IS") ? self.getBistEquity() : self.getEquity()),
                     buyingPower: self.balance,
                     portfolioState: self.buildPortfolioState(), // FIX: Pass real portfolio
                     candles: candles,
@@ -727,7 +498,7 @@ extension TradingViewModel {
                     aetherRating: aetherRating,
                     hermesInsight: source,
                     argusFinalScore: nil, // Let engine compute if needed, or approx
-                    cronosScore: cronosScore
+                    demeterScore: demeterScore
                 )
                 
                 if let validSignal = evaluation.signal, validSignal.action == SignalAction.buy {

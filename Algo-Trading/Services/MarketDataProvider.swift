@@ -1,6 +1,22 @@
 import Foundation
 import Combine
 
+// MARK: - Data Health Report (Inline)
+enum DataHealthStatus: String {
+    case healthy = "Healthy"
+    case degraded = "Degraded"
+    case unhealthy = "Unhealthy"
+}
+
+struct DataHealthReport {
+    var timestamp: Date
+    var overallStatus: DataHealthStatus
+    var apiLatency: Double
+    var dataFreshness: Double
+    var activeProvider: String
+    var errors: [String]
+}
+
 /// "The Hydra" - Legacy Provider Manager -> Streaming Engine
 /// Refactored to be a Streaming-Only Service. Data is pushed to MarketDataStore.
 /// Fetch logic has moved to MarketDataStore (SSoT).

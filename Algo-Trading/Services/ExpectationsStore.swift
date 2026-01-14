@@ -170,6 +170,17 @@ class ExpectationsStore: ObservableObject {
         return entry.indicator.isInverse ? -impact : impact
     }
     
+    // MARK: - Senkron Erişim (MacroRegimeService için)
+    // Bu fonksiyonlar cached verileri döndürür - thread-safe snapshot
+    
+    nonisolated func getSurpriseImpactSync(for indicator: EconomicIndicator) -> Double {
+        // MainActor üzerinde çalışan asenkron bir fonksiyon, ama cached değer döndürür
+        // Note: Bu bir snapshot'tır, anlık değer farklı olabilir
+        return MainActor.assumeIsolated {
+            self.getSurpriseImpact(for: indicator)
+        }
+    }
+    
     func clearExpectation(for indicator: EconomicIndicator) {
         let id = makeId(for: indicator)
         expectations.removeValue(forKey: id)

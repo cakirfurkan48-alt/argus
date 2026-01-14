@@ -166,6 +166,71 @@ actor ChironDataLakeService {
             lastUpdated: Date()
         )
     }
+    
+    // MARK: - Transaction Import (Chiron 3.0)
+    
+    /// Geçmiş transaction'ları TradeOutcomeRecord'a dönüştürür
+    func importFromTransactions(_ transactions: [Transaction]) async -> Int {
+        var importCount = 0
+        
+        // Sadece tamamlanmış (satış) işlemlerini import et
+        let sellTransactions = transactions.filter { $0.type == .sell }
+        
+        for sellTx in sellTransactions {
+            // Bu satışa karşılık gelen alış işlemini bul
+            guard let buyTx = transactions.first(where: {
+                $0.symbol == sellTx.symbol &&
+                $0.type == .buy &&
+                $0.date < sellTx.date
+            }) else { continue }
+            
+            let pnlPercent = ((sellTx.price - buyTx.price) / buyTx.price) * 100
+            
+            let record = TradeOutcomeRecord(
+                id: UUID(),
+                symbol: sellTx.symbol,
+                engine: .corse, // Varsayılan
+                entryDate: buyTx.date,
+                exitDate: sellTx.date,
+                entryPrice: buyTx.price,
+                exitPrice: sellTx.price,
+                pnlPercent: pnlPercent,
+                exitReason: "Imported",
+                orionScoreAtEntry: nil,
+                atlasScoreAtEntry: nil,
+                aetherScoreAtEntry: nil,
+                phoenixScoreAtEntry: nil,
+                allModuleScores: nil,
+                systemDecision: nil,
+                ignoredWarnings: nil,
+                regime: nil
+            )
+            
+            await logTrade(record)
+            importCount += 1
+        }
+        
+        print("📥 Chiron: \(importCount) trade import edildi")
+        return importCount
+    }
+    
+    /// Tüm trade geçmişini döndürür
+    func loadAllTradeHistory() async -> [TradeOutcomeRecord] {
+        var allTrades: [TradeOutcomeRecord] = []
+        
+        let fm = FileManager.default
+        let tradesPath = basePath.appendingPathComponent("trades")
+        
+        if let files = try? fm.contentsOfDirectory(atPath: tradesPath.path) {
+            for file in files where file.hasSuffix("_history.json") {
+                let symbol = file.replacingOccurrences(of: "_history.json", with: "")
+                let trades = await loadTradeHistory(symbol: symbol)
+                allTrades.append(contentsOf: trades)
+            }
+        }
+        
+        return allTrades.sorted { $0.exitDate > $1.exitDate }
+    }
 }
 
 // MARK: - Data Models
@@ -186,6 +251,12 @@ struct TradeOutcomeRecord: Codable, Sendable {
     let atlasScoreAtEntry: Double?
     let aetherScoreAtEntry: Double?
     let phoenixScoreAtEntry: Double?
+    
+    // Chiron 3.0 - Genişletilmiş Alanlar
+    let allModuleScores: [String: Double]?  // Tüm modüllerin giriş skorları
+    let systemDecision: String?              // AL/SAT/BEKLE
+    let ignoredWarnings: [String]?           // Hangi modüller uyarı verdi ama dinlenmedi
+    let regime: MarketRegime?                // Giriş anındaki rejim
 }
 
 struct ModulePredictionRecord: Codable, Sendable {
@@ -227,6 +298,7 @@ enum ChironEventType: String, Codable, Sendable {
     case ruleRemoved = "RULE_REMOVED"
     case analysisCompleted = "ANALYSIS_COMPLETED"
     case anomalyDetected = "ANOMALY_DETECTED"
+    case forwardTest = "FORWARD_TEST"  // Forward test doğrulama sonucu
 }
 
 struct SymbolLearningStats: Codable, Sendable {

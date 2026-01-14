@@ -33,20 +33,42 @@ final class GroqClient: Sendable {
         do {
             return try await generateJSONWithModel(model: primaryModel, messages: messages, maxTokens: maxTokens)
         } catch {
-            print("⚠️ Groq Primary Failed (\(error)). Switching to Fallback (\(fallbackModel))...")
-            // 2. Fallback to LLaMA 3.1
-            do {
-                return try await generateJSONWithModel(model: fallbackModel, messages: messages, maxTokens: maxTokens)
-            } catch {
-                // 3. DeepSeek Fallback
-                print("⚠️ Groq Fallback Failed. Trying DeepSeek...")
+            var isQuotaExhausted = false
+            if case HermesError.quotaExhausted = error {
+                isQuotaExhausted = true
+            } else if (error as NSError).localizedDescription.contains("tokens per day") {
+                isQuotaExhausted = true
+            }
+            
+            if isQuotaExhausted {
+                print("⚠️ Groq Daily Quota Exhausted. Skipping to DeepSeek...")
+            } else {
+                print("⚠️ Groq Primary Failed (\(error)). Switching to Fallback (\(fallbackModel))...")
+                // 2. Fallback to LLaMA 3.1
                 do {
-                    return try await generateJSONWithDeepSeek(messages: messages, maxTokens: maxTokens)
+                    return try await generateJSONWithModel(model: fallbackModel, messages: messages, maxTokens: maxTokens)
                 } catch {
-                    // 4. Last Resort: Text Mode + Aggressive Cleaning
-                    print("⚠️ DeepSeek Failed. Trying Manual Text Extraction...")
+                    print("⚠️ Groq Fallback Failed. Trying DeepSeek...")
+                }
+            }
+            
+            // 3. DeepSeek Fallback (for quota or model failures)
+            do {
+                return try await generateJSONWithDeepSeek(messages: messages, maxTokens: maxTokens)
+            } catch {
+                // 4. Gemini Fallback (if DeepSeek fails)
+                print("⚠️ DeepSeek Failed. Trying Gemini...")
+                do {
+                    return try await generateJSONWithGemini(messages: messages)
+                } catch {
+                    // 5. Last Resort: Text Mode + Aggressive Cleaning
+                    print("⚠️ Gemini Failed. Trying Manual Text Extraction...")
                     let text = try await chat(messages: messages)
-                    let clean = cleanJsonString(text)
+                    
+                    let clean = text.replacingOccurrences(of: "```json", with: "")
+                                    .replacingOccurrences(of: "```", with: "")
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    
                     guard let jsonData = clean.data(using: .utf8) else {
                         throw URLError(.cannotDecodeContentData)
                     }
@@ -165,14 +187,32 @@ final class GroqClient: Sendable {
         do {
             return try await chatWithModel(model: primaryModel, messages: messages, maxTokens: maxTokens)
         } catch {
-            // 2. Fallback to LLaMA 3.1
-            print("⚠️ Groq Chat Primary Failed (\(error)). Switching to Fallback (\(fallbackModel))...")
+            var isQuotaExhausted = false
+            if case HermesError.quotaExhausted = error {
+                isQuotaExhausted = true
+            } else if (error as NSError).localizedDescription.contains("tokens per day") {
+                isQuotaExhausted = true
+            }
+            
+            if isQuotaExhausted {
+                print("⚠️ Groq Chat: Daily Quota Exhausted. Skipping to DeepSeek...")
+            } else {
+                // 2. Fallback to LLaMA 3.1
+                print("⚠️ Groq Chat Primary Failed (\(error)). Switching to Fallback (\(fallbackModel))...")
+                do {
+                    return try await chatWithModel(model: fallbackModel, messages: messages, maxTokens: maxTokens)
+                } catch {
+                    print("⚠️ Groq Chat Fallback Failed. Trying DeepSeek...")
+                }
+            }
+            
+            // 3. DeepSeek Fallback (for quota or model failures)
             do {
-                return try await chatWithModel(model: fallbackModel, messages: messages, maxTokens: maxTokens)
-            } catch {
-                // 3. DeepSeek Fallback
-                print("⚠️ Groq Chat Fallback Failed. Trying DeepSeek...")
                 return try await chatWithDeepSeek(messages: messages, maxTokens: maxTokens)
+            } catch {
+                // 4. Gemini Fallback
+                print("⚠️ DeepSeek Chat Failed. Trying Gemini...")
+                return try await chatWithGemini(messages: messages)
             }
         }
     }
@@ -209,6 +249,32 @@ final class GroqClient: Sendable {
         let data = try await performRequestWithRetry(body: requestBody)
         let responseWrapper = try JSONDecoder().decode(GroqResponseWrapper.self, from: data)
         return responseWrapper.choices.first?.message.content ?? ""
+    }
+    
+    // MARK: - Gemini Integration
+    
+    private func generateJSONWithGemini<T: Decodable>(messages: [ChatMessage]) async throws -> T {
+        // Convert chat messages to single prompt
+        let prompt = messages.map { "\($0.role.uppercased()): \($0.content)" }.joined(separator: "\n\n") + "\n\nRespond with VALID JSON ONLY."
+        
+        // Use GeminiClient
+        let response = try await GeminiClient.shared.generateContent(prompt: prompt)
+        
+        // Clean JSON
+        let clean = response.replacingOccurrences(of: "```json", with: "")
+                            .replacingOccurrences(of: "```", with: "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard let jsonData = clean.data(using: .utf8) else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        
+        return try JSONDecoder().decode(T.self, from: jsonData)
+    }
+    
+    private func chatWithGemini(messages: [ChatMessage]) async throws -> String {
+        let prompt = messages.map { "\($0.role.uppercased()): \($0.content)" }.joined(separator: "\n\n")
+        return try await GeminiClient.shared.generateContent(prompt: prompt)
     }
     
     private func performRequestWithRetry(body: [String: Any], attempt: Int = 1) async throws -> Data {

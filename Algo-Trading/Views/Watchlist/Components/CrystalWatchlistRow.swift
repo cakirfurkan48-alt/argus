@@ -5,6 +5,7 @@ struct CrystalWatchlistRow: View {
     let symbol: String
     let quote: Quote?
     let candles: [Candle]?
+    let forecast: PrometheusForecast? // New property
     
     // Derived
     var changeColor: Color {
@@ -35,34 +36,16 @@ struct CrystalWatchlistRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             
-            // 2. Trend (Sparkline) - "The Heartbeat"
-            if let c = candles, c.count >= 10 {
-                Chart {
-                    ForEach(Array(c.suffix(20).enumerated()), id: \.offset) { index, candle in
-                        LineMark(
-                            x: .value("Time", index),
-                            y: .value("Price", candle.close)
-                        )
-                        .interpolationMethod(.catmullRom)
-                        .foregroundStyle(changeColor.gradient)
-                    }
-                    if let last = c.last {
-                        PointMark(
-                             x: .value("Time", 19),
-                             y: .value("Price", last.close)
-                        )
-                        .foregroundStyle(changeColor)
-                    }
-                }
-                .chartXAxis(.hidden)
-                .chartYAxis(.hidden)
-                .frame(width: 60, height: 30)
-                .padding(.horizontal, 4)
+            // 2. PROMETHEUS FORECAST (Replaces Sparkline)
+            if let f = forecast {
+                PrometheusBadge(forecast: f)
+                    .frame(width: 80, alignment: .center) // Sabit genislik
             } else {
-                // Placeholder line for no data
-                Rectangle()
-                    .fill(Theme.textSecondary.opacity(0.1))
-                    .frame(width: 60, height: 2)
+                // Placeholder if no forecast yet
+                Text("-")
+                    .font(.caption)
+                    .foregroundColor(Theme.textSecondary.opacity(0.3))
+                    .frame(width: 80, alignment: .center)
             }
             
             // 3. Data Pill

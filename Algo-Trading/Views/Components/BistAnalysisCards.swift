@@ -74,9 +74,14 @@ struct GrafikEducationalCard: View {
                     
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("🎯 TOPLAM SKOR")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
+                            HStack(spacing: 4) {
+                                Image(systemName: "target")
+                                    .font(.caption2)
+                                    .foregroundColor(.cyan)
+                                Text("TOPLAM SKOR")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
                             Text("\(Int(r.score))/100")
                                 .font(.title2.bold())
                                 .foregroundColor(signalColor(r.signal))
@@ -356,9 +361,14 @@ struct OrionRelativeStrengthCard: View {
                                         .foregroundColor(.gray)
                                     
                                     // Formül
-                                    Text("📐 \(metric.formula)")
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundColor(.cyan.opacity(0.7))
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "function")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.cyan.opacity(0.7))
+                                        Text(metric.formula)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundColor(.cyan.opacity(0.7))
+                                    }
                                 }
                                 .padding(8)
                                 .background(Color.white.opacity(0.05))
@@ -434,6 +444,8 @@ struct OrionRelativeStrengthCard: View {
 struct HermesAnalystCard: View {
     let symbol: String
     let currentPrice: Double
+    var newsDecision: HermesDecision? = nil // Opsiyonel haber verisi
+    
     @State private var result: HermesAnalystResult?
     @State private var isLoading = true
     @State private var isExpanded = false
@@ -458,7 +470,7 @@ struct HermesAnalystCard: View {
                         
                         if isLoading {
                             ProgressView().scaleEffect(0.7)
-                        } else if let r = result {
+                        } else if let r = result, r.consensus.totalAnalysts > 0 {
                             Text(r.verdict)
                                 .font(.caption)
                                 .padding(.horizontal, 8)
@@ -466,6 +478,16 @@ struct HermesAnalystCard: View {
                                 .background(verdictColor(r.verdict).opacity(0.2))
                                 .foregroundColor(verdictColor(r.verdict))
                                 .cornerRadius(8)
+                        } else if newsDecision != nil {
+                            // Veri yok ama haber var -> "Kulis Modu" Badge
+                            Text("KULİS MODU")
+                                .font(.caption2)
+                                .bold()
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.2))
+                                .foregroundColor(.blue)
+                                .cornerRadius(4)
                         }
                         
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -476,6 +498,8 @@ struct HermesAnalystCard: View {
                 .buttonStyle(PlainButtonStyle())
                 
                 if let r = result, r.consensus.totalAnalysts > 0 {
+                    // --- STANDART MOD (Analist Verisi Var) ---
+                    
                     // Konsensüs Bar
                     HStack(spacing: 2) {
                         // AL
@@ -569,9 +593,82 @@ struct HermesAnalystCard: View {
                         .transition(.opacity)
                     }
                 } else if !isLoading {
-                    Text("Bu hisse için analist verisi bulunamadı")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                    // --- LITE MOD (Analist Yok, Haber Var) ---
+                    if let news = newsDecision {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: "sparkles")
+                                    .foregroundColor(.yellow)
+                                Text("Analist verisi yetersiz, ancak piyasa dedikoduları var:")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            // Sentiment Göstergesi
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    Circle()
+                                        .fill(sentimentColor(news.sentiment).opacity(0.2))
+                                        .frame(width: 40, height: 40)
+                                    Image(systemName: sentimentIcon(news.sentiment))
+                                        .font(.title3)
+                                        .foregroundColor(sentimentColor(news.sentiment))
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(news.sentiment.displayTitle)
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    Text(news.isHighImpact ? "Yüksek Piyasa Etkisi" : "Normal Piyasa Algısı")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                            
+                            // Başlıklar
+                            if !news.keyHeadlines.isEmpty {
+                                Divider().background(Color.white.opacity(0.1))
+                                Text("Öne Çıkan Başlıklar")
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(.gray)
+                                
+                                ForEach(news.keyHeadlines.prefix(3), id: \.self) { headline in
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Circle()
+                                            .fill(Color.blue)
+                                            .frame(width: 4, height: 4)
+                                            .padding(.top, 6)
+                                        Text(headline)
+                                            .font(.caption2)
+                                            .foregroundColor(.white.opacity(0.8))
+                                            .lineLimit(2)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.blue.opacity(0.05))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.blue.opacity(0.2), lineWidth: 1)
+                        )
+                        
+                    } else {
+                        // --- VERİ YOK MODU ---
+                        HStack {
+                            Image(systemName: "eye.slash")
+                                .foregroundColor(.gray)
+                            Text("Bu hisse için analist veya haber verisi bulunamadı")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                    }
                 }
             }
             .padding(16)
@@ -581,6 +678,7 @@ struct HermesAnalystCard: View {
         }
     }
     
+    // ... existing loadData ...
     private func loadData() {
         Task {
             if let data = try? await HermesAnalystEngine.shared.analyze(symbol: symbol, currentPrice: currentPrice) {
@@ -598,6 +696,23 @@ struct HermesAnalystCard: View {
         if verdict.contains("AL") { return .green }
         if verdict.contains("Nötr") || verdict.contains("TUT") { return .yellow }
         return .orange
+    }
+    
+    // Lite Mod Yardımcıları
+    private func sentimentColor(_ sentiment: NewsSentiment) -> Color {
+        switch sentiment {
+        case .strongPositive, .weakPositive: return .green
+        case .weakNegative, .strongNegative: return .red
+        default: return .gray
+        }
+    }
+    
+    private func sentimentIcon(_ sentiment: NewsSentiment) -> String {
+        switch sentiment {
+        case .strongPositive, .weakPositive: return "arrow.up.right.circle.fill"
+        case .weakNegative, .strongNegative: return "arrow.down.right.circle.fill"
+        default: return "minus.circle.fill"
+        }
     }
 }
 
@@ -767,9 +882,14 @@ struct BistModuleDetailCard: View {
                 Divider().background(Color.white.opacity(0.2))
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("📊 Detay Metrikleri")
-                        .font(.caption.bold())
-                        .foregroundColor(.gray)
+                    HStack(spacing: 4) {
+                        Image(systemName: "chart.bar.fill")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text("Detay Metrikleri")
+                            .font(.caption.bold())
+                            .foregroundColor(.gray)
+                    }
                     
                     ForEach(extraInfo) { info in
                         HStack {

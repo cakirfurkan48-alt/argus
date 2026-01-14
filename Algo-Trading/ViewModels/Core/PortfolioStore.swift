@@ -58,7 +58,8 @@ final class PortfolioStore: ObservableObject {
         engine: AutoPilotEngine? = nil,
         stopLoss: Double? = nil,
         takeProfit: Double? = nil,
-        rationale: String? = nil
+        rationale: String? = nil,
+        orionSnapshot: OrionComponentSnapshot? = nil  // NEW: Chiron öğrenme için
     ) -> Bool {
         guard quantity > 0, price > 0 else { return false }
         
@@ -82,7 +83,7 @@ final class PortfolioStore: ObservableObject {
         }
         
         // Create trade
-        let trade = Trade(
+        var trade = Trade(
             id: UUID(),
             symbol: symbol,
             entryPrice: price,
@@ -95,6 +96,9 @@ final class PortfolioStore: ObservableObject {
             takeProfit: takeProfit,
             rationale: rationale ?? (source == .autoPilot ? "AUTO_SIGNAL" : "MANUAL")
         )
+        
+        // NEW: Attach Orion Snapshot for Chiron Learning
+        trade.entryOrionSnapshot = orionSnapshot
         
         portfolio.append(trade)
         
@@ -146,6 +150,24 @@ final class PortfolioStore: ObservableObject {
         trade.exitPrice = currentPrice
         trade.exitDate = Date()
         portfolio[index] = trade
+        
+        // NEW: Create TradeLog for Chiron Learning
+        let tradeLog = TradeLog(
+            date: Date(),
+            symbol: trade.symbol,
+            entryPrice: trade.entryPrice,
+            exitPrice: currentPrice,
+            pnlPercent: trade.profitPercentage,
+            pnlAbsolute: pnl,
+            entryRegime: .neutral, // Placeholder - ideally from ChironRegimeEngine
+            entryOrionScore: trade.entryOrionSnapshot?.orionTotal ?? 0,
+            entryAtlasScore: 0, // Could be enhanced with more context
+            entryAetherScore: 0,
+            engine: trade.source == .autoPilot ? "AutoPilot" : "Manual",
+            entryOrionSnapshot: trade.entryOrionSnapshot,
+            exitOrionSnapshot: nil // Could add exit snapshot if needed
+        )
+        TradeLogStore.shared.append(tradeLog)
         
         // Log transaction
         var transaction = Transaction(

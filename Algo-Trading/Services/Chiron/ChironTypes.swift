@@ -18,12 +18,12 @@ struct TradeSnapshot: Codable, Identifiable {
     let stopLoss: Double?
     let takeProfit: Double?
     
-    // Regime State (The "Weather" when trade was opened)
+    // Regime State (The \"Weather\" when trade was opened)
     let aetherScore: Double
     let orionScore: Double
     let atlasScore: Double
     let hermesScore: Double
-    let cronosScore: Double?
+    let demeterScore: Double?
     
     // Cluster Context
     let cluster: String

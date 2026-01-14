@@ -105,6 +105,96 @@ final class YahooFinanceProvider: HeimdallProvider {
         }
     }
     
+    // MARK: - Batch Quote (Single Request for Multiple Symbols)
+    /// Tek bir HTTP isteğinde birden fazla sembol için quote çeker
+    /// 50 sembol için 50 istek yerine 1 istek - Rate limit sorunu çözümü
+    func fetchBatchQuotes(symbols: [String]) async throws -> [String: Quote] {
+        guard !symbols.isEmpty else { return [:] }
+        
+        // Sembolleri Yahoo formatına çevir ve URL encode et
+        let yahooSymbols = symbols.map { SymbolResolver.shared.resolve($0, for: .yahoo) }
+        let symbolsParam = yahooSymbols.joined(separator: ",")
+        
+        // URL encode (virgül korunmalı)
+        guard let encodedSymbols = symbolsParam.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw URLError(.badURL)
+        }
+        
+        let urlString = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=\(encodedSymbols)"
+        guard let url = URL(string: urlString) else {
+            throw URLError(.badURL)
+        }
+        
+        print("📡 Yahoo Batch: \(symbols.count) sembol tek istekte çekiliyor...")
+        
+        let data = try await HeimdallNetwork.request(
+            url: url,
+            engine: .market,
+            provider: .yahoo,
+            symbol: symbols.first ?? "BATCH"
+        )
+        
+        // Parse response
+        struct BatchResponse: Codable {
+            struct QuoteResponse: Codable {
+                struct Result: Codable {
+                    let symbol: String
+                    let regularMarketPrice: Double?
+                    let regularMarketChange: Double?
+                    let regularMarketChangePercent: Double?
+                    let regularMarketPreviousClose: Double?
+                    let currency: String?
+                    let shortName: String?
+                    let marketCap: Double?
+                }
+                let result: [Result]?
+                let error: YError?
+            }
+            struct YError: Codable { let description: String? }
+            let quoteResponse: QuoteResponse
+        }
+        
+        do {
+            let resp = try JSONDecoder().decode(BatchResponse.self, from: data)
+            
+            if let err = resp.quoteResponse.error {
+                print("⚠️ Yahoo Batch Error: \(err.description ?? "Unknown")")
+                throw URLError(.badServerResponse)
+            }
+            
+            guard let results = resp.quoteResponse.result else {
+                print("⚠️ Yahoo Batch: Boş sonuç")
+                return [:]
+            }
+            
+            var quotes: [String: Quote] = [:]
+            for r in results {
+                // Orijinal sembolü bul (Yahoo sembolü farklı olabilir)
+                let originalSymbol = symbols.first { 
+                    SymbolResolver.shared.resolve($0, for: .yahoo) == r.symbol 
+                } ?? r.symbol
+                
+                var q = Quote(
+                    c: r.regularMarketPrice ?? 0,
+                    d: r.regularMarketChange ?? 0,
+                    dp: r.regularMarketChangePercent ?? 0,
+                    currency: r.currency ?? "USD",
+                    shortName: r.shortName,
+                    symbol: originalSymbol
+                )
+                q.previousClose = r.regularMarketPreviousClose
+                q.marketCap = r.marketCap
+                quotes[originalSymbol] = q
+            }
+            
+            print("✅ Yahoo Batch: \(quotes.count)/\(symbols.count) sembol alındı")
+            return quotes
+            
+        } catch {
+            print("❌ Yahoo Batch Decode Error: \(error)")
+            throw error
+        }
+    }
 
     
     // MARK: - Helpers
@@ -243,7 +333,12 @@ final class YahooFinanceProvider: HeimdallProvider {
     
     func fetchCandles(symbol: String, interval: String, outputSize: Int) async throws -> [Candle] {
         // Delegated to dedicated Adapter (Heimdall 4.0)
-        return try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: interval, limit: outputSize)
+        let (candles, hash) = try await YahooCandleAdapter.shared.fetchCandles(symbol: symbol, timeframe: interval, limit: outputSize)
+        
+        // Context Propagation (Black Box V0)
+        ForwardTestLedger.shared.cacheSnapshotRef(symbol: symbol, type: "CANDLES_OHLCV", hash: hash)
+        
+        return candles
     }
     func fetchNews(symbol: String) async throws -> [NewsArticle] {
         // Placeholder: Yahoo Finance News Parsing is complex (RSS or HTML scraping).
@@ -310,6 +405,21 @@ final class YahooFinanceProvider: HeimdallProvider {
     // MARK: - Atlas: Real Fundamentals Implementation
     
     func fetchFundamentals(symbol: String) async throws -> FinancialsData {
+        // Retry wrapper for 401 handling
+        do {
+            return try await _fetchFundamentalsInternal(symbol: symbol, isRetry: false)
+        } catch {
+            // Check if it's a 401 error (Invalid Crumb)
+            if let urlError = error as? URLError, urlError.code == .userAuthenticationRequired {
+                print("🔐 Yahoo: 401 detected. Invalidating crumb and retrying...")
+                await YahooAuthenticationService.shared.invalidate()
+                return try await _fetchFundamentalsInternal(symbol: symbol, isRetry: true)
+            }
+            throw error
+        }
+    }
+    
+    private func _fetchFundamentalsInternal(symbol: String, isRetry: Bool) async throws -> FinancialsData {
         let encoded = encodeYahooSymbolForPath(symbol)
         
         // 1. Authenticate (Get Crumb & Cookie) to Fix 401

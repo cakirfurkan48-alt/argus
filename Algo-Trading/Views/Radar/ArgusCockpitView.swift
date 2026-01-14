@@ -3,10 +3,15 @@ import SwiftUI
 // MARK: - TRADER TERMINAL VIEW
 
 // Global Scope Enum
-enum MarketTab {
-    case global
-    case bist
+enum MarketTab: String, CaseIterable {
+    case global = "Global"
+    case bist = "Sirkiye"
+    case fonlar = "Fonlar"
 }
+
+// MARK: - TRADER TERMINAL VIEW
+
+// MARK: - TRADER TERMINAL VIEW
 
 struct ArgusCockpitView: View {
     @EnvironmentObject var viewModel: TradingViewModel
@@ -15,7 +20,7 @@ struct ArgusCockpitView: View {
     @State private var sortOption: TerminalSortOption = .councilScore
     @State private var hideLowQualityData: Bool = true
     @State private var searchText: String = ""
-    @State private var selectedMarket: MarketTab = .global // Tab State
+    @State private var selectedMarket: MarketTab = .global
     
     // Overlay State
     @State private var selectedSymbolForModule: String? = nil
@@ -26,115 +31,139 @@ struct ArgusCockpitView: View {
         case councilScore = "Konsey / Divan"
         case orion = "Orion / Tahta"
         case atlas = "Atlas / Kasa"
+        case prometheus = "Prometheus"
         case potential = "Potansiyel"
         
         var id: String { rawValue }
     }
     
-    // Filtered & Sorted List
-    var terminalData: [String] {
-        var symbols = viewModel.watchlist
+    // Optimized List from ViewModel
+    var terminalData: [TerminalItem] {
+        var items = viewModel.terminalItems
         
+        // 1. Market Filter (Type-Safe)
+        switch selectedMarket {
+        case .bist:
+            items = items.filter { $0.market == .bist }
+        case .global:
+            items = items.filter { $0.market == .global }
+        case .fonlar:
+            return [] // Fonlar ayrı view
+        }
+        
+        // 2. Search
         if !searchText.isEmpty {
-            symbols = symbols.filter { $0.localizedCaseInsensitiveContains(searchText) }
+            items = items.filter { $0.symbol.localizedCaseInsensitiveContains(searchText) }
         }
         
+        // 3. Quality Filter
         if hideLowQualityData {
-            symbols = symbols.filter { symbol in
-                let health = viewModel.dataHealthBySymbol[symbol]?.qualityScore ?? 0
-                return health >= 50
-            }
+            items = items.filter { $0.dataQuality >= 50 }
         }
         
-        symbols.sort { sym1, sym2 in
+        // 4. Sort (Pre-calculated values)
+        items.sort { item1, item2 in
             switch sortOption {
             case .councilScore:
-                let s1 = viewModel.grandDecisions[sym1]?.confidence ?? 0
-                let s2 = viewModel.grandDecisions[sym2]?.confidence ?? 0
-                return s1 > s2
-                
+                return (item1.councilScore ?? 0) > (item2.councilScore ?? 0)
             case .orion:
-                let s1 = viewModel.orionScores[sym1]?.score ?? 0
-                let s2 = viewModel.orionScores[sym2]?.score ?? 0
-                return s1 > s2
-                
+                return (item1.orionScore ?? 0) > (item2.orionScore ?? 0)
             case .atlas:
-                let s1 = viewModel.getFundamentalScore(for: sym1)?.totalScore ?? 0
-                let s2 = viewModel.getFundamentalScore(for: sym2)?.totalScore ?? 0
-                return s1 > s2
-                
+                return (item1.atlasScore ?? 0) > (item2.atlasScore ?? 0)
+            case .prometheus:
+                return (item1.forecast?.changePercent ?? -999) > (item2.forecast?.changePercent ?? -999)
             case .potential:
-                return sym1 < sym2
+                return item1.symbol < item2.symbol
             }
         }
         
-        return symbols
+        return items
     }
     
     var body: some View {
         ZStack {
             NavigationView {
                 VStack(spacing: 0) {
-                    // Control Bar
-                    TerminalControlBar(
-                        sortOption: $sortOption,
-                        hideLowQualityData: $hideLowQualityData,
-                        count: terminalData.count,
-                        selectedMarket: selectedMarket
-                    )
+                    // MARK: - Market Tab Selector
+                    marketTabBar
                     
-                    // Terminal List
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            if terminalData.isEmpty {
-                                ContentUnavailableView(
-                                    "Veri Bulunamadı",
-                                    systemImage: "antenna.radiowaves.left.and.right.slash",
-                                    description: Text("Kriterlere uygun hisse senedi yok.")
-                                )
-                                .padding(.top, 40)
-                            } else {
-                                ForEach(terminalData, id: \.self) { symbol in
-                                    NavigationLink(destination: StockDetailView(symbol: symbol, viewModel: viewModel)) {
-                                        TerminalStockRow(
-                                            symbol: symbol,
-                                            viewModel: viewModel,
-                                            onOrionTap: {
-                                                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                                                    selectedSymbolForModule = symbol
-                                                    selectedModuleType = .orion
-                                                }
-                                            },
-                                            onAtlasTap: {
-                                                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                                                    selectedSymbolForModule = symbol
-                                                    selectedModuleType = .atlas
-                                                }
-                                            }
+                    // Content based on selected tab
+                    if selectedMarket == .fonlar {
+                        Text("Fon Modülü Yakında...")
+                    } else {
+                        // Stock Terminal
+                        VStack(spacing: 0) {
+                            // Control Bar
+                            TerminalControlBar(
+                                sortOption: $sortOption,
+                                hideLowQualityData: $hideLowQualityData,
+                                count: terminalData.count,
+                                selectedMarket: selectedMarket
+                            )
+                            
+                            // MARK: - Chiron Widget
+                            ChironCockpitWidget()
+                                .padding(.vertical, 8)
+                                .background(Color(hex: "080b14"))
+                            
+                            // Terminal List
+                            ScrollView {
+                                LazyVStack(spacing: 0) {
+                                    if terminalData.isEmpty {
+                                        ContentUnavailableView(
+                                            "Veri Bulunamadı",
+                                            systemImage: "antenna.radiowaves.left.and.right.slash",
+                                            description: Text("Kriterlere uygun hisse bulunamadı.")
                                         )
+                                        .padding(.top, 40)
+                                    } else {
+                                        ForEach(terminalData) { item in
+                                            NavigationLink(destination: StockDetailView(symbol: item.symbol, viewModel: viewModel)) {
+                                                TerminalStockRow(
+                                                    item: item,
+                                                    onOrionTap: {
+                                                        openModule(.orion, for: item.symbol)
+                                                    },
+                                                    onAtlasTap: {
+                                                        openModule(.atlas, for: item.symbol)
+                                                    }
+                                                )
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            
+                                            Divider()
+                                                .background(Color.white.opacity(0.1))
+                                                .padding(.leading, 16)
+                                        }
                                     }
-                                    .buttonStyle(PlainButtonStyle())
-                                    
-                                    Divider()
-                                        .background(Color.white.opacity(0.1))
-                                        .padding(.leading, 16)
                                 }
+                                .padding(.bottom, 20)
                             }
                         }
-                        .padding(.bottom, 20)
                     }
                 }
                 .background(Color(hex: "080b14").ignoresSafeArea())
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .principal) {
-                        HStack(spacing: 4) {
-                            Image(systemName: selectedMarket == .bist ? "building.columns.fill" : "globe")
-                                .foregroundColor(selectedMarket == .bist ? .red : .cyan)
-                            Text(selectedMarket == .bist ? "SİRKİYE KOKPİTİ" : "GLOBAL TERMINAL")
-                                .font(.system(.headline, design: .monospaced))
-                                .bold()
-                                .foregroundColor(.white)
+                     ToolbarItem(placement: .principal) {
+                         HStack(spacing: 4) {
+                             Image(systemName: toolbarIcon)
+                                 .foregroundColor(toolbarColor)
+                             Text(toolbarTitle)
+                                 .font(.system(.headline, design: .monospaced))
+                                 .bold()
+                                 .foregroundColor(.white)
+                         }
+                     }
+                    
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            Task {
+                                viewModel.refreshTerminal()
+                            }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.gray)
                         }
                     }
                 }
@@ -157,8 +186,23 @@ struct ArgusCockpitView: View {
                 .zIndex(100)
             }
         }
+        .onAppear {
+             // View açıldığında veriyi tazele
+             viewModel.refreshTerminal()
+        }
         .task {
             await viewModel.bootstrapTerminalData()
+        }
+        // Watchlist değişirse terminali güncelle
+        .onChange(of: viewModel.watchlist) { _ in
+            viewModel.refreshTerminal()
+        }
+    }
+    
+    private func openModule(_ type: ArgusSanctumView.ModuleType, for symbol: String) {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            selectedSymbolForModule = symbol
+            selectedModuleType = type
         }
     }
     
@@ -174,12 +218,54 @@ struct ArgusCockpitView: View {
                     .padding(.top, 12)
                 
                 Rectangle()
-                    .fill(selectedMarket == tab ? (tab == .bist ? Color.red : Color.cyan) : Color.clear)
+                    .fill(selectedMarket == tab ? tabColor(for: tab) : Color.clear)
                     .frame(height: 2)
             }
         }
     }
+    
+    // MARK: - Market Tab Bar
+    private var marketTabBar: some View {
+        HStack(spacing: 0) {
+            tabButton(title: "Global", tab: .global)
+            tabButton(title: "Sirkiye", tab: .bist)
+            tabButton(title: "Fonlar", tab: .fonlar)
+        }
+        .background(Color(hex: "10141f"))
+    }
+    
+    // Tab color helper
+    private func tabColor(for tab: MarketTab) -> Color {
+        switch tab {
+        case .global: return .cyan
+        case .bist: return .red
+        case .fonlar: return .green
+        }
+    }
+    
+    // Toolbar helpers
+    private var toolbarIcon: String {
+        switch selectedMarket {
+        case .global: return "globe"
+        case .bist: return "building.columns.fill"
+        case .fonlar: return "chart.pie.fill"
+        }
+    }
+    
+    private var toolbarColor: Color {
+        tabColor(for: selectedMarket)
+    }
+    
+    private var toolbarTitle: String {
+        switch selectedMarket {
+        case .global: return "GLOBAL TERMINAL"
+        case .bist: return "SİRKİYE KOKPİTİ"
+        case .fonlar: return "TEFAS FONLARI"
+        }
+    }
 }
+
+// ... FundListEmbeddedView ... (Aynı kalabilir veya ayrı dosyaya alınabilir, şimdilik burada tutuyoruz ama sadeleştirilmiş)
 
 // MARK: - SUBCOMPONENTS
 
@@ -187,7 +273,7 @@ struct TerminalControlBar: View {
     @Binding var sortOption: ArgusCockpitView.TerminalSortOption
     @Binding var hideLowQualityData: Bool
     let count: Int
-    let selectedMarket: MarketTab // Updated Type
+    let selectedMarket: MarketTab
     
     var body: some View {
         VStack(spacing: 12) {
@@ -208,7 +294,6 @@ struct TerminalControlBar: View {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.up.arrow.down")
                             .font(.caption)
-                        // Dynamic Sort Labels based on Market
                         Text(sortLabel(for: sortOption))
                             .font(.caption)
                             .bold()
@@ -243,40 +328,31 @@ struct TerminalControlBar: View {
     func sortLabel(for option: ArgusCockpitView.TerminalSortOption) -> String {
         guard selectedMarket == .bist else { return option.rawValue }
         switch option {
-        case .councilScore: return "Divan Puanı"
+        case .councilScore: return "Divan Puani"
         case .orion: return "Tahta (Teknik)"
         case .atlas: return "Kasa (Temel)"
+        case .prometheus: return "Prometheus"
         case .potential: return "Potansiyel"
         }
     }
 }
 
+// DUMB COMPONENT
 struct TerminalStockRow: View {
-    let symbol: String
-    @ObservedObject var viewModel: TradingViewModel
+    let item: TerminalItem // Artık tüm hesaplanmış veri burada
     var onOrionTap: () -> Void
     var onAtlasTap: () -> Void
-    
-    // Metric Accessors
-    var orionScore: Double { viewModel.orionScores[symbol]?.score ?? 0 }
-    var atlasScore: Double { viewModel.getFundamentalScore(for: symbol)?.totalScore ?? 0 }
-    var councilScore: Double { (viewModel.grandDecisions[symbol]?.confidence ?? 0) * 100 }
-    var dataHealth: Int { viewModel.dataHealthBySymbol[symbol]?.qualityScore ?? 0 }
-    
-    var action: ArgusAction {
-        viewModel.grandDecisions[symbol]?.action ?? .neutral
-    }
     
     var body: some View {
         HStack(spacing: 12) {
             // Ticker & Price
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Text(symbol.replacingOccurrences(of: ".IS", with: ""))
+                    Text(item.symbol.replacingOccurrences(of: ".IS", with: ""))
                         .font(.system(size: 16, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
                     
-                    if symbol.uppercased().hasSuffix(".IS") {
+                    if item.market == .bist {
                         Text("TR")
                             .font(.system(size: 8, weight: .bold))
                             .foregroundColor(.red)
@@ -285,54 +361,52 @@ struct TerminalStockRow: View {
                     }
                 }
                 
-                if let quote = viewModel.quotes[symbol] {
-                    let isBist = symbol.uppercased().hasSuffix(".IS")
-                    Text(String(format: isBist ? "₺%.2f" : "$%.2f", quote.currentPrice))
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                } else {
-                    Text("---")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
+                Text(item.price > 0 
+                     ? String(format: item.currency == .TRY ? "₺%.2f" : "$%.2f", item.price)
+                     : "---")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
             .frame(width: 80, alignment: .leading)
             
             // Scores
-            let isBist = symbol.uppercased().hasSuffix(".IS")
+            let isBist = (item.market == .bist)
             HStack(spacing: 12) {
                 Button(action: onOrionTap) {
-                    // Orion (O) or Tahta (T)
-                    TerminalScoreBadge(label: isBist ? "T" : "O", score: orionScore, color: .cyan)
+                    TerminalScoreBadge(label: isBist ? "T" : "O", score: item.orionScore ?? 0, color: .cyan)
                 }
                 .buttonStyle(PlainButtonStyle())
                 
                 Button(action: onAtlasTap) {
-                    // Atlas (A) or Kasa (K)
-                    TerminalScoreBadge(label: isBist ? "K" : "A", score: atlasScore, color: .yellow)
+                    TerminalScoreBadge(label: isBist ? "K" : "A", score: item.atlasScore ?? 0, color: .yellow)
                 }
                 .buttonStyle(PlainButtonStyle())
                 
-                // Council (Star)
-                TerminalScoreBadge(label: "★", score: councilScore, color: .green)
+                // Council (Confidence) -> 0.75 -> 75
+                TerminalScoreBadge(label: "★", score: (item.councilScore ?? 0) * 100, color: .green)
             }
+            
+            Spacer()
+            
+            // Prometheus
+            PrometheusBadge(forecast: item.forecast)
             
             Spacer()
             
             // Action Signal
             VStack(alignment: .trailing, spacing: 4) {
-                Text(actionLocalizedString(action))
+                Text(actionLocalizedString(item.action))
                     .font(.system(size: 11, weight: .black))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(actionColor(action).opacity(0.2))
-                    .foregroundColor(actionColor(action))
+                    .background(actionColor(item.action).opacity(0.2))
+                    .foregroundColor(actionColor(item.action))
                     .cornerRadius(4)
                 
-                if dataHealth < 100 {
+                if item.dataQuality < 100 {
                     HStack(spacing: 2) {
                         Image(systemName: "wifi.exclamationmark")
-                        Text("%\(dataHealth)")
+                        Text("%\(item.dataQuality)")
                     }
                     .font(.system(size: 8))
                     .foregroundColor(.orange)
@@ -389,3 +463,5 @@ struct TerminalScoreBadge: View {
         }
     }
 }
+
+

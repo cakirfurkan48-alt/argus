@@ -47,7 +47,7 @@ struct ArgusDecisionResult: Codable {
     let orionScore: Double      // Technical (0-100)
     let athenaScore: Double     // Athena (Factors) (0-100)
     let hermesScore: Double     // News (0-100)
-    let cronosScore: Double     // Time/Phase (0-100)
+    let demeterScore: Double    // Sector Analysis (0-100)
     
     // Detailed Results
     // Detailed Results
@@ -72,7 +72,7 @@ struct ArgusDecisionResult: Codable {
     let isNewsBacked: Bool      // Hermes strong?
     let isRegimeGood: Bool      // Aether > 50?
     let isFundamentallyStrong: Bool // Atlas > 50?
-    let isTimeAligned: Bool     // Cronos good?
+    let isDemeterStrong: Bool   // Demeter > 50?
     
     let generatedAt: Date
 }

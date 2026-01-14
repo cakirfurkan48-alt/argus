@@ -1,10 +1,10 @@
 import Foundation
 
-// MARK: - Fed Master Engine
+// MARK: - Monetary Policy Engine (ex-FedMaster)
 /// Council member responsible for Fed and interest rate analysis
-struct FedMasterEngine: MacroCouncilMember, Sendable {
-    let id = "fed_master"
-    let name = "Fed Ustası"
+struct MonetaryPolicyEngine: MacroCouncilMember, Sendable {
+    let id = "monetary_policy"
+    let name = "Monetary Policy"
     
     nonisolated init() {}
     
@@ -17,30 +17,30 @@ struct FedMasterEngine: MacroCouncilMember, Sendable {
         if macro.yieldCurveInverted {
             confidence = 0.85
             stance = .defensive
-            reasoning = "Getiri eğrisi ters - Resesyon sinyali"
+            reasoning = "Yield Curve Inverted - Recession Signal"
         }
         // High and rising rates
         else if let fedRate = macro.fedFundsRate, fedRate > 5.0 {
             confidence = 0.75
             stance = .cautious
-            reasoning = "Fed faizi yüksek (%\(String(format: "%.2f", fedRate))) - Likidite azalıyor"
+            reasoning = "High Rates (%\(String(format: "%.2f", fedRate))) - Liquidity Constraint"
         }
         // Low rates = risk on
         else if let fedRate = macro.fedFundsRate, fedRate < 2.0 {
             confidence = 0.80
             stance = .riskOn
-            reasoning = "Düşük faiz ortamı (%\(String(format: "%.2f", fedRate))) - Likidite bol"
+            reasoning = "Low Rates (%\(String(format: "%.2f", fedRate))) - High Liquidity"
         }
         // 10Y yield analysis
         else if let tenY = macro.tenYearYield {
             if tenY > 4.5 {
                 confidence = 0.70
                 stance = .cautious
-                reasoning = "10Y getiri yüksek (%\(String(format: "%.2f", tenY))) - Bono rekabeti"
+                reasoning = "High 10Y Yield (%\(String(format: "%.2f", tenY))) - Bond Competition"
             } else if tenY < 3.0 {
                 confidence = 0.70
                 stance = .riskOn
-                reasoning = "Düşük 10Y getiri - Hisse cazip"
+                reasoning = "Low 10Y Yield - Equity Attractive"
             }
         }
         else {
@@ -61,23 +61,23 @@ struct FedMasterEngine: MacroCouncilMember, Sendable {
     func vote(on proposal: MacroProposal, macro: MacroSnapshot) -> MacroVote {
         if macro.yieldCurveInverted && proposal.stance == .riskOn {
             return MacroVote(voter: id, voterName: name, decision: .veto, 
-                             reasoning: "Getiri eğrisi ters - Risk alma tehlikeli", weight: 1.0)
+                             reasoning: "Yield Curve Inverted - Risk too high", weight: 1.0)
         }
         
         if let fedRate = macro.fedFundsRate, fedRate > 5.5 && proposal.stance == .riskOn {
             return MacroVote(voter: id, voterName: name, decision: .veto,
-                             reasoning: "Yüksek faiz - Risk azalt", weight: 0.9)
+                             reasoning: "Rates too high for Risk-On", weight: 0.9)
         }
         
-        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Fed nötr", weight: 0.5)
+        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Monetary Neutral", weight: 0.5)
     }
 }
 
-// MARK: - Sentiment Master Engine
+// MARK: - Market Sentiment Engine (ex-SentimentMaster)
 /// Council member responsible for market sentiment (VIX, Fear & Greed)
-struct SentimentMasterEngine: MacroCouncilMember, Sendable {
-    let id = "sentiment_master"
-    let name = "Duygu Ustası"
+struct MarketSentimentEngine: MacroCouncilMember, Sendable {
+    let id = "market_sentiment"
+    let name = "Market Sentiment"
     
     nonisolated init() {}
     
@@ -91,19 +91,19 @@ struct SentimentMasterEngine: MacroCouncilMember, Sendable {
             if vix > 35 {
                 confidence = 0.85
                 stance = .riskOff
-                reasoning = "Aşırı korku (VIX: \(Int(vix))) - Panik modu"
+                reasoning = "Extreme Fear (VIX: \(Int(vix))) - Panic Mode"
             } else if vix > 25 {
                 confidence = 0.75
                 stance = .defensive
-                reasoning = "Korku yükseliyor (VIX: \(Int(vix)))"
+                reasoning = "Elevated Fear (VIX: \(Int(vix)))"
             } else if vix < 12 {
                 confidence = 0.70
                 stance = .cautious
-                reasoning = "Rehavet (VIX: \(Int(vix))) - Dikkatli ol"
+                reasoning = "Complacency (VIX: \(Int(vix))) - Caution"
             } else if vix < 18 {
                 confidence = 0.75
                 stance = .riskOn
-                reasoning = "Sakin piyasa (VIX: \(Int(vix)))"
+                reasoning = "Calm Market (VIX: \(Int(vix)))"
             }
         }
         
@@ -112,11 +112,11 @@ struct SentimentMasterEngine: MacroCouncilMember, Sendable {
             if fg < 20 {
                 confidence = max(confidence, 0.85)
                 stance = .riskOn  // Contrarian - extreme fear = buy
-                reasoning = "Aşırı korku (F&G: \(Int(fg))) - Kontrarian AL"
+                reasoning = "Extreme Fear (F&G: \(Int(fg))) - Contrarian Buy"
             } else if fg > 80 {
                 confidence = max(confidence, 0.80)
                 stance = .defensive
-                reasoning = "Aşırı açgözlülük (F&G: \(Int(fg))) - Düzeltme riski"
+                reasoning = "Extreme Greed (F&G: \(Int(fg))) - Correction Risk"
             }
         }
         
@@ -136,23 +136,23 @@ struct SentimentMasterEngine: MacroCouncilMember, Sendable {
         
         if vix > 35 && proposal.stance == .riskOn {
             return MacroVote(voter: id, voterName: name, decision: .veto,
-                             reasoning: "VIX çok yüksek - Panik modu", weight: 1.0)
+                             reasoning: "VIX too high - Panic Mode", weight: 1.0)
         }
         
         if let fg = macro.fearGreedIndex, fg > 85 && proposal.stance == .riskOn {
             return MacroVote(voter: id, voterName: name, decision: .veto,
-                             reasoning: "Aşırı açgözlülük - Düzeltme yakın", weight: 0.9)
+                             reasoning: "Extreme Greed - Correction Imminent", weight: 0.9)
         }
         
-        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Duygu nötr", weight: 0.5)
+        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Sentiment Neutral", weight: 0.5)
     }
 }
 
-// MARK: - Sector Master Engine
+// MARK: - Sector Rotation Engine (ex-SectorMaster)
 /// Council member responsible for sector rotation analysis
-struct SectorMasterEngine: MacroCouncilMember, Sendable {
-    let id = "sector_master"
-    let name = "Sektör Ustası"
+struct SectorRotationEngine: MacroCouncilMember, Sendable {
+    let id = "sector_rotation"
+    let name = "Sector Rotation"
     
     nonisolated init() {}
     
@@ -167,19 +167,19 @@ struct SectorMasterEngine: MacroCouncilMember, Sendable {
         case .earlyExpansion:
             confidence = 0.80
             stance = .riskOn
-            reasoning = "Erken genişleme - Tech ve Finans liderliği"
+            reasoning = "Early Expansion - Tech & Finance Lead"
         case .lateExpansion:
             confidence = 0.70
             stance = .cautious
-            reasoning = "Geç genişleme - Enerji ve Hammadde liderliği"
+            reasoning = "Late Expansion - Energy & Materials Lead"
         case .earlyRecession:
             confidence = 0.85
             stance = .defensive
-            reasoning = "Erken resesyon - Savunmacı sektörlere geç"
+            reasoning = "Early Recession - Defensive Sectors Lead"
         case .lateRecession:
             confidence = 0.75
             stance = .cautious
-            reasoning = "Geç resesyon - Dipten dönüş aranıyor"
+            reasoning = "Late Recession - Bottoming Process"
         }
         
         guard confidence >= 0.65 else { return nil }
@@ -195,23 +195,23 @@ struct SectorMasterEngine: MacroCouncilMember, Sendable {
     
     func vote(on proposal: MacroProposal, macro: MacroSnapshot) -> MacroVote {
         guard let phase = macro.sectorRotation else {
-            return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Faz belirsiz", weight: 0.3)
+            return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Phase Unclear", weight: 0.3)
         }
         
         if phase == .earlyRecession && proposal.stance == .riskOn {
             return MacroVote(voter: id, voterName: name, decision: .veto,
-                             reasoning: "Resesyon başlıyor - Risk azalt", weight: 0.9)
+                             reasoning: "Recession Phase - Reduce Risk", weight: 0.9)
         }
         
-        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Sektör rotasyonu nötr", weight: 0.5)
+        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Rotation Neutral", weight: 0.5)
     }
 }
 
-// MARK: - Cycle Master Engine
+// MARK: - Economic Cycle Engine (ex-CycleMaster)
 /// Council member responsible for economic cycle analysis
-struct CycleMasterEngine: MacroCouncilMember, Sendable {
-    let id = "cycle_master"
-    let name = "Döngü Ustası"
+struct EconomicCycleEngine: MacroCouncilMember, Sendable {
+    let id = "economic_cycle"
+    let name = "Economic Cycle"
     
     nonisolated init() {}
     
@@ -225,15 +225,15 @@ struct CycleMasterEngine: MacroCouncilMember, Sendable {
             if gdp > 3 && unemployment < 4 {
                 confidence = 0.80
                 stance = .riskOn
-                reasoning = "Güçlü ekonomi: GDP +%\(String(format: "%.1f", gdp)), İşsizlik %\(String(format: "%.1f", unemployment))"
+                reasoning = "Strong Economy: GDP +%\(String(format: "%.1f", gdp)), UE %\(String(format: "%.1f", unemployment))"
             } else if gdp < 0 {
                 confidence = 0.85
                 stance = .defensive
-                reasoning = "Negatif GDP: %\(String(format: "%.1f", gdp)) - Resesyon"
+                reasoning = "Negative GDP: %\(String(format: "%.1f", gdp)) - Recession"
             } else if unemployment > 6 {
                 confidence = 0.75
                 stance = .cautious
-                reasoning = "Yüksek işsizlik: %\(String(format: "%.1f", unemployment))"
+                reasoning = "High Unemployment: %\(String(format: "%.1f", unemployment))"
             }
         }
         
@@ -242,7 +242,7 @@ struct CycleMasterEngine: MacroCouncilMember, Sendable {
             if inflation > 5 {
                 confidence = max(confidence, 0.75)
                 stance = .cautious
-                reasoning += " | Yüksek enflasyon: %\(String(format: "%.1f", inflation))"
+                reasoning += " | High Inflation: %\(String(format: "%.1f", inflation))"
             }
         }
         
@@ -260,18 +260,18 @@ struct CycleMasterEngine: MacroCouncilMember, Sendable {
     func vote(on proposal: MacroProposal, macro: MacroSnapshot) -> MacroVote {
         if let gdp = macro.gdpGrowth, gdp < -1 && proposal.stance == .riskOn {
             return MacroVote(voter: id, voterName: name, decision: .veto,
-                             reasoning: "Resesyon - Risk al değil", weight: 0.9)
+                             reasoning: "Recession - Risk Off", weight: 0.9)
         }
         
-        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Döngü nötr", weight: 0.5)
+        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Cycle Neutral", weight: 0.5)
     }
 }
 
-// MARK: - Correlation Master Engine
+// MARK: - Cross-Asset Engine (ex-CorrelationMaster)
 /// Council member responsible for cross-asset correlation analysis
-struct CorrelationMasterEngine: MacroCouncilMember, Sendable {
-    let id = "correlation_master"
-    let name = "Korelasyon Ustası"
+struct CrossAssetEngine: MacroCouncilMember, Sendable {
+    let id = "cross_asset"
+    let name = "Cross-Asset"
     
     nonisolated init() {}
     
@@ -285,11 +285,11 @@ struct CorrelationMasterEngine: MacroCouncilMember, Sendable {
             if adRatio > 2.0 {
                 confidence = 0.75
                 stance = .riskOn
-                reasoning = "Güçlü piyasa genişliği (A/D: \(String(format: "%.1f", adRatio)))"
+                reasoning = "Strong Breadth (A/D: \(String(format: "%.1f", adRatio)))"
             } else if adRatio < 0.5 {
                 confidence = 0.80
                 stance = .defensive
-                reasoning = "Zayıf piyasa genişliği (A/D: \(String(format: "%.1f", adRatio)))"
+                reasoning = "Weak Breadth (A/D: \(String(format: "%.1f", adRatio)))"
             }
         }
         
@@ -298,11 +298,11 @@ struct CorrelationMasterEngine: MacroCouncilMember, Sendable {
             if above200 > 70 {
                 confidence = max(confidence, 0.75)
                 stance = .riskOn
-                reasoning += " | %\(Int(above200)) hisse 200MA üstünde"
+                reasoning += " | %\(Int(above200)) above 200MA"
             } else if above200 < 30 {
                 confidence = max(confidence, 0.80)
                 stance = .defensive
-                reasoning = "Sadece %\(Int(above200)) hisse 200MA üstünde - Zayıf piyasa"
+                reasoning = "Only %\(Int(above200)) above 200MA - Market Weak"
             }
         }
         
@@ -311,11 +311,11 @@ struct CorrelationMasterEngine: MacroCouncilMember, Sendable {
             if pcr > 1.2 {
                 confidence = max(confidence, 0.70)
                 stance = .riskOn  // Contrarian
-                reasoning += " | Yüksek Put/Call (\(String(format: "%.2f", pcr))) - Korku yüksek"
+                reasoning += " | High P/C (\(String(format: "%.2f", pcr))) - Fear"
             } else if pcr < 0.7 {
                 confidence = max(confidence, 0.70)
                 stance = .cautious
-                reasoning += " | Düşük Put/Call (\(String(format: "%.2f", pcr))) - Rehavet"
+                reasoning += " | Low P/C (\(String(format: "%.2f", pcr))) - Complacency"
             }
         }
         
@@ -333,9 +333,9 @@ struct CorrelationMasterEngine: MacroCouncilMember, Sendable {
     func vote(on proposal: MacroProposal, macro: MacroSnapshot) -> MacroVote {
         if let above200 = macro.percentAbove200MA, above200 < 20 && proposal.stance == .riskOn {
             return MacroVote(voter: id, voterName: name, decision: .veto,
-                             reasoning: "Piyasa çok zayıf - Risk almak tehlikeli", weight: 0.9)
+                             reasoning: "Market Internals Weak", weight: 0.9)
         }
         
-        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Korelasyon nötr", weight: 0.5)
+        return MacroVote(voter: id, voterName: name, decision: .abstain, reasoning: "Cross-Asset Neutral", weight: 0.5)
     }
 }

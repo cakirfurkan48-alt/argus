@@ -25,11 +25,18 @@ actor AtlasV2Engine {
             }
         }
         
-        // 1. Veri çek
-        let financials = try await HeimdallOrchestrator.shared.requestFundamentals(symbol: symbol)
+        // FIX: HeimdallOrchestrator @MainActor olduğu için timeout ile korumalı çağrı
+        // Actor isolation Swift tarafından otomatik handle edilir, ama timeout ekliyoruz
         
-        // 2. Quote çek (güncel fiyat için)
-        let quote = try? await HeimdallOrchestrator.shared.requestQuote(symbol: symbol)
+        // 1. Veri çek (timeout ile)
+        let financials = try await withTimeout(seconds: 20) {
+            try await HeimdallOrchestrator.shared.requestFundamentals(symbol: symbol)
+        }
+        
+        // 2. Quote çek (güncel fiyat için, timeout ile)
+        let quote = try? await withTimeout(seconds: 10) {
+            try await HeimdallOrchestrator.shared.requestQuote(symbol: symbol)
+        }
         
         // 3. Sektör benchmark'ını al (TODO: Sektör bilgisi Yahoo assetProfile'den çekilebilir)
         let sectorBenchmark = benchmarks.getBenchmark(for: nil)
@@ -531,5 +538,37 @@ actor AtlasV2Engine {
         }
         
         return summary
+    }
+    
+    // MARK: - Timeout Helper (Deadlock Prevention)
+    
+    /// Timeout ile async işlemleri korur, sonsuz beklemeyi önler
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            // Ana işlem
+            group.addTask {
+                try await operation()
+            }
+            
+            // Timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError.timeout
+            }
+            
+            // İlk tamamlanan task'ı al
+            guard let result = try await group.next() else {
+                throw TimeoutError.timeout
+            }
+            
+            // Diğer task'ı iptal et
+            group.cancelAll()
+            
+            return result
+        }
+    }
+    
+    private enum TimeoutError: Error {
+        case timeout
     }
 }

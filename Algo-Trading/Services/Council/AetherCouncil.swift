@@ -9,11 +9,11 @@ actor AetherCouncil {
     
     private init() {
         self.members = [
-            FedMasterEngine(),
-            SentimentMasterEngine(),
-            SectorMasterEngine(),
-            CycleMasterEngine(),
-            CorrelationMasterEngine()
+            MonetaryPolicyEngine(),
+            MarketSentimentEngine(),
+            SectorRotationEngine(),
+            EconomicCycleEngine(),
+            CrossAssetEngine()
         ]
     }
     

@@ -11,9 +11,12 @@ actor YahooCandleAdapter {
     private init() {}
     
     /// Fetches candles with robust error handling for 502/HTML responses
-    func fetchCandles(symbol: String, timeframe: String, limit: Int) async throws -> [Candle] {
+    /// Returns: (Candles, SnapshotHash)
+    func fetchCandles(symbol: String, timeframe: String, limit: Int) async throws -> ([Candle], String) {
         // Use Builder for strict URL compliance
         let url = try YahooChartURLBuilder.build(symbol: symbol, timeframe: timeframe)
+        
+        let start = Date()
         
         // Use HeimdallNetwork for observability
         let data = try await HeimdallNetwork.request(
@@ -23,7 +26,19 @@ actor YahooCandleAdapter {
             symbol: symbol
         )
         
-        return try parseResponse(data, limit: limit)
+        // HOOK-1: Data Snapshot
+        let latency = Date().timeIntervalSince(start) * 1000
+        let blobHash = ForwardTestLedger.shared.logDataSnapshot(
+            symbol: symbol,
+            type: "CANDLES_OHLCV",
+            blobData: data,
+            marketTime: nil,
+            provider: "Yahoo",
+            latencyMs: Int(latency)
+        ) ?? "ERROR"
+        
+        let candles = try parseResponse(data, limit: limit)
+        return (candles, blobHash)
     }
     
     private func parseResponse(_ data: Data, limit: Int) throws -> [Candle] {
@@ -118,7 +133,8 @@ actor YahooCandleAdapter {
                 ))
             }
         }
-        
-        return Array(candles.suffix(limit).reversed())
+        // Tarihe göre sırala (eski → yeni) ve limit uygula
+        // NOT: .reversed() KALDIRILDI - Yahoo zaten kronolojik döndürüyor!
+        return Array(candles.suffix(limit))
     }
 }

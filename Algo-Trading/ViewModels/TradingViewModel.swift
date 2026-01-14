@@ -15,6 +15,37 @@ class TradingViewModel: ObservableObject {
     @Published var topLosers: [Quote] = []
     @Published var mostActive: [Quote] = []
     
+    // Terminal Optimized Data Source
+    @Published var terminalItems: [TerminalItem] = []
+    
+    func refreshTerminal() {
+        let newItems = watchlist.map { symbol -> TerminalItem in
+            let isBist = symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol)
+            let quote = quotes[symbol]
+            let decision = grandDecisions[symbol]
+            
+            return TerminalItem(
+                id: symbol,
+                symbol: symbol,
+                market: isBist ? .bist : .global,
+                currency: isBist ? .TRY : .USD,
+                price: quote?.currentPrice ?? 0.0,
+                dayChangePercent: quote?.percentChange,
+                orionScore: orionScores[symbol]?.score,
+                atlasScore: getFundamentalScore(for: symbol)?.totalScore,
+                councilScore: decision?.confidence,
+                action: decision?.action ?? .neutral,
+                dataQuality: dataHealthBySymbol[symbol]?.qualityScore ?? 0,
+                forecast: prometheusForecastBySymbol[symbol]
+            )
+        }
+        
+        // Sadece değişiklik varsa güncelle (UI performansın için)
+        if newItems != terminalItems {
+            terminalItems = newItems
+        }
+    }
+    
     @Published var quotes: [String: Quote] = [:]
     @Published var candles: [String: [Candle]] = [:]
     @Published var patterns: [String: [OrionChartPattern]] = [:] // Orion V3 Pattern Store
@@ -418,6 +449,7 @@ class TradingViewModel: ObservableObject {
     // MARK: - Orion Score Integration
     
     @Published var orionScores: [String: OrionScoreResult] = [:]
+    @Published var prometheusForecastBySymbol: [String: PrometheusForecast] = [:] // Prometheus 5-day forecasts
     
     // Orion Logic moved to TradingViewModel+Argus.swift
     
@@ -578,6 +610,27 @@ class TradingViewModel: ObservableObject {
                 await loadArgusData(for: symbol)
             }
             
+            // PROMETHEUS: 5-day price forecast
+            // Ensure forecast exists or is generated
+            if prometheusForecastBySymbol[symbol] == nil {
+                // 1. Ensure Candles (Data Dependency)
+                if candles[symbol] == nil {
+                    let cVal = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: "1day")
+                    if let c = cVal.value {
+                        await MainActor.run { self.candles[symbol] = c }
+                    }
+                }
+                
+                // 2. Generate Forecast if enough data
+                if let candleData = candles[symbol], candleData.count >= 30 {
+                    // Prices are usually oldest-first coming from provider.
+                    // Prometheus expects newest-first.
+                    let prices = candleData.map { $0.close }.reversed()
+                    let forecast = await PrometheusEngine.shared.forecast(symbol: symbol, historicalPrices: Array(prices))
+                    await MainActor.run { self.prometheusForecastBySymbol[symbol] = forecast }
+                }
+            }
+            
             // 5. Update DataHealth based on ACTUAL data availability
             await MainActor.run {
                 let candleCount = self.candles[symbol]?.count ?? 0
@@ -727,11 +780,14 @@ class TradingViewModel: ObservableObject {
     @MainActor
     func buy(symbol: String, quantity: Double, source: TradeSource = .user, engine: AutoPilotEngine? = nil, stopLoss: Double? = nil, takeProfit: Double? = nil, rationale: String? = nil, decisionTrace: DecisionTraceSnapshot? = nil, marketSnapshot: MarketSnapshot? = nil) {
         
-        // UNIFIED INPUT VALIDATION (Phase 1 Fix)
+        // UNIFIED INPUT VALIDATION & CURRENCY DETECTION
         let isBist = symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol)
-        let availableBalance = isBist ? bistBalance : balance
+        let currency: Currency = isBist ? .TRY : .USD
+        let availableBalance = (currency == .TRY) ? bistBalance : balance
+        
         let price = quotes[symbol]?.currentPrice
         
+        // Validator'a isBist boolean'ı currency kontrolü için yine lazım
         let validation = TradeValidator.validateBuy(
             symbol: symbol,
             quantity: quantity,
@@ -776,12 +832,9 @@ class TradingViewModel: ObservableObject {
         let commission = FeeModel.shared.calculate(amount: cost)
         let totalCost = cost + commission
         
-        
-        // isBist ve availableBalance zaten validation öncesi hesaplandı
-        // Burada tekrar kullanıyoruz
-        
+        // Bakiye kontrolü ve düşümü (Currency-Safe)
         if availableBalance >= totalCost {
-            if isBist {
+            if currency == .TRY {
                 bistBalance -= totalCost
             } else {
                 balance -= totalCost
@@ -799,7 +852,8 @@ class TradingViewModel: ObservableObject {
                 stopLoss: stopLoss,
                 takeProfit: takeProfit,
                 rationale: source == .autoPilot ? (rationale ?? "BUY_SIGNAL") : "MANUAL_OVERRIDE",
-                decisionContext: decisionTrace != nil ? makeDecisionContext(fromTrace: decisionTrace!) : (decisionTrace != nil && !self.agoraSnapshots.isEmpty ? makeDecisionContext(from: self.agoraSnapshots.last!) : nil)
+                decisionContext: decisionTrace != nil ? makeDecisionContext(fromTrace: decisionTrace!) : (decisionTrace != nil && !self.agoraSnapshots.isEmpty ? makeDecisionContext(from: self.agoraSnapshots.last!) : nil),
+                currency: currency // Explicit Currency
             )
             portfolio.append(newTrade)
             
@@ -826,8 +880,8 @@ class TradingViewModel: ObservableObject {
                 unrealizedPnlBefore: 0,
                 realizedPnlThisTrade: 0,
                 portfolioSnapshot: PositionSnapshot.PortfolioSnapshot(
-                    cashBefore: balance + totalCost,
-                    cashAfter: balance,
+                    cashBefore: (currency == .TRY ? bistBalance + totalCost : balance + totalCost),
+                    cashAfter: (currency == .TRY ? bistBalance : balance),
                     grossExposure: portfolio.filter { $0.isOpen }.reduce(0) { $0 + ($1.quantity * (quotes[$1.symbol]?.currentPrice ?? $1.entryPrice)) },
                     netExposure: portfolio.filter { $0.isOpen }.reduce(0) { $0 + ($1.quantity * (quotes[$1.symbol]?.currentPrice ?? $1.entryPrice)) },
                     positionsCount: portfolio.filter { $0.isOpen }.count
@@ -843,6 +897,7 @@ class TradingViewModel: ObservableObject {
                 price: validPrice,
                 date: Date(),
                 fee: commission,
+                currency: currency, // Explicit Currency
                 pnl: nil,
                 pnlPercent: nil,
                 decisionTrace: decisionTrace,
@@ -864,7 +919,10 @@ class TradingViewModel: ObservableObject {
             ))
             saveTransactions() // Persist immediately
             
-            self.lastAction = "Alındı: \(String(format: "%.2f", quantity))x \(symbol) @ $\(String(format: "%.2f", validPrice))"
+            // Log Message (Currency aware)
+            let currencySymbol = currency.symbol
+            self.lastAction = "Alındı: \(String(format: "%.2f", quantity))x \(symbol) @ \(currencySymbol)\(String(format: "%.2f", validPrice))"
+
             
             // ARGUS VOICE (Phase 3)
             // Fire-and-forget generation
@@ -1294,12 +1352,11 @@ class TradingViewModel: ObservableObject {
     func getTotalPortfolioValue() -> Double {
         var total: Double = 0.0
         for trade in portfolio where trade.isOpen {
-            // BIST hisselerini atla - bunlar TL cinsinden
-            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
-            if isBist { continue }
-            
-            if let quote = quotes[trade.symbol] {
-                total += quote.currentPrice * trade.quantity
+            // New Currency Check
+            if trade.currency == .USD {
+                if let quote = quotes[trade.symbol] {
+                    total += quote.currentPrice * trade.quantity
+                }
             }
         }
         return total
@@ -1309,11 +1366,11 @@ class TradingViewModel: ObservableObject {
     func getBistPortfolioValue() -> Double {
         var total: Double = 0.0
         for trade in portfolio where trade.isOpen {
-            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
-            if !isBist { continue }
-            
-            if let quote = quotes[trade.symbol] {
-                total += quote.currentPrice * trade.quantity
+            // New Currency Check
+            if trade.currency == .TRY {
+                if let quote = quotes[trade.symbol] {
+                    total += quote.currentPrice * trade.quantity
+                }
             }
         }
         return total
@@ -1323,13 +1380,11 @@ class TradingViewModel: ObservableObject {
     func getUnrealizedPnL() -> Double {
         var totalPnL = 0.0
         for trade in portfolio where trade.isOpen {
-            // BIST hisselerini atla
-            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
-            if isBist { continue }
-            
-            if let currentPrice = quotes[trade.symbol]?.currentPrice {
-                let diff = currentPrice - trade.entryPrice
-                totalPnL += diff * trade.quantity
+            if trade.currency == .USD {
+                if let currentPrice = quotes[trade.symbol]?.currentPrice {
+                    let diff = currentPrice - trade.entryPrice
+                    totalPnL += diff * trade.quantity
+                }
             }
         }
         return totalPnL
@@ -1339,12 +1394,11 @@ class TradingViewModel: ObservableObject {
     func getBistUnrealizedPnL() -> Double {
         var totalPnL = 0.0
         for trade in portfolio where trade.isOpen {
-            let isBist = trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
-            if !isBist { continue }
-            
-            if let currentPrice = quotes[trade.symbol]?.currentPrice {
-                let diff = currentPrice - trade.entryPrice
-                totalPnL += diff * trade.quantity
+            if trade.currency == .TRY {
+                if let currentPrice = quotes[trade.symbol]?.currentPrice {
+                    let diff = currentPrice - trade.entryPrice
+                    totalPnL += diff * trade.quantity
+                }
             }
         }
         return totalPnL
@@ -1771,15 +1825,15 @@ extension TradingViewModel {
     }    
 
     var bistPortfolio: [Trade] {
-        portfolio.filter { $0.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol) }
+        portfolio.filter { $0.currency == .TRY }
     }
 
     var globalPortfolio: [Trade] {
-        portfolio.filter { !($0.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) }
+        portfolio.filter { $0.currency == .USD }
     }
     
     
-    // Logları filtrele: Sadece Global semboller (BIST olmayanlar)
+    // Logları filtrele: Sadece Global semboller (BIST olmayanlar) - Loglarda currency alanı yoksa symbol kontrolüne devam etmek zorunda kalabiliriz ama trade üzerinden gidiyorsak currency kullanırız. ScoutLog içinde currency yok, o yüzden burada symbol check kalmalı ya da ScoutLog güncellenmeli. Ancak ScoutLog trade değil. Burada symbol check mecburen kalacak veya ScoutLog'a da eklemeliyiz. Şimdilik symbol check devam etsin ama SymbolResolver ile destekli.
     var globalScoutLogs: [ScoutLog] {
         scoutLogs.filter { !($0.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) }
     }
@@ -1790,12 +1844,12 @@ extension TradingViewModel {
         
         // 1. BIST Pozisyonlarını Sil
         portfolio.removeAll { trade in
-            trade.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(trade.symbol)
+            trade.currency == .TRY
         }
         savePortfolio()
         print("✅ BIST pozisyonları silindi.")
         
-        // 2. BIST İşlem Geçmişini Sil
+        // 2. BIST İşlem Geçmişini Sil - Transaction modelinde currency yoksa symbol check devam
         transactionHistory.removeAll { tx in
             tx.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(tx.symbol)
         }
@@ -1808,16 +1862,17 @@ extension TradingViewModel {
         print("✅ Bakiye 1.000.000 TL olarak ayarlandı.")
     }
     
-    // MARK: - Smart Rebalancing (Portföy Dengesi Analizi)
+    // MARK: - Smart Rebalancing (Portföy Dengesi Analizi - GLOBAL ONLY)
     
-    /// Her pozisyonun portföy içindeki yüzde ağırlığı
+    /// Her pozisyonun portföy içindeki yüzde ağırlığı (Sadece Global/USD)
+    /// NOT: BIST için ayrı bir allocation hesabı yapılmalı
     var portfolioAllocation: [String: PortfolioAllocationItem] {
-        let totalEquity = getEquity()
+        let totalEquity = getEquity() // Sadece Global Equity
         guard totalEquity > 0 else { return [:] }
         
         var allocation: [String: PortfolioAllocationItem] = [:]
         
-        for trade in portfolio where trade.isOpen {
+        for trade in portfolio where trade.isOpen && trade.currency == .USD {
             let currentPrice = quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
             let positionValue = currentPrice * trade.quantity
             let percentage = (positionValue / totalEquity) * 100

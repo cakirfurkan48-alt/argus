@@ -73,8 +73,36 @@ final class HeimdallOrchestrator {
     // MARK: - Macro
     
     func requestMacro(symbol: String, context: UsageContext = .interactive) async throws -> HeimdallMacroIndicator {
-        print("🏛️ Yahoo Direct: Macro for \(symbol)")
-        return try await yahoo.fetchMacro(symbol: symbol)
+        // Routing Logic
+        if symbol.hasPrefix("FRED.") || ["INFLATION", "FEDFUNDS", "GDP", "UNRATE"].contains(symbol) {
+            // Map common aliases to FRED Series IDs
+            let seriesId: String
+            switch symbol {
+            case "INFLATION": seriesId = "CPIAUCSL"
+            case "FEDFUNDS": seriesId = "FEDFUNDS"
+            case "GDP": seriesId = "GDPC1"
+            case "UNRATE": seriesId = "UNRATE"
+            default: seriesId = symbol.replacingOccurrences(of: "FRED.", with: "")
+            }
+            
+            print("🏛️ HEIMDALL: Routing \(symbol) -> FRED Provider (\(seriesId))")
+            
+            // Fetch series from Fred
+            let series = try await fred.fetchSeries(seriesId: seriesId, limit: 1)
+            guard let latest = series.first else { throw URLError(.badServerResponse) }
+            
+            return HeimdallMacroIndicator(
+                symbol: symbol,
+                value: latest.1,
+                change: nil,
+                changePercent: nil,
+                lastUpdated: latest.0
+            )
+        } else {
+            // Default to Yahoo (VIX, DXY, Etc)
+            print("🏛️ HEIMDALL: Routing \(symbol) -> Yahoo Provider")
+            return try await yahoo.fetchMacro(symbol: symbol)
+        }
     }
     
     // MARK: - FRED Series (Special - Direct to FRED)

@@ -183,7 +183,7 @@ actor ExecutionGovernor {
             orionScore: scores.1,
             atlasScore: scores.0,
             hermesScore: scores.3,
-            cronosScore: scores.4,
+            demeterScore: scores.4,
             cluster: ClusterMap.getCluster(for: trade.symbol)
         )
         await TradeJournal.shared.logEntry(snapshot: snapshot)

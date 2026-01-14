@@ -3,14 +3,17 @@ import SwiftUI
 // MARK: - Atlas (Argus Core) Sheet
 struct ArgusAtlasSheet: View {
     let score: FundamentalScoreResult?
+    let symbol: String
     
     var body: some View {
-        if let score = score {
-            ScoreDetailsSheet(score: score)
-        } else {
-            NavigationView {
-                Text("Veri Yok")
-                    .navigationTitle("Argus Atlas")
+        NavigationStack {
+            // 🆕 BIST vs Global kontrolü (.IS suffix veya bilinen BIST sembolü)
+            if symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol) {
+                // BIST sembolü için .IS suffix ekle (gerekirse)
+                let bistSymbol = symbol.uppercased().hasSuffix(".IS") ? symbol : "\(symbol.uppercased()).IS"
+                BISTBilancoDetailView(sembol: bistSymbol)
+            } else {
+                AtlasV2DetailView(symbol: symbol)
             }
         }
     }
@@ -21,11 +24,12 @@ struct ArgusOrionSheet: View {
     let symbol: String
     let orion: OrionScoreResult?
     let candles: [Candle]?
+    let patterns: [OrionChartPattern]? // Orion V3
     
     var body: some View {
         NavigationView {
             if let orion = orion {
-                OrionDetailView(symbol: symbol, orion: orion, candles: candles)
+                OrionDetailView(symbol: symbol, orion: orion, candles: candles, patterns: patterns)
             } else {
                 Text("Veri Yok")
             }
