@@ -16,23 +16,61 @@ final class HeimdallOrchestrator {
     // MARK: - Quote
     
     func requestQuote(symbol: String, context: UsageContext = .interactive) async throws -> Quote {
-        // BIST Routing (BorsaPy)
-        // BIST Routing REMOVED: BorsaPy returns incorrect data.
-        // Unified path -> Yahoo Finance (which has correct BIST data)
-        // if symbol.uppercased().hasSuffix(".IS") ... { ... }
+        let provider = "yahoo"
+        let endpoint = "/quote"
+        
+        // Circuit Breaker Check
+        guard await HeimdallCircuitBreaker.shared.canRequest(provider: provider) else {
+            await HeimdallLogger.shared.warn("circuit_blocked", provider: provider, errorClass: "circuit_open")
+            throw HeimdallCoreError(category: .rateLimited, code: 503, message: "Circuit open for \(provider)", bodyPrefix: "")
+        }
         
         await RateLimiter.shared.waitIfNeeded()
-        print("🏛️ Yahoo Direct: Quote for \(symbol)")
-        return try await yahoo.fetchQuote(symbol: symbol)
+        let start = Date()
+        
+        do {
+            let quote = try await yahoo.fetchQuote(symbol: symbol)
+            let latency = Int(Date().timeIntervalSince(start) * 1000)
+            
+            await HeimdallCircuitBreaker.shared.reportSuccess(provider: provider)
+            await HeimdallLogger.shared.info("fetch_success", provider: provider, endpoint: endpoint, symbol: symbol, latencyMs: latency)
+            await HealthStore.shared.reportSuccess(provider: provider, latency: Double(latency))
+            
+            return quote
+        } catch {
+            await HeimdallCircuitBreaker.shared.reportFailure(provider: provider, error: error)
+            await HeimdallLogger.shared.error("fetch_failed", provider: provider, errorClass: classifyError(error), errorMessage: error.localizedDescription, endpoint: endpoint)
+            await HealthStore.shared.reportError(provider: provider, error: error)
+            throw error
+        }
     }
     
     // MARK: - Fundamentals
     
     func requestFundamentals(symbol: String, context: UsageContext = .interactive) async throws -> FinancialsData {
+        let provider = "yahoo"
+        let endpoint = "/fundamentals"
+        
+        guard await HeimdallCircuitBreaker.shared.canRequest(provider: provider) else {
+            throw HeimdallCoreError(category: .rateLimited, code: 503, message: "Circuit open", bodyPrefix: "")
+        }
+        
         await RateLimiter.shared.waitIfNeeded()
-        print("🏛️ Yahoo Direct: Fundamentals for \(symbol)")
-        return try await yahoo.fetchFundamentals(symbol: symbol)
+        let start = Date()
+        
+        do {
+            let data = try await yahoo.fetchFundamentals(symbol: symbol)
+            let latency = Int(Date().timeIntervalSince(start) * 1000)
+            await HeimdallCircuitBreaker.shared.reportSuccess(provider: provider)
+            await HeimdallLogger.shared.info("fetch_success", provider: provider, endpoint: endpoint, symbol: symbol, latencyMs: latency)
+            return data
+        } catch {
+            await HeimdallCircuitBreaker.shared.reportFailure(provider: provider, error: error)
+            await HeimdallLogger.shared.error("fetch_failed", provider: provider, errorClass: classifyError(error), errorMessage: error.localizedDescription, endpoint: endpoint)
+            throw error
+        }
     }
+
     
     // MARK: - Candles
     
@@ -41,18 +79,32 @@ final class HeimdallOrchestrator {
         timeframe: String,
         limit: Int,
         context: UsageContext = .interactive,
-        provider: ProviderTag? = nil,
+        provider providerTag: ProviderTag? = nil,
         instrument: CanonicalInstrument? = nil
     ) async throws -> [Candle] {
-        // BIST Routing (BorsaPy)
-        // BIST Routing REMOVED for Data Consistency
-        // BorsaPy candles are OK but we want unified provider.
-        // if (symbol.uppercased().hasSuffix(".IS") ... { ... }
+        let provider = "yahoo"
+        let endpoint = "/candles"
+        
+        guard await HeimdallCircuitBreaker.shared.canRequest(provider: provider) else {
+            throw HeimdallCoreError(category: .rateLimited, code: 503, message: "Circuit open", bodyPrefix: "")
+        }
         
         await RateLimiter.shared.waitIfNeeded()
-        print("🏛️ Yahoo Direct: Candles for \(symbol) (\(timeframe), \(limit) bars)")
-        return try await yahoo.fetchCandles(symbol: symbol, timeframe: timeframe, limit: limit)
+        let start = Date()
+        
+        do {
+            let candles = try await yahoo.fetchCandles(symbol: symbol, timeframe: timeframe, limit: limit)
+            let latency = Int(Date().timeIntervalSince(start) * 1000)
+            await HeimdallCircuitBreaker.shared.reportSuccess(provider: provider)
+            await HeimdallLogger.shared.info("fetch_success", provider: provider, endpoint: endpoint, symbol: symbol, latencyMs: latency)
+            return candles
+        } catch {
+            await HeimdallCircuitBreaker.shared.reportFailure(provider: provider, error: error)
+            await HeimdallLogger.shared.error("fetch_failed", provider: provider, errorClass: classifyError(error), errorMessage: error.localizedDescription, endpoint: endpoint)
+            throw error
+        }
     }
+
     
     // MARK: - News
     
@@ -149,6 +201,26 @@ final class HeimdallOrchestrator {
     
     func getProviderScores() async -> [String: ProviderScore] {
         return ["Yahoo": ProviderScore.neutral]
+    }
+    
+    // MARK: - Error Classification Helper
+    
+    private func classifyError(_ error: Error) -> String {
+        if let heimdallError = error as? HeimdallCoreError {
+            return heimdallError.category.rawValue
+        }
+        
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut: return "timeout"
+            case .notConnectedToInternet: return "network"
+            case .userAuthenticationRequired: return "auth"
+            case .cancelled: return "cancelled"
+            default: return "network"
+            }
+        }
+        
+        return "unknown"
     }
 }
 
