@@ -9,40 +9,36 @@ final class AthenaFactorService {
     private init() {}
     
     /// Calculate all factor scores for a given symbol
-    /// - Note: orionScore parameter added to avoid double momentum calculation
+    /// - Note: Uses AthenaInferenceEngine for final scoring
     func calculateFactors(
         symbol: String,
         financials: FinancialsData?,
         atlasResult: FundamentalScoreResult?,
         candles: [Candle],
-        orionScore: OrionScoreResult? = nil  // NEW: Delegate momentum to Orion
+        orionScore: OrionScoreResult? = nil
     ) -> AthenaFactorResult {
         
-        // 1. Value Factor (Valuation)
+        // 1. Extract Features (Rule-Based Feature Engineering)
         let valueScore = calculateValueFactor(financials: financials)
-        
-        // 2. Quality Factor (Reusing Atlas Sub-scores)
         let qualityScore = calculateQualityFactor(atlasResult: atlasResult)
-        
-        // 3. Momentum Factor - DELEGATED TO ORION (avoid double counting)
         let momentumScore = calculateMomentumFactor(orionScore: orionScore, candles: candles)
-        
-        // 4. Size Factor (NEW - Fama-French SMB)
         let sizeScore = calculateSizeFactor(marketCap: financials?.marketCap)
-        
-        // 5. Risk Factor (Volatility + Liquidity)
         let riskScore = calculateRiskFactor(financials: financials, candles: candles)
         
-        // 6. Final Factor Score
-        // NEW WEIGHTS: Value(20%), Quality(25%), Momentum(25%), Size(15%), Risk(15%)
-        let weightedScore = (valueScore * 0.20) +
-                            (qualityScore * 0.25) +
-                            (momentumScore * 0.25) +
-                            (sizeScore * 0.15) +
-                            (riskScore * 0.15)
+        // 2. Create Feature Vector
+        let features = AthenaFeatureVector(
+            valueScore: valueScore,
+            qualityScore: qualityScore,
+            momentumScore: momentumScore,
+            sizeScore: sizeScore,
+            riskScore: riskScore
+        )
         
-        // 7. Style Label
-        let styleLabel = generateStyleLabel(value: valueScore, quality: qualityScore, momentum: momentumScore, size: sizeScore)
+        // 3. AI Inference (Predict)
+        let prediction = AthenaInferenceEngine.shared.predict(features: features)
+        
+        // 4. Generate Human-Readable Label (Explainability)
+        let styleLabel = generateStyleLabel(features: features, prediction: prediction)
         
         return AthenaFactorResult(
             symbol: symbol,
@@ -50,9 +46,9 @@ final class AthenaFactorService {
             valueFactorScore: valueScore,
             qualityFactorScore: qualityScore,
             momentumFactorScore: momentumScore,
-            sizeFactorScore: sizeScore,  // NEW
+            sizeFactorScore: sizeScore,
             riskFactorScore: riskScore,
-            factorScore: weightedScore,
+            factorScore: prediction.predictedScore, // AI Output
             styleLabel: styleLabel
         )
     }
@@ -213,18 +209,18 @@ final class AthenaFactorService {
     }
     
     // MARK: - Label Generation
-    private func generateStyleLabel(value: Double, quality: Double, momentum: Double, size: Double) -> String {
+    private func generateStyleLabel(features: AthenaFeatureVector, prediction: AthenaPrediction) -> String {
         func getWord(score: Double, low: String, mid: String, high: String) -> String {
             if score >= 70 { return high }
             else if score >= 40 { return mid }
             else { return low }
         }
         
-        let vWord = getWord(score: value, low: "Pahalı", mid: "Makul", high: "Ucuz")
-        let qWord = getWord(score: quality, low: "Spekülatif", mid: "Solid", high: "Kaliteli")
-        let mWord = getWord(score: momentum, low: "Zayıf", mid: "Yatay", high: "Momentumlu")
-        let sWord = size >= 70 ? "Mid-Cap" : (size >= 50 ? "Large-Cap" : "Mega-Cap")
+        let vWord = getWord(score: features.valueScore, low: "Pahalı", mid: "Makul", high: "Ucuz")
+        let qWord = getWord(score: features.qualityScore, low: "Spekülatif", mid: "Solid", high: "Kaliteli")
+        let sWord = features.sizeScore >= 70 ? "Mid-Cap" : (features.sizeScore >= 50 ? "Large-Cap" : "Mega-Cap")
         
-        return "Athena: \(vWord) \(qWord) \(sWord) (\(mWord))"
+        // Add Dominant Factor info
+        return "Athena (\(prediction.dominantFactor)): \(vWord) \(qWord) \(sWord)"
     }
 }

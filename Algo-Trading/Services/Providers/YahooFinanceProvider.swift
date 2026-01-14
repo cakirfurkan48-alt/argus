@@ -411,8 +411,10 @@ final class YahooFinanceProvider: HeimdallProvider {
         } catch {
             // Check if it's a 401 error (Invalid Crumb)
             if let urlError = error as? URLError, urlError.code == .userAuthenticationRequired {
-                print("🔐 Yahoo: 401 detected. Invalidating crumb and retrying...")
+                print("🔐 Yahoo: 401 detected. Invalidating crumb...")
                 await YahooAuthenticationService.shared.invalidate()
+                // Brief pause before retry to avoid hammering
+                try? await Task.sleep(nanoseconds: 1 * 1_000_000_000) 
                 return try await _fetchFundamentalsInternal(symbol: symbol, isRetry: true)
             }
             throw error
@@ -524,28 +526,12 @@ final class YahooFinanceProvider: HeimdallProvider {
             throw URLError(.resourceUnavailable)
         }
         
-        // --- 🔍 ATLAS AUDIT LOG ---
-        print("\n=== 🔍 ATLAS AUDIT: \(symbol) ===")
-        print("🌍 Endpoint: \(urlString)") 
-        print("📦 Content-Type: JSON") // Implied by success decode
-        
-        var modulesFound: [String] = []
-        if res.financialData != nil { modulesFound.append("financialData") }
-        if res.defaultKeyStatistics != nil { modulesFound.append("defaultKeyStatistics") }
-        if res.assetProfile != nil { modulesFound.append("assetProfile") }
-        if res.incomeStatementHistory != nil { modulesFound.append("income") }
-        if res.balanceSheetHistory != nil { modulesFound.append("balance") }
-        if res.cashflowStatementHistory != nil { modulesFound.append("cash") }
-        print("📚 Modules Present: \(modulesFound.joined(separator: ", "))")
-        
-        if let inc = res.incomeStatementHistory?.incomeStatementHistory?.first {
-            print("💰 Sample Metric (Revenue): \(inc.totalRevenue?.raw ?? -1)")
-            print("💰 Sample Metric (NetIncome): \(inc.netIncome?.raw ?? -1)")
-            print("🗓 Period: \(inc.endDate?.raw ?? -1)") // Timestamp
-        } else {
-            print("⚠️ Missing Income Statement History")
+        // --- 🔍 ATLAS AUDIT LOG (Minimal) ---
+        // print("\n=== 🔍 ATLAS AUDIT: \(symbol) ===")
+        // Only log if critical modules are missing
+        if res.financialData == nil {
+             print("⚠️ Yahoo/Atlas: Missing financialData for \(symbol)")
         }
-        print("==============================\n")
         // ---------------------------
         
         let fin = res.financialData

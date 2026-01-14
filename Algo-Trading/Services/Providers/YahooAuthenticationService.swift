@@ -9,23 +9,55 @@ actor YahooAuthenticationService {
     private var cookie: String?
     private var lastAuthTime: Date?
     
+    // Circuit Breaker State
+    private var consecutiveFailures: Int = 0
+    private var circuitBreakUntil: Date?
+    
     // Session with cookie storage
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieAcceptPolicy = .always
+        config.timeoutIntervalForRequest = 10 // Short timeout to fail fast
         return URLSession(configuration: config)
     }()
     
     private init() {}
     
     func getCrumb() async throws -> (String, String) {
+        // 0. Check Circuit Breaker
+        if let breakUntil = circuitBreakUntil, Date() < breakUntil {
+            print("🚫 YahooAuth: Circuit Breaker OPEN. Waiting until \(breakUntil)")
+            throw URLError(.userAuthenticationRequired)
+        }
+        
         // 1. Check Cache (1 Hour TTL)
         if let c = crumb, let k = cookie, let t = lastAuthTime, -t.timeIntervalSinceNow < 3600 {
             return (c, k)
         }
         
         // 2. Refresh
-        return try await refresh()
+        do {
+            let result = try await refresh()
+            // Success: Reset breaker
+            consecutiveFailures = 0
+            circuitBreakUntil = nil
+            return result
+        } catch {
+            // Failure: Increment breaker
+            consecutiveFailures += 1
+            print("⚠️ YahooAuth: Refresh attempt failed (\(consecutiveFailures)/5)")
+            
+            if consecutiveFailures >= 5 {
+                let backoffSeconds = 300.0 // 5 Minutes
+                circuitBreakUntil = Date().addingTimeInterval(backoffSeconds)
+                print("⛔️ YahooAuth: Too many failures. Circuit Breaker ACTIVATED for \(Int(backoffSeconds))s")
+            } else {
+                // Short backoff (Exponential: 2s, 4s, 8s, 16s...)
+                let backoff = pow(2.0, Double(consecutiveFailures))
+                try? await Task.sleep(nanoseconds: UInt64(backoff * 1_000_000_000))
+            }
+            throw error
+        }
     }
     
     /// Invalidate cached crumb (call this on 401 errors)

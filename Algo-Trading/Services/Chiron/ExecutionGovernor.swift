@@ -166,27 +166,21 @@ actor ExecutionGovernor {
         return openCount >= effectiveLimit
     }
 
-    // MARK: - Journaling Hook
+    // MARK: - Journaling Hook (ARGUS 3.0: Migrated to ForwardTestLedger)
     
     func didExecute(trade: Trade, scores: (Double, Double, Double, Double, Double?)) async {
-        let snapshot = TradeSnapshot(
-            tradeId: trade.id,
+        // Create entry reason from scores
+        let reason = "Atlas: \(Int(scores.0)), Orion: \(Int(scores.1)), Aether: \(Int(scores.2)), Hermes: \(Int(scores.3))"
+        let dominantSignal = scores.1 > scores.0 ? "Orion" : "Atlas"
+        
+        // Log to ArgusLedger (Single Source of Truth)
+        ForwardTestLedger.shared.openTrade(
             symbol: trade.symbol,
-            entryDate: trade.entryDate,
-            direction: "Long",
-            entryPrice: trade.entryPrice,
-            quantity: trade.quantity,
-            riskAmount: (trade.entryPrice - (trade.stopLoss ?? 0)) * trade.quantity,
-            stopLoss: trade.stopLoss,
-            takeProfit: trade.takeProfit,
-            aetherScore: scores.2,
-            orionScore: scores.1,
-            atlasScore: scores.0,
-            hermesScore: scores.3,
-            demeterScore: scores.4,
-            cluster: ClusterMap.getCluster(for: trade.symbol)
+            price: trade.entryPrice,
+            reason: reason,
+            dominantSignal: dominantSignal,
+            decisionId: trade.id.uuidString
         )
-        await TradeJournal.shared.logEntry(snapshot: snapshot)
     }
 }
 

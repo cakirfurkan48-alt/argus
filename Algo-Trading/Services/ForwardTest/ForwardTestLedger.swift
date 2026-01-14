@@ -81,14 +81,61 @@ final class ForwardTestLedger: Sendable {
         );
         """
         
+        // ARGUS 3.0: New Tables
+        let createTrades = """
+        CREATE TABLE IF NOT EXISTS trades (
+            trade_id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'OPEN',
+            entry_date TEXT NOT NULL,
+            entry_price REAL NOT NULL,
+            entry_reason TEXT,
+            exit_date TEXT,
+            exit_price REAL,
+            pnl_percent REAL,
+            dominant_signal TEXT,
+            decision_id TEXT
+        );
+        """
+        
+        let createLessons = """
+        CREATE TABLE IF NOT EXISTS lessons (
+            lesson_id TEXT PRIMARY KEY,
+            trade_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            lesson_text TEXT NOT NULL,
+            deviation_percent REAL,
+            weight_changes_json TEXT,
+            FOREIGN KEY (trade_id) REFERENCES trades(trade_id)
+        );
+        """
+        
+        let createWeightHistory = """
+        CREATE TABLE IF NOT EXISTS weight_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            module TEXT NOT NULL,
+            old_weight REAL NOT NULL,
+            new_weight REAL NOT NULL,
+            reason TEXT,
+            trade_id TEXT
+        );
+        """
+        
         let indices = [
             "CREATE INDEX IF NOT EXISTS idx_events_time ON events(event_time_utc);",
             "CREATE INDEX IF NOT EXISTS idx_events_symbol_time ON events(symbol, event_time_utc);",
-            "CREATE INDEX IF NOT EXISTS idx_events_decision ON events(decision_id);"
+            "CREATE INDEX IF NOT EXISTS idx_events_decision ON events(decision_id);",
+            "CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);",
+            "CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status);",
+            "CREATE INDEX IF NOT EXISTS idx_lessons_trade ON lessons(trade_id);"
         ]
         
         execute(sql: createBlobs)
         execute(sql: createEvents)
+        execute(sql: createTrades)
+        execute(sql: createLessons)
+        execute(sql: createWeightHistory)
         for idx in indices { execute(sql: idx) }
     }
     
@@ -251,6 +298,191 @@ final class ForwardTestLedger: Sendable {
     private func sha256(data: Data) -> String {
         let digest = SHA256.hash(data: data)
         return digest.compactMap { String(format: "%02x", $0) }.joined()
+    }
+    
+    // MARK: - ARGUS 3.0: Trade Lifecycle API
+    
+    /// Opens a new trade and returns its UUID.
+    @discardableResult
+    func openTrade(
+        symbol: String,
+        price: Double,
+        reason: String,
+        dominantSignal: String? = nil,
+        decisionId: String? = nil
+    ) -> UUID {
+        let tradeId = UUID()
+        let now = Date().iso8601
+        
+        let sql = """
+        INSERT INTO trades (trade_id, symbol, status, entry_date, entry_price, entry_reason, dominant_signal, decision_id)
+        VALUES (?, ?, 'OPEN', ?, ?, ?, ?, ?);
+        """
+        
+        queue.sync {
+            ensureConnection()
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (tradeId.uuidString as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (symbol as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 3, (now as NSString).utf8String, -1, nil)
+                sqlite3_bind_double(stmt, 4, price)
+                sqlite3_bind_text(stmt, 5, (reason as NSString).utf8String, -1, nil)
+                
+                if let signal = dominantSignal {
+                    sqlite3_bind_text(stmt, 6, (signal as NSString).utf8String, -1, nil)
+                } else {
+                    sqlite3_bind_null(stmt, 6)
+                }
+                
+                if let decId = decisionId {
+                    sqlite3_bind_text(stmt, 7, (decId as NSString).utf8String, -1, nil)
+                } else {
+                    sqlite3_bind_null(stmt, 7)
+                }
+                
+                if sqlite3_step(stmt) != SQLITE_DONE {
+                    print("🚨 ArgusLedger: Trade Open Error")
+                } else {
+                    print("📈 ArgusLedger: Trade Opened for \(symbol) @ \(price)")
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        
+        return tradeId
+    }
+    
+    /// Closes an open trade and calculates PnL.
+    func closeTrade(tradeId: UUID, exitPrice: Double) {
+        let now = Date().iso8601
+        
+        // First, get entry price to calculate PnL
+        var entryPrice: Double = 0
+        var symbol: String = ""
+        
+        let selectSql = "SELECT entry_price, symbol FROM trades WHERE trade_id = ?;"
+        
+        queue.sync {
+            ensureConnection()
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, selectSql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (tradeId.uuidString as NSString).utf8String, -1, nil)
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    entryPrice = sqlite3_column_double(stmt, 0)
+                    if let symPtr = sqlite3_column_text(stmt, 1) {
+                        symbol = String(cString: symPtr)
+                    }
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        
+        guard entryPrice > 0 else {
+            print("⚠️ ArgusLedger: Trade not found for closing: \(tradeId)")
+            return
+        }
+        
+        let pnlPercent = ((exitPrice - entryPrice) / entryPrice) * 100.0
+        
+        let updateSql = """
+        UPDATE trades SET status = 'CLOSED', exit_date = ?, exit_price = ?, pnl_percent = ? WHERE trade_id = ?;
+        """
+        
+        queue.sync {
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, updateSql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (now as NSString).utf8String, -1, nil)
+                sqlite3_bind_double(stmt, 2, exitPrice)
+                sqlite3_bind_double(stmt, 3, pnlPercent)
+                sqlite3_bind_text(stmt, 4, (tradeId.uuidString as NSString).utf8String, -1, nil)
+                
+                if sqlite3_step(stmt) != SQLITE_DONE {
+                    print("🚨 ArgusLedger: Trade Close Error")
+                } else {
+                    print("💰 ArgusLedger: Trade Closed for \(symbol). PnL: \(String(format: "%.2f", pnlPercent))%")
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+    }
+    
+    /// Records a lesson learned from a trade.
+    func recordLesson(tradeId: UUID, lesson: String, deviationPercent: Double? = nil, weightChanges: [String: Double]? = nil) {
+        let lessonId = UUID()
+        let now = Date().iso8601
+        let weightJson = weightChanges != nil ? asJsonString(weightChanges! as [String: Any]) : nil
+        
+        let sql = """
+        INSERT INTO lessons (lesson_id, trade_id, created_at, lesson_text, deviation_percent, weight_changes_json)
+        VALUES (?, ?, ?, ?, ?, ?);
+        """
+        
+        queue.async {
+            self.ensureConnection()
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (lessonId.uuidString as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (tradeId.uuidString as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 3, (now as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 4, (lesson as NSString).utf8String, -1, nil)
+                
+                if let dev = deviationPercent {
+                    sqlite3_bind_double(stmt, 5, dev)
+                } else {
+                    sqlite3_bind_null(stmt, 5)
+                }
+                
+                if let wJson = weightJson {
+                    sqlite3_bind_text(stmt, 6, (wJson as NSString).utf8String, -1, nil)
+                } else {
+                    sqlite3_bind_null(stmt, 6)
+                }
+                
+                if sqlite3_step(stmt) != SQLITE_DONE {
+                    print("🚨 ArgusLedger: Lesson Record Error")
+                } else {
+                    print("📚 ArgusLedger: Lesson Recorded for Trade \(tradeId.uuidString.prefix(8))")
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+    }
+    
+    /// Records a weight change in history.
+    func recordWeightChange(module: String, oldWeight: Double, newWeight: Double, reason: String?, tradeId: UUID? = nil) {
+        let now = Date().iso8601
+        
+        let sql = """
+        INSERT INTO weight_history (timestamp, module, old_weight, new_weight, reason, trade_id)
+        VALUES (?, ?, ?, ?, ?, ?);
+        """
+        
+        queue.async {
+            self.ensureConnection()
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (now as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (module as NSString).utf8String, -1, nil)
+                sqlite3_bind_double(stmt, 3, oldWeight)
+                sqlite3_bind_double(stmt, 4, newWeight)
+                
+                if let r = reason {
+                    sqlite3_bind_text(stmt, 5, (r as NSString).utf8String, -1, nil)
+                } else {
+                    sqlite3_bind_null(stmt, 5)
+                }
+                
+                if let tid = tradeId {
+                    sqlite3_bind_text(stmt, 6, (tid.uuidString as NSString).utf8String, -1, nil)
+                } else {
+                    sqlite3_bind_null(stmt, 6)
+                }
+                
+                sqlite3_step(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
     }
 }
 

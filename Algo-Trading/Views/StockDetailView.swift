@@ -52,11 +52,10 @@ struct StockDetailView: View {
                         }
                     }
                     
-                    // 2. Orion Lab Button (Backtest)
-                    NavigationLink(destination: ArgusBacktestView(
-                        symbol: symbol,
-                        candles: viewModel.candles[symbol] ?? []
-                    )) {
+                    // 2. Chronos Lab Button (Walk-Forward)
+                    NavigationLink(destination: ChronosDetailView(symbol: symbol)
+                        .environmentObject(viewModel) // Inject EnvironmentObject
+                    ) {
                         Image(systemName: "clock.arrow.circlepath")
                             .foregroundColor(Theme.tint)
                     }

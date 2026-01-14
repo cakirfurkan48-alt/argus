@@ -1,9 +1,19 @@
+//
+//  ChironJournalService.swift
+//  Algo-Trading
+//
+//  DEPRECATED: This service is RAM-only and causes data loss.
+//  Migrating to ArgusLedger (SQLite).
+//  Do not use for new features.
+//
+
 import Foundation
 
 // MARK: - Chiron Journal Models
 
 /// A complete record of a "Council Debate" and its outcome.
 /// Used by Chiron to learn which modules are reliable.
+@available(*, deprecated, message: "Use ArgusLedger instead")
 struct ChironDecisionLog: Codable, Identifiable, Sendable {
     let id: UUID
     let timestamp: Date
