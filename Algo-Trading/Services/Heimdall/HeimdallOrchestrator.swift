@@ -163,13 +163,56 @@ final class HeimdallOrchestrator {
         guard let seriesId = instrument.fredSeriesId else {
             throw HeimdallCoreError(category: .symbolNotFound, code: 404, message: "No FRED Series ID for \(instrument.internalId)", bodyPrefix: "")
         }
-        print("🏛️ FRED Direct: Series \(seriesId)")
-        return try await fred.fetchSeries(seriesId: seriesId, limit: limit)
+        
+        let provider = "fred"
+        let endpoint = "/series/\(seriesId)"
+        
+        // Circuit Breaker Check
+        guard await HeimdallCircuitBreaker.shared.canRequest(provider: provider) else {
+            await HeimdallLogger.shared.warn("circuit_blocked", provider: provider, errorClass: "circuit_open", endpoint: endpoint)
+            throw HeimdallCoreError(category: .rateLimited, code: 503, message: "Circuit open for FRED", bodyPrefix: "")
+        }
+        
+        let start = Date()
+        
+        do {
+            let result = try await fred.fetchSeries(seriesId: seriesId, limit: limit)
+            let latency = Int(Date().timeIntervalSince(start) * 1000)
+            
+            await HeimdallCircuitBreaker.shared.reportSuccess(provider: provider)
+            await HeimdallLogger.shared.info("fetch_success", provider: provider, endpoint: endpoint, symbol: seriesId, latencyMs: latency)
+            
+            return result
+        } catch {
+            await HeimdallCircuitBreaker.shared.reportFailure(provider: provider, error: error)
+            await HeimdallLogger.shared.error("fetch_failed", provider: provider, errorClass: classifyError(error), errorMessage: error.localizedDescription, endpoint: endpoint)
+            throw error
+        }
     }
     
     func requestFredSeries(series: FredProvider.SeriesInfo, limit: Int = 24) async throws -> [(Date, Double)] {
-        print("🏛️ FRED Direct: Series \(series.rawValue)")
-        return try await fred.fetchSeries(seriesId: series.rawValue, limit: limit)
+        let provider = "fred"
+        let endpoint = "/series/\(series.rawValue)"
+        
+        guard await HeimdallCircuitBreaker.shared.canRequest(provider: provider) else {
+            throw HeimdallCoreError(category: .rateLimited, code: 503, message: "Circuit open for FRED", bodyPrefix: "")
+        }
+        
+        let start = Date()
+        
+        do {
+            let result = try await fred.fetchSeries(seriesId: series.rawValue, limit: limit)
+            let latency = Int(Date().timeIntervalSince(start) * 1000)
+            
+            await HeimdallCircuitBreaker.shared.reportSuccess(provider: provider)
+            await HeimdallLogger.shared.info("fetch_success", provider: provider, endpoint: endpoint, latencyMs: latency)
+            
+            return result
+        } catch {
+            await HeimdallCircuitBreaker.shared.reportFailure(provider: provider, error: error)
+            await HeimdallLogger.shared.error("fetch_failed", provider: provider, errorClass: classifyError(error), errorMessage: error.localizedDescription)
+            throw error
+        }
     }
     
     // MARK: - Instrument Candles

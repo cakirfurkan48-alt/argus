@@ -48,12 +48,13 @@ final class MacroRegimeService: @unchecked Sendable {
     func evaluate(forceRefresh: Bool = false) async -> MacroResult {
         // 1. Check Cache
         if !forceRefresh, let cached = cachedResult, let last = lastFetchTime, -last.timeIntervalSinceNow < cacheDuration {
-            // DEBUG: print("✅ Aether: Using Valid Cached Result (Score: \(cached.output.score10))")
+        // DEBUG: print("✅ Aether: Using Valid Cached Result (Score: \(cached.output.score10))")
             return cached
         }
         
-        // DEBUG: print("DEBUG: Aether 4.0 - Evaluating Deterministic Macro Regime...")
+        print("🌐 AETHER: Full refresh başlatılıyor...")
         let startTime = Date()
+
         
         // 2. Fetch Data (Parallel)
         async let fredPayload = fetchFredData()
@@ -71,13 +72,16 @@ final class MacroRegimeService: @unchecked Sendable {
         // Decision Logic
         if !fredMissing.isEmpty {
             explain.append("FRED verileri eksik: \(fredMissing.joined(separator: ",")).")
+            print("⚠️ AETHER: FRED eksik = \(fredMissing)")
         }
         if !marketMissing.isEmpty {
             explain.append("Piyasa verileri eksik: \(marketMissing.joined(separator: ",")).")
+            print("⚠️ AETHER: Market eksik = \(marketMissing)")
         }
         
         if detResult.penalty > 0 {
             explain.append("⚠️ STALE veri cezası uygulandı (\(Int(detResult.penalty)) birim).")
+            print("⚠️ AETHER: STALE penalty = \(Int(detResult.penalty))")
         }
         
         // 5. Construct EngineOutput
@@ -187,20 +191,28 @@ final class MacroRegimeService: @unchecked Sendable {
         self.lastFetchTime = Date()
         self.saveWidgetData(rating: legacy, market: marketData)
         
-        // 🔍 AETHER FORENSIC REPORT
-        // DEBUG: print("\n=== 🔍 AETHER FORENSIC CARD REPORT ===")
-        // DEBUG: print("[01] Enflasyon (CPI):   \(breakdown["cpi"] ?? 0)/100 [Status: \(detResult.statuses["cpi"] ?? "MISSING")]")
-        // DEBUG: print("[02] İstihdam (Labor):  \(breakdown["labor"] ?? 0)/100 [Status: \(detResult.statuses["labor"] ?? "MISSING")]")
-        // DEBUG: print("[03] Faizler (Rates):   \(breakdown["rates"] ?? 0)/100 [Status: \(detResult.statuses["rates"] ?? "MISSING")]")
-        // DEBUG: print("[04] Büyüme (Growth):   \(breakdown["growth"] ?? 0)/100 [Status: \(detResult.statuses["growth"] ?? "MISSING")]")
-        // DEBUG: print("[05] Trend (Equity):    \(breakdown["trend"] ?? 0)/100 [Status: \(detResult.statuses["trend"] ?? "MISSING")]")
-        // DEBUG: print("[06] Volatilite (VIX):  \(breakdown["vix"] ?? 0)/100 [Status: \(detResult.statuses["vix"] ?? "MISSING")]")
-        // DEBUG: print("[07] Altın (GLD):       \(breakdown["gld"] ?? 0)/100 [Status: \(detResult.statuses["gld"] ?? "MISSING")]")
-        // DEBUG: print("[08] Kripto (BTC):      \(breakdown["btc"] ?? 0)/100 [Status: \(detResult.statuses["btc"] ?? "MISSING")]")
-        // DEBUG: print("=== GRADE: \(MacroEnvironmentRating.letterGrade(for: detResult.totalScore)) ===")
-        // DEBUG: print("=== END REPORT ===\n")
+        // 🔍 AETHER FORENSIC REPORT (ACTIVE)
+        print("\n═══════════════════════════════════════════════════════════════")
+        print("🔍 AETHER FORENSIC CARD REPORT")
+        print("───────────────────────────────────────────────────────────────")
+        print("[01] Enflasyon (CPI):   \(Int(breakdown["cpi"] ?? 0))/100 [\(detResult.statuses["cpi"] ?? "MISSING")]")
+        print("[02] İstihdam (Labor):  \(Int(breakdown["labor"] ?? 0))/100 [\(detResult.statuses["labor"] ?? "MISSING")]")
+        print("[03] Faizler (Rates):   \(Int(breakdown["rates"] ?? 0))/100 [\(detResult.statuses["rates"] ?? "MISSING")]")
+        print("[04] Büyüme (Growth):   \(Int(breakdown["growth"] ?? 0))/100 [\(detResult.statuses["growth"] ?? "MISSING")]")
+        print("[05] Trend (Equity):    \(Int(breakdown["trend"] ?? 0))/100 [\(detResult.statuses["trend"] ?? "MISSING")]")
+        print("[06] Volatilite (VIX):  \(Int(breakdown["vix"] ?? 0))/100 [\(detResult.statuses["vix"] ?? "MISSING")]")
+        print("[07] Altın (GLD):       \(Int(breakdown["gld"] ?? 0))/100 [\(detResult.statuses["gld"] ?? "MISSING")]")
+        print("[08] Kripto (BTC):      \(Int(breakdown["btc"] ?? 0))/100 [\(detResult.statuses["btc"] ?? "MISSING")]")
+        print("[09] Dolar (DXY):       \(Int(breakdown["dxy"] ?? 0))/100 [\(detResult.statuses["dxy"] ?? "MISSING")]")
+        print("[10] Claims:            \(Int(breakdown["claims"] ?? 0))/100 [\(detResult.statuses["claims"] ?? "MISSING")]")
+        print("[11] Credit:            \(Int(breakdown["credit"] ?? 0))/100 [\(detResult.statuses["credit"] ?? "MISSING")]")
+        print("───────────────────────────────────────────────────────────────")
+        print("📊 FINAL SCORE: \(Int(detResult.totalScore))/100 → Grade: \(MacroEnvironmentRating.letterGrade(for: detResult.totalScore))")
+        print("⏱️ Duration: \(Int(duration))ms")
+        print("═══════════════════════════════════════════════════════════════\n")
         
         return result
+
     }
     
     // Legacy Wrapper for UI
