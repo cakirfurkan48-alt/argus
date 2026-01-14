@@ -40,7 +40,8 @@ struct ArgusSanctumView: View {
     @State private var showDebateSheet = false
     @State private var showChronosLabSheet = false
     @State private var showArgusLabSheet = false
-    
+    @State private var showObservatorySheet = false
+
     // Modules enum for identification
     enum ModuleType: String, CaseIterable {
         case atlas = "ATLAS"
@@ -234,6 +235,9 @@ struct ArgusSanctumView: View {
         .sheet(isPresented: $showArgusLabSheet) {
              argusLabSheetContent
         }
+        .sheet(isPresented: $showObservatorySheet) {
+              observatorySheetContent
+        }
         .onAppear {
             if symbol.uppercased().hasSuffix(".IS") {
                 // Pre-load BIST logic if needed
@@ -259,9 +263,19 @@ struct ArgusSanctumView: View {
                     .cornerRadius(8)
                 }
                 Spacer()
+                
+                // Observatory Button
+                Button(action: { showObservatorySheet = true }) {
+                    Image(systemName: "binoculars.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(SanctumTheme.titanGold)
+                        .padding(10)
+                        .background(Color.black.opacity(0.3))
+                        .cornerRadius(8)
+                }
             }
             .padding(.top, 40)
-            .padding(.leading, 16)
+            .padding(.horizontal, 16)
             Spacer()
         }
     }
@@ -366,6 +380,13 @@ struct ArgusSanctumView: View {
              ArgusLabView()
                  .environmentObject(viewModel)
                  .navigationBarItems(trailing: Button("Kapat") { showArgusLabSheet = false })
+         }
+    }
+    
+    private var observatorySheetContent: some View {
+         NavigationView {
+             ObservatoryContainerView()
+                 .navigationBarItems(trailing: Button("Kapat") { showObservatorySheet = false })
          }
     }
 }
