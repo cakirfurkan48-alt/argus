@@ -121,11 +121,57 @@ final class ChimeraSynergyEngine: @unchecked Sendable {
                          (sentimentScore * wSent) +
                          (structureScore * wStruct)
         
-        // 3. SIGNAL DETECTION (Corrected thresholds for 0-100 scale)
+        // 3. SIGNAL DETECTION (More sensitive signals)
         var signals: [ChimeraSignal] = []
         
+        // === EASILY TRIGGERED SIGNALS (Common) ===
+        
+        // Strong Momentum: Momentum > 65
+        if momentumScore > 65 {
+            signals.append(ChimeraSignal(
+                type: .momentumBreakout,
+                title: "Güçlü Momentum",
+                description: "Momentum ivmesi yüksek.",
+                severity: 0.6
+            ))
+        }
+        
+        // Weak Momentum: Momentum < 35
+        if momentumScore < 35 {
+            signals.append(ChimeraSignal(
+                type: .fallingKnife,
+                title: "Zayıf Momentum",
+                description: "Momentum düşük, dikkatli ol.",
+                severity: 0.5
+            ))
+        }
+        
+        // Strong Trend: Trend > 65
+        if trendScore > 65 {
+            signals.append(ChimeraSignal(
+                type: .momentumBreakout,
+                title: "Güçlü Trend",
+                description: "Trend yukarı yönlü güçlü.",
+                severity: 0.6
+            ))
+        }
+        
+        // Weak Structure: Structure < 40
+        if structureScore < 40 {
+            signals.append(ChimeraSignal(
+                type: .fallingKnife,
+                title: "Zayıf Yapı",
+                description: "Fiyat yapısı kırılgan.",
+                severity: 0.5
+            ))
+        }
+        
+        // === RARE PREMIUM SIGNALS (Original) ===
+        
         // Deep Value: High value + Low momentum + Positive sentiment
-        if valueScore > 70 && momentumScore < 40 && sentimentScore > 50 {
+        if valueScore > 65 && momentumScore < 45 && sentimentScore > 45 {
+            // Clear lower priority signals, this is premium
+            signals.removeAll()
             signals.append(ChimeraSignal(
                 type: .deepValueBuy,
                 title: "Deep Value",
@@ -135,7 +181,8 @@ final class ChimeraSynergyEngine: @unchecked Sendable {
         }
         
         // Bull Trap: High sentiment + Low value + Weak momentum
-        if sentimentScore > 75 && valueScore < 40 && momentumScore < 50 {
+        if sentimentScore > 70 && valueScore < 45 && momentumScore < 55 {
+            signals.removeAll()
             signals.append(ChimeraSignal(
                 type: .bullTrap,
                 title: "Bull Trap",
@@ -145,7 +192,8 @@ final class ChimeraSynergyEngine: @unchecked Sendable {
         }
         
         // Perfect Storm: All stars aligned
-        if momentumScore > 70 && sentimentScore > 70 && trendScore > 70 && valueScore > 60 {
+        if momentumScore > 65 && sentimentScore > 65 && trendScore > 65 && valueScore > 55 {
+            signals.removeAll()
             signals.append(ChimeraSignal(
                 type: .perfectStorm,
                 title: "Perfect Storm",
@@ -155,7 +203,8 @@ final class ChimeraSynergyEngine: @unchecked Sendable {
         }
         
         // Falling Knife: Strong downtrend + Negative sentiment
-        if trendScore < 30 && momentumScore < 30 && sentimentScore < 40 {
+        if trendScore < 35 && momentumScore < 35 && sentimentScore < 45 {
+            signals.removeAll()
             signals.append(ChimeraSignal(
                 type: .fallingKnife,
                 title: "Falling Knife",
