@@ -300,7 +300,8 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
         
         // 1. Risk-Off
         // Check Macro (Aether) and Volatility (Orion-based Vol or VIX)
-        if aether < 40 || vol < 25.0 { return .riskOff }
+        // Aether 30'un altındaysa (Kötü Makro) veya Volatilite 25'in üstündeyse (Yüksek Volatilite) Risk-Off
+        if aether < 30 || vol > 25.0 { return .riskOff }
         
         // 2. News Shock
         if context.isHermesAvailable && hermes >= 75 { return .newsShock }
