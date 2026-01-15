@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
     // ChironOptimizationModels map (Added for compatibility if needed in same file, but they are in separate files)
 
@@ -88,7 +89,7 @@ struct ChironResult: Codable, Sendable {
 
 // MARK: - Chiron Regime Engine
 
-final class ChironRegimeEngine: @unchecked Sendable {
+final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
     static let shared = ChironRegimeEngine()
     
     private var _dynamicConfig: ChironOptimizationOutput?
@@ -106,11 +107,13 @@ final class ChironRegimeEngine: @unchecked Sendable {
             _dynamicConfig = newValue
         }
     }
-    
+
     private let persistenceKey = "ChironLearnedWeights"
+    private let regimePersistenceKey = "ChironLastRegimeResult"
     
     init() {
         loadFromDisk()
+        loadRegimeFromDisk()
     }
     
     func loadDynamicWeights(_ config: ChironOptimizationOutput) {
@@ -132,6 +135,45 @@ final class ChironRegimeEngine: @unchecked Sendable {
            let config = try? JSONDecoder().decode(ChironOptimizationOutput.self, from: data) {
             self.dynamicConfig = config
             print("💾 Chiron: Loaded learned weights from disk.")
+        }
+    }
+    
+    private func saveRegimeToDisk(_ result: ChironResult) {
+        if let data = try? JSONEncoder().encode(result) {
+            UserDefaults.standard.set(data, forKey: regimePersistenceKey)
+        }
+    }
+    
+    private func loadRegimeFromDisk() {
+        if let data = UserDefaults.standard.data(forKey: regimePersistenceKey),
+           let result = try? JSONDecoder().decode(ChironResult.self, from: data) {
+            lock.lock()
+            _lastResult = result
+            lock.unlock()
+            
+            // Notify UI
+            DispatchQueue.main.async {
+                self.objectWillChange.send()
+            }
+            print("💾 Chiron: Loaded last regime result from disk.")
+        }
+    }
+    
+    // UI için son durumu saklar (Default: Neutral)
+    private var _lastResult: ChironResult = ChironResult(
+        regime: .neutral,
+        coreWeights: ModuleWeights(atlas: 0.3, orion: 0.2, aether: 0.2, demeter: 0.1, phoenix: 0.1, hermes: 0.05, athena: 0.05),
+        pulseWeights: ModuleWeights(atlas: 0.1, orion: 0.3, aether: 0.1, demeter: 0.1, phoenix: 0.2, hermes: 0.15, athena: 0.05),
+        explanationTitle: "SİSTEM BAŞLATILIYOR",
+        explanationBody: "Analiz motoru veri akışını bekliyor... İlk veri seti ile adaptasyon başlayacak.",
+        learningNotes: []
+    )
+    
+    public var lastResult: ChironResult {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _lastResult
         }
     }
     
@@ -223,7 +265,7 @@ final class ChironRegimeEngine: @unchecked Sendable {
         // 5. Generate Explanation
         let (title, body) = generateExplanation(regime: regime, context: context, finalCore: finalCore)
         
-        return ChironResult(
+        let result = ChironResult(
             regime: regime,
             coreWeights: finalCore,
             pulseWeights: finalPulse,
@@ -231,6 +273,19 @@ final class ChironRegimeEngine: @unchecked Sendable {
             explanationBody: body,
             learningNotes: dynamicConfig?.learningNotes
         )
+        
+        lock.lock()
+        _lastResult = result
+        lock.unlock()
+        
+        saveRegimeToDisk(result)
+        
+        // Notify UI Reactively
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
+        
+        return result
     }
     
     // MARK: - Logic Internals
@@ -331,8 +386,8 @@ final class ChironRegimeEngine: @unchecked Sendable {
         
         switch regime {
         case .trend:
-            title = "Trend Modu – Teknik ve Fiyat Hareketleri"
-            body = "Orion ve Phoenix trendi teyit ediyor. Agresif ağırlıklandırma uygulandı."
+            title = "Adaptif Trend Modu – Akıllı Takip"
+            body = "Orion ve Phoenix trendi teyit ediyor. FreqAI tabanlı adaptif ağırlıklandırma ile trend takipçileri (Orion) güçlendirildi."
         case .riskOff:
             title = "Risk-Off Modu – Defansif Duruş"
             body = "Volatilite veya Makro (Aether) riskleri yüksek. Sermayeyi korumak için Atlas ve Aether ağırlıklarını artırdım."
@@ -399,12 +454,13 @@ final class ChironRegimeEngine: @unchecked Sendable {
 
     // MARK: - Chiron Learning Logic (Pillar 8)
     
-    /// Determines the optimal weight distribution based on history and market context.
+    /// Determines the optimal weight distribution based on history and market context (Adaptive Learning).
     private func determineDynamicWeights() -> (core: ModuleWeights, pulse: ModuleWeights)? {
         let logs = TradeLogStore.shared.fetchLogs()
         // let vix = MacroRegimeService.shared.getCurrentVix() ?? 20.0 (Unused for now) 
         
-        // Phase 3: Live Pain Awareness (Bleeding Check)
+        // 1. Phase: Pain Awareness (Bleeding Check)
+        // If portfolio is heavily bleeding, reduce exposure to high-beta (Pulse) modules.
         let portfolio = ArgusStorage.shared.loadPortfolio()
         let openTrades = portfolio.filter { $0.isOpen }
         let totalUnrealizedPnL = openTrades.reduce(0.0) { $0 + $1.profit }
@@ -413,7 +469,7 @@ final class ChironRegimeEngine: @unchecked Sendable {
         
         if totalUnrealizedPnL < -20.0 { // Sensitivity Threshold
             print("🩸 Chiron Pain: Portfolio Bleeding (\(totalUnrealizedPnL))$. Reducing Pulse weights.")
-            // Penalize Momentum/Pulse modules (Orion, Hermes)
+            // Penalize Momentum/Pulse modules (Orion, Herems)
             let penaltyFactor = 0.7
             
             pulse = ModuleWeights(
@@ -426,10 +482,49 @@ final class ChironRegimeEngine: @unchecked Sendable {
                 athena: pulse.athena
             ).normalized
         }
+        
+        // 2. Phase: Market Condition Adaptation (FreqAI Style)
+        // If historical trades show Orion failed in Chop markets, reduce Orion weight.
+        // If Phoenix succeeded in Trend markets, boost Phoenix weight.
+        
+        // Simulating "Market State Awareness" from FreqAI logic
+        // This acts as a multiplier based on recent Success Rate of modules
+        let recentLogs = logs.suffix(20) // Look at last 20 trades
+        if !recentLogs.isEmpty {
+            let orionSuccess = recentLogs.filter { $0.entryOrionScore > 60 && $0.pnlPercent > 0 }.count
+            let orionAttempts = recentLogs.filter { $0.entryOrionScore > 60 }.count
+            
+            if orionAttempts > 5 {
+                let successRate = Double(orionSuccess) / Double(orionAttempts)
+                if successRate > 0.6 {
+                    pulse = ModuleWeights(
+                        atlas: pulse.atlas,
+                        orion: pulse.orion * 1.2, // Boost Orion
+                        aether: pulse.aether,
+                        demeter: pulse.demeter,
+                        phoenix: pulse.phoenix,
+                        hermes: pulse.hermes,
+                        athena: pulse.athena
+                    ).normalized
+                    print("🧠 Chiron Adaptive: Orion is hot (Win Rate \(Int(successRate*100))%). Boosting weight.")
+                } else if successRate < 0.4 {
+                    pulse = ModuleWeights(
+                        atlas: pulse.atlas,
+                        orion: pulse.orion * 0.8, // Penalize Orion
+                        aether: pulse.aether,
+                        demeter: pulse.demeter,
+                        phoenix: pulse.phoenix,
+                        hermes: pulse.hermes,
+                        athena: pulse.athena
+                    ).normalized
+                    print("🧠 Chiron Adaptive: Orion is cold (Win Rate \(Int(successRate*100))%). Reducing weight.")
+                }
+            }
+        }
 
-        // 1. Cold Start (Insufficient Data)
+        // 3. Cold Start Bypass
         if logs.count < 10 {
-           // ... (existing cold start logic) ...
+           // Keep calculated defaults if low data
         }
         
         return (core, pulse)

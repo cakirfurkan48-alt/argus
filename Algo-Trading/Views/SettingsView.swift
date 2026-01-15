@@ -1,381 +1,429 @@
 import SwiftUI
 
+// MARK: - MAIN SETTINGS VIEW (ROUTER)
 struct SettingsView: View {
-    @ObservedObject var tradingViewModel: TradingViewModel
-    @StateObject private var settingsViewModel = SettingsViewModel()
-    @Environment(\.presentationMode) var presentationMode
-    @FocusState private var isInputFocused: Bool
-    @ObservedObject private var safeService = SafeUniverseService.shared
-    @State private var showRoadmap = false
-    @State private var showShareSheet = false
-    @State private var shareItems: [Any] = []
+    @ObservedObject var settingsViewModel: SettingsViewModel
+    @AppStorage("isDarkMode") private var isDarkMode = true
 
-    
     var body: some View {
         NavigationView {
             ZStack {
-                Theme.background.ignoresSafeArea()
+                // Background: Pure Terminal Black
+                Color.black.edgesIgnoringSafeArea(.all)
                 
                 ScrollView {
                     VStack(spacing: 24) {
                         
-                        // 1. Profile / Header Card
-                        HStack(spacing: 16) {
-                            ZStack {
-                                Circle()
-                                    .fill(Theme.tint)
-                                    .frame(width: 64, height: 64)
-                                Text("EK")
-                                    .font(.title2)
-                                    .bold()
+                        // MARK: - SYSTEM STATUS HEADER
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Circle().fill(Color.green).frame(width: 8, height: 8)
+                                Text("SİSTEM: ÇEVRİMİÇİ")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.green)
+                                Spacer()
+                                Text("V.2024.1.0")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.gray)
+                            }
+                            Divider().background(Color.gray.opacity(0.3))
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 16)
+                        
+                        // MARK: - MODULE 1: CORTEX
+                        TerminalSection(title: "CORTEX // ZEKA & ANALİZ") {
+                            NavigationLink(destination: SettingsCortexView(settingsViewModel: settingsViewModel)) {
+                                TerminalRow(label: "VERİ AKIŞI & API", value: "BAĞLI", icon: "server.rack", color: .cyan)
+                            }
+                            NavigationLink(destination: ChironInsightsView(symbol: nil)) {
+                                TerminalRow(label: "CHIRON ÖĞRENME", value: "AKTİF", icon: "brain", color: .cyan)
+                            }
+                            NavigationLink(destination: ArgusSimulatorView()) {
+                                TerminalRow(label: "SİMÜLASYON LAB", value: "HAZIR", icon: "flask", color: .purple)
+                            }
+                        }
+                        
+                        // MARK: - MODULE 2: KERNEL
+                        TerminalSection(title: "KERNEL // MOTOR AYARLARI") {
+                            NavigationLink(destination: ArgusKernelView()) {
+                                TerminalRow(label: "ÇEKİRDEK PARAMETRELERİ", value: "ÖZEL", icon: "cpu", color: .orange)
+                            }
+                        }
+                        
+                        // MARK: - MODULE 3: COMMS
+                        TerminalSection(title: "COMMS // İLETİŞİM") {
+                            NavigationLink(destination: SettingsCommsView(settingsViewModel: settingsViewModel)) {
+                                TerminalRow(label: "BİLDİRİMLER", value: "AÇIK", icon: "antenna.radiowaves.left.and.right", color: .green)
+                            }
+                        }
+                        
+                        // MARK: - MODULE 4: CODEX
+                        TerminalSection(title: "CODEX // KAYITLAR") {
+                            NavigationLink(destination: SettingsCodexView(settingsViewModel: settingsViewModel)) {
+                                TerminalRow(label: "SİSTEM LOGLARI", value: "GÖRÜNTÜLE", icon: "doc.text", color: .gray)
+                            }
+                        }
+                        
+                        // MARK: - QUICK CONFIG
+                        TerminalSection(title: "AYARLAR") {
+                            HStack {
+                                Image(systemName: "moon.fill")
+                                    .foregroundColor(.purple)
+                                    .font(.system(size: 12))
+                                Text("KARANLIK MOD")
+                                    .font(.system(size: 14, design: .monospaced))
                                     .foregroundColor(.white)
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Argus Team")
-                                    .font(.title3)
-                                    .bold()
-                                    .foregroundColor(Theme.textPrimary)
-                                Text("Argus Pro Üyesi")
-                                    .font(.caption)
-                                    .foregroundColor(Theme.tint)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(Theme.tint.opacity(0.1))
-                                    .cornerRadius(4)
-                            }
-                            Spacer()
-                        }
-                        .padding(20)
-                        .background(Theme.cardBackground)
-                        .cornerRadius(20)
-                        
-                        // 2. Main Settings
-                        VStack(spacing: 2) {
-                            SettingsRow(icon: "moon.fill", title: "Karanlık Mod", isToggle: true, isOn: $settingsViewModel.isDarkMode)
-                        }
-                        .background(Theme.cardBackground)
-                        .cornerRadius(20)
-                        .clipped()
-                        
-                        // 3. Trading Intelligence
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("TRADING INTELLIGENCE")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(Theme.textSecondary)
-                                .padding(.leading, 12)
-                            
-                            VStack(spacing: 2) {
-                                // Phoenix Picker
-                                HStack {
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color.orange.opacity(0.15))
-                                            .frame(width: 32, height: 32)
-                                        Image(systemName: "flame.fill")
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.orange)
-                                    }
-                                    Text("Phoenix Zaman Dilimi")
-                                        .font(.subheadline)
-                                        .foregroundColor(Theme.textPrimary)
-                                    Spacer()
-                                    Picker("", selection: $settingsViewModel.phoenixTimeframe) {
-                                        ForEach(PhoenixTimeframe.allCases, id: \.self) { tf in
-                                            Text(tf.rawValue).tag(tf)
-                                        }
-                                    }
-                                    .pickerStyle(MenuPickerStyle())
+                                Spacer()
+                                Toggle("", isOn: $isDarkMode)
                                     .labelsHidden()
-                                }
-                                .padding(16)
-                                .background(Theme.cardBackground) // Row styling check
-                                
-                                Divider().padding(.leading, 56)
-                                
-                                SettingsRow(icon: "brain.head.profile", title: "Risk Toleransı", value: settingsViewModel.riskTolerance.localizedName)
-                                Divider().padding(.leading, 56)
-                                
-                                VStack(spacing: 8) {
-                                    SettingsRow(icon: "number.square.fill", title: "Max Pozisyon", value: "\(settingsViewModel.maxOpenPositions)")
-                                    
-                                    // Stepper for Max Positions
-                                    Stepper("Pozisyon Limiti: \(settingsViewModel.maxOpenPositions)", value: $settingsViewModel.maxOpenPositions, in: 1...20)
-                                        .padding(.horizontal, 16)
-                                        .onChange(of: settingsViewModel.maxOpenPositions) {
-                                            // Auto-save happens via AppStorage in ViewModel
-                                        }
-                                    
-                                    Divider().padding(.leading, 56)
-                                    
-                                    // Data Collection Toggle (User Request)
-                                    Toggle(isOn: $settingsViewModel.isDataCollectionEnabled) {
-                                        HStack {
-                                            Image(systemName: "server.rack")
-                                                .foregroundColor(.purple)
-                                            VStack(alignment: .leading) {
-                                                Text("Veri Koleksiyonu")
-                                                    .font(.subheadline)
-                                                    .foregroundColor(Theme.textPrimary)
-                                                Text("Gelecekteki AI eğitimi için trade verilerini sakla.")
-                                                    .font(.caption)
-                                                    .foregroundColor(Theme.textSecondary)
-                                            }
-                                        }
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    
-                                    // Copy Data Button
-                                    Button(action: {
-                                        let json = tradingViewModel.exportTransactionHistoryJSON()
-                                        UIPasteboard.general.string = json
-                                        // Feedback handled by UI or just assume works (SwiftUI doesn't have easy toast yet without extra code)
-                                        // We can change the button text temporarily if we had state, but for now simple action.
-                                    }) {
-                                        HStack {
-                                            Image(systemName: "doc.on.doc")
-                                            Text("Verileri Kopyala (JSON)")
-                                        }
-                                        .font(.caption)
-                                        .foregroundColor(Theme.tint)
-                                        .padding(.vertical, 8)
-                                    }
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                NavigationLink(destination: StrategyLabView()) {
-                                    SettingsRow(icon: "slider.horizontal.3", title: "Aktif Stratejiler", value: "Yönet", hasChevron: true)
-                                }
+                                    .tint(.purple)
                             }
-                            .background(Theme.cardBackground)
-                            .cornerRadius(20)
-                            .clipped()
+                            .padding(.vertical, 8)
                         }
                         
-                        // 4. Notifications
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("BİLDİRİMLER")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(Theme.textSecondary)
-                                .padding(.leading, 12)
-                            
-                            VStack(spacing: 2) {
-                                SettingsRow(icon: "bell.fill", title: "Bildirimler", isToggle: true, isOn: $settingsViewModel.notificationsEnabled)
-                                Divider().padding(.leading, 56)
-                                
-                                NavigationLink(destination: PriceAlertSettingsView()) {
-                                    SettingsRow(icon: "exclamationmark.bubble.fill", title: "Fiyat Alarmları", hasChevron: true)
-                                }
-                            }
-                            .background(Theme.cardBackground)
-                            .cornerRadius(20)
-                            .clipped()
-                        }
-                        
-                        // 5. ARGUS LABORATORIES
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("ARGUS LABORATORIES")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(Theme.textSecondary)
-                                .padding(.leading, 12)
-                            
-                            VStack(spacing: 2) {
-                                // Argus Voice
-                                NavigationLink(destination: ArgusVoiceView()) {
-                                    SettingsRow(icon: "mic.fill", title: "Argus Voice", iconColor: .blue, hasChevron: true)
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                // Core Brain (Simulator)
-                                NavigationLink(destination: ArgusSimulatorView()) {
-                                    SettingsRow(icon: "brain.head.profile", title: "Argus Simulator", iconColor: Theme.tint, hasChevron: true)
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                // Orion (Technical Analysis)
-                                NavigationLink(destination: OrionLabView()) {
-                                    SettingsRow(icon: "star.fill", title: "Orion Lab", iconColor: .purple, hasChevron: true)
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                // Chiron Öğrenme (NEW)
-                                NavigationLink(destination: ChironInsightsView(symbol: nil)) {
-                                    SettingsRow(icon: "brain.head.profile", title: "Chiron Öğrenme", iconColor: .cyan, hasChevron: true)
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                // Data Health / Mimir
-                                NavigationLink(destination: ArgusDataHealthView()) {
-                                    SettingsRow(icon: "eye.fill", title: "Mimir Intelligence", iconColor: .indigo, hasChevron: true)
-                                }
-                                Divider().padding(.leading, 56)
-                                
-                                // Roadmap
-                                Button(action: { showRoadmap = true }) {
-                                    SettingsRow(icon: "map.circle.fill", title: "Gelişim Yol Haritası", iconColor: .orange, hasChevron: true)
-                                }
-                            }
-                            .background(Theme.cardBackground)
-                            .cornerRadius(20)
-                            .clipped()
-                        }
-                        
-                        // 6. Data Management
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("DATA MANAGEMENT")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(Theme.textSecondary)
-                                .padding(.leading, 12)
-                            
-                            VStack(spacing: 2) {
-                                Button(action: {
-                                    Task {
-                                        if let url = try? await ForwardTestExport.shared.exportLogBundle() {
-                                            self.shareItems = [url]
-                                            self.showShareSheet = true
-                                        }
-                                    }
-                                }) {
-                                    SettingsRow(icon: "airplane.departure", title: "Flight Recorder Dışa Aktar", iconColor: .green, hasChevron: true)
-                                }
-                            }
-                            .background(Theme.cardBackground)
-                            .cornerRadius(20)
-                            .clipped()
-                        }
-
-                        
-                        // Footer
-                        VStack(spacing: 4) {
-                            Text("Argus Terminal v2.1")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(Theme.textSecondary)
-                            Text("Made with ❤️ by Argus Team")
-                                .font(.caption2)
-                                .foregroundColor(Theme.textSecondary.opacity(0.8))
-                        }
-                        .padding(.top, 20)
-                        .padding(.bottom, 120)
+                        Spacer()
                     }
-                    .padding()
+                    .padding(.bottom, 40)
                 }
             }
-            .navigationTitle("Ayarlar")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Kapat") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-            }
+            .navigationTitle("")
+            .navigationBarHidden(true)
         }
-        .preferredColorScheme(settingsViewModel.isDarkMode ? .dark : .light)
-        .sheet(isPresented: $showRoadmap) {
-            RoadmapView()
-        }
-        .sheet(isPresented: $showShareSheet) {
-            ShareSheet(activityItems: shareItems)
-        }
-
+        .preferredColorScheme(isDarkMode ? .dark : .light)
+        .navigationViewStyle(StackNavigationViewStyle())
     }
-
 }
 
-// MARK: - Helper Components
-
-struct SettingsRow: View {
-    var icon: String
-    var title: String
-    var value: String? = nil
-    var iconColor: Color = Theme.tint
-    var isToggle: Bool = false
-    var isOn: Binding<Bool>? = nil
-    var hasChevron: Bool = false
-    var action: (() -> Void)? = nil
+// MARK: - UI COMPONENT: TERMINAL SECTION
+struct TerminalSection<Content: View>: View {
+    let title: String
+    let content: Content
     
-    var body: some View {
-        if let action = action {
-            Button(action: action) {
-                rowContent
-            }
-            .buttonStyle(PlainButtonStyle())
-        } else {
-            rowContent
-        }
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
     }
     
-    private var rowContent: some View {
-        HStack(spacing: 16) {
-            // Icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(iconColor.opacity(0.15))
-                    .frame(width: 32, height: 32)
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .foregroundColor(iconColor)
-            }
-            
-            // Title
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text(title)
-                .font(.subheadline)
-                .foregroundColor(Theme.textPrimary)
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .tracking(1.5)
+                .foregroundColor(Color.gray.opacity(0.8))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            
+            VStack(spacing: 0) {
+                content
+            }
+            .padding(16)
+            .background(Color(white: 0.08)) // Dark gray background for blocks
+            .overlay(
+                Rectangle()
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 0.5)
+            )
+        }
+    }
+}
+
+// MARK: - UI COMPONENT: TERMINAL ROW
+struct TerminalRow: View {
+    let label: String
+    let value: String?
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(color)
+                .frame(width: 20)
+            
+            Text(label)
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundColor(.white)
             
             Spacer()
             
-            // Trailing
-            if isToggle, let isOn = isOn {
-                Toggle("", isOn: isOn)
-                    .labelsHidden()
-            } else {
-                if let val = value {
-                    Text(val)
-                        .font(.subheadline)
-                        .foregroundColor(Theme.textSecondary)
-                }
-                
-                if hasChevron {
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(Theme.textSecondary)
-                }
+            if let v = value {
+                Text(v)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(color.opacity(0.8))
             }
+            
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10))
+                .foregroundColor(.gray.opacity(0.5))
         }
-        .padding(16)
-        .contentShape(Rectangle()) // Make full row tappable for NavigationLink
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        // Divider at bottom
+        .overlay(
+            Rectangle()
+                .frame(height: 0.5)
+                .foregroundColor(Color.gray.opacity(0.1)),
+            alignment: .bottom
+        )
     }
 }
 
+// MARK: - MODULE: CORTEX (INTELLIGENCE)
+struct SettingsCortexView: View {
+    @ObservedObject var settingsViewModel: SettingsViewModel
+    
+    var body: some View {
+        ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
+            ScrollView {
+                VStack(spacing: 24) {
+                    TerminalSection(title: "VERİ AKIŞLARI") {
+                        NavigationLink(destination: ArgusDataHealthView()) {
+                            TerminalRow(label: "API GEÇİDİ", value: "AYARLAR", icon: "server.rack", color: .indigo)
+                        }
+                    }
+                    
+                    TerminalSection(title: "SİNİR AĞI") {
+                        NavigationLink(destination: ChironInsightsView(symbol: nil)) {
+                            TerminalRow(label: "CHIRON AĞIRLIKLARI", value: "İNCELE", icon: "network", color: .cyan)
+                        }
+                        NavigationLink(destination: ArgusSimulatorView()) {
+                            TerminalRow(label: "SİMÜLASYON LAB", value: "BAŞLAT", icon: "flask.fill", color: .purple)
+                        }
+                    }
+                }
+                .padding(.top, 20)
+            }
+        }
+        .navigationTitle("CORTEX")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
 
-// MARK: - Components (Legal Document Viewer Preserved)
+// MARK: - MODULE: ARGUS KERNEL (ENGINE)
+struct ArgusKernelView: View {
+    @AppStorage("kernel_aggressiveness") private var aggressiveness: Double = 0.55
+    @AppStorage("kernel_risk_tolerance") private var riskTolerance: Double = 0.05
+    @AppStorage("kernel_authority_tech") private var authorityTech: Double = 0.85
+    
+    var body: some View {
+        ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
+            ScrollView {
+                VStack(spacing: 24) {
+                    
+                    // AGGRESSIVENESS
+                    TerminalSection(title: "SALDIRGANLIK FAKTÖRÜ") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("EŞİK SAPMASI")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                Spacer()
+                                Text(String(format: "%.2f", aggressiveness))
+                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.orange)
+                            }
+                            Slider(value: $aggressiveness, in: 0.50...0.80, step: 0.01)
+                                .tint(.orange)
+                            
+                            HStack {
+                                Text("MUHAFAZAKAR")
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                Spacer()
+                                Text("AGRESİF")
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    
+                    // AUTHORITY
+                    TerminalSection(title: "TEKNİK OTORİTE") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("AĞIRLIK ÇARPANI")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                Spacer()
+                                Text(String(format: "%.2fx", authorityTech))
+                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.purple)
+                            }
+                            Slider(value: $authorityTech, in: 0.5...1.5, step: 0.05)
+                                .tint(.purple)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    
+                    // RISK
+                    TerminalSection(title: "RİSK PROTOKOLLERİ") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("STOP LOSS TOLERANSI")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                Spacer()
+                                Text(String(format: "%.1f%%", riskTolerance * 100))
+                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.red)
+                            }
+                            Slider(value: $riskTolerance, in: 0.01...0.10, step: 0.005)
+                                .tint(.red)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+                .padding(.top, 20)
+            }
+        }
+        .navigationTitle("KERNEL")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - MODULE: COMMS
+struct SettingsCommsView: View {
+    @ObservedObject var settingsViewModel: SettingsViewModel
+    @AppStorage("notify_all_signals") private var notifyAllSignals = true
+    
+    var body: some View {
+        ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
+            ScrollView {
+                VStack(spacing: 24) {
+                    TerminalSection(title: "BİLDİRİM KANALLARI") {
+                        HStack {
+                            Image(systemName: "bell.fill")
+                                .foregroundColor(.green)
+                            Text("SİNYAL UYARILARI")
+                                .font(.system(size: 14, design: .monospaced))
+                                .foregroundColor(.white)
+                            Spacer()
+                            Toggle("", isOn: $notifyAllSignals)
+                                .labelsHidden()
+                                .tint(.green)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    
+                    TerminalSection(title: "WIDGET'LAR") {
+                        NavigationLink(destination: WidgetListSettingsView()) {
+                            TerminalRow(label: "ANA EKRAN WIDGET", value: "DÜZENLE", icon: "square.grid.2x2", color: .blue)
+                        }
+                    }
+                    
+                    TerminalSection(title: "FİYAT ALARMLARI") {
+                         NavigationLink(destination: PriceAlertSettingsView()) {
+                             TerminalRow(label: "İZLEME LİSTESİ ALARMLARI", value: "DÜZENLE", icon: "exclamationmark.bubble", color: .red)
+                         }
+                    }
+                }
+                .padding(.top, 20)
+            }
+        }
+        .navigationTitle("COMMS")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - MODULE: CODEX
+struct SettingsCodexView: View {
+    @ObservedObject var settingsViewModel: SettingsViewModel
+    @State private var showingExportSheet = false
+    @State private var exportURL: URL? = nil
+    
+    var body: some View {
+        ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
+            ScrollView {
+                VStack(spacing: 24) {
+                    TerminalSection(title: "YASAL BELGELER") {
+                        NavigationLink(destination: LegalDocumentView(document: settingsViewModel.privacyPolicy)) {
+                            TerminalRow(label: "GİZLİLİK POLİTİKASI", value: nil, icon: "hand.raised", color: .gray)
+                        }
+                        NavigationLink(destination: LegalDocumentView(document: settingsViewModel.termsOfUse)) {
+                             TerminalRow(label: "KULLANIM KOŞULLARI", value: nil, icon: "doc.text", color: .gray)
+                        }
+                        NavigationLink(destination: LegalDocumentView(document: settingsViewModel.riskDisclosure)) {
+                             TerminalRow(label: "RİSK BİLDİRİMİ", value: nil, icon: "exclamationmark.triangle", color: .orange)
+                         }
+                    }
+                    
+                    TerminalSection(title: "HATA AYIKLAMA ARAÇLARI") {
+                         Button(action: {
+                            Task {
+                                let logContent = await HeimdallDebugBundleExporter.shared.generateBundle()
+                                let fileName = "Argus_System_Log_\(Date().timeIntervalSince1970).txt"
+                                let tempDir = FileManager.default.temporaryDirectory
+                                let fileURL = tempDir.appendingPathComponent(fileName)
+                                do {
+                                    try logContent.write(to: fileURL, atomically: true, encoding: .utf8)
+                                    self.exportURL = fileURL
+                                    self.showingExportSheet = true
+                                } catch {
+                                    print("Log export failed: \(error)")
+                                }
+                            }
+                        }) {
+                            TerminalRow(label: "SİSTEM DÖKÜMÜ İNDİR", value: "ÇALIŞTIR", icon: "arrow.up.doc", color: .blue)
+                        }
+                        .sheet(isPresented: $showingExportSheet) {
+                            if let url = exportURL {
+                                ArgusShareSheet(activityItems: [url])
+                            } else {
+                                Text("LOG OLUŞTURMA HATASI")
+                            }
+                        }
+                    }
+                    
+                    // Footer
+                    VStack(spacing: 4) {
+                        Image(systemName: "eye.fill")
+                            .font(.title)
+                            .foregroundColor(Color.purple.opacity(0.3))
+                        Text("ARGUS TERMINAL V1.1")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(Color.gray.opacity(0.3))
+                    }
+                    .padding(.top, 40)
+                }
+                .padding(.top, 20)
+            }
+        }
+        .navigationTitle("CODEX")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - UTILITY: LEGAL DOCUMENT VIEWER
 struct LegalDocumentView: View {
     let document: LegalDocument
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(document.title)
-                    .font(.largeTitle)
-                    .bold()
-                
-                Divider()
-                
-                Text(document.content)
-                    .font(.body)
-                    .lineSpacing(6)
-                
-                Spacer()
-            }
-            .padding()
+            Text(document.content)
+                .font(.system(.body, design: .monospaced))
+                .padding()
+                .foregroundColor(.white)
         }
+        .background(Color.black.edgesIgnoringSafeArea(.all))
+        .navigationTitle(document.title)
     }
 }
 
+// MARK: - UTILITY: SHARE SHEET
+struct ArgusShareSheet: UIViewControllerRepresentable {
+    var activityItems: [Any]
+    var applicationActivities: [UIActivity]? = nil
 
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}

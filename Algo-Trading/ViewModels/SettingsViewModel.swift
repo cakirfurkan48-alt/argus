@@ -71,6 +71,7 @@ class SettingsViewModel: ObservableObject {
     @Published var isApiKeyVisible: Bool = false
     
     // MARK: - Legal Documents (Static Data)
+    // LegalDocument struct is defined in Models.swift
     let privacyPolicy = LegalDocument(title: "Gizlilik Politikası", content: "Bu gizlilik politikası, kişisel verilerinizin nasıl toplandığını, kullanıldığını ve korunduğunu açıklar. Uygulamamızı kullanarak, verilerinizin bu politikaya uygun olarak işlenmesini kabul etmiş olursunuz.\n\n1. Veri Toplama: Uygulama, işlem geçmişinizi ve tercihlerinizi yerel cihazınızda saklar.\n2. Üçüncü Taraflar: Piyasa verileri için üçüncü taraf API sağlayıcıları (örn. Finnhub) kullanılmaktadır.\n3. Güvenlik: Verileriniz endüstri standardı şifreleme yöntemleri ile korunmaktadır.")
     
     let termsOfUse = LegalDocument(title: "Kullanım Koşulları", content: "Bu uygulamayı indirerek ve kullanarak aşağıdaki koşulları kabul etmiş sayılırsınız.\n\n1. Amaç: Bu uygulama sadece eğitim ve simülasyon amaçlıdır. Gerçek para ile işlem yapılmaz.\n2. Sorumluluk Reddi: Uygulama tarafından sağlanan sinyaller ve veriler yatırım tavsiyesi değildir. Finansal kayıplardan geliştirici sorumlu tutulamaz.\n3. Değişiklikler: Geliştirici, uygulama özelliklerini önceden haber vermeksizin değiştirme hakkını saklı tutar.")
@@ -108,14 +109,18 @@ class SettingsViewModel: ObservableObject {
         let savedPTF = UserDefaults.standard.string(forKey: "phoenixTimeframe") ?? "Otomatik"
         self.phoenixTimeframe = PhoenixTimeframe(rawValue: savedPTF) ?? .auto
         
-        // KeyStore Entegrasyonu
+        // KeyStore Entegrasyonu (Safe Init)
         self.loadKeys()
-        NotificationCenter.default.addObserver(self, selector: #selector(loadKeys), name: .argusKeyStoreDidUpdate, object: nil)
+        
+        // Use Closure instead of Selector to avoid @objc issues during init
+        NotificationCenter.default.addObserver(forName: .argusKeyStoreDidUpdate, object: nil, queue: .main) { [weak self] _ in
+            self?.loadKeys()
+        }
         
         MarketDataProvider.shared.updatePrimaryFinnhubKey(self.apiKey)
     }
     
-    @objc func loadKeys() {
+    func loadKeys() {
         Task { @MainActor in
             if let fKey = APIKeyStore.shared.getKey(for: .finnhub) {
                 if self.apiKey != fKey { self.apiKey = fKey }

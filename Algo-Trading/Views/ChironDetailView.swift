@@ -2,10 +2,13 @@ import SwiftUI
 
 struct ChironDetailView: View {
     // State
+    @ObservedObject var engine = ChironRegimeEngine.shared // NEW: Reactive Engine Source
     @State private var selectedEngine: AutoPilotEngine = .corse
     @State private var corseWeights: ChironModuleWeights?
     @State private var pulseWeights: ChironModuleWeights?
     @State private var learningEvents: [ChironLearningEvent] = []
+    // @State private var regimeResult removed - using engine.lastResult directly
+    
     @State private var isAnalyzing = false
     @State private var selectedTab = 0 // 0: Weights, 1: Performance
     
@@ -76,6 +79,11 @@ struct ChironDetailView: View {
                 if selectedTab == 0 {
                     ScrollView {
                         VStack(spacing: 24) {
+                            
+                            // MARK: - NEW: Regime Card (Reactive)
+                            RegimeCard(result: engine.lastResult)
+                                .padding(.horizontal)
+                            
                             // MARK: - Engine Selector
                             HStack(spacing: 0) {
                                 EngineTab(title: "CORSE 🐢", isSelected: selectedEngine == .corse) {
@@ -180,6 +188,7 @@ struct ChironDetailView: View {
         corseWeights = await ChironWeightStore.shared.getWeights(symbol: "DEFAULT", engine: .corse)
         pulseWeights = await ChironWeightStore.shared.getWeights(symbol: "DEFAULT", engine: .pulse)
         learningEvents = await ChironDataLakeService.shared.loadLearningEvents()
+        // regimeResult load removed - using reactive engine.lastResult
     }
     
     private func triggerAnalysis() {
@@ -560,5 +569,84 @@ struct ChironRegretCornerCard: View {
         isLoading = true
         regretSummary = await ChironRegretEngine.shared.generateSummary()
         isLoading = false
+    }
+}
+
+// MARK: - Regime Card (New)
+struct RegimeCard: View {
+    let result: ChironResult
+    
+    var regimeColor: Color {
+        switch result.regime {
+        case .trend: return .green
+        case .riskOff: return .red
+        case .chop: return .orange
+        case .newsShock: return .purple
+        case .neutral: return .blue
+        }
+    }
+    
+    var regimeIcon: String {
+        switch result.regime {
+        case .trend: return "chart.line.uptrend.xyaxis"
+        case .riskOff: return "shield.fill"
+        case .chop: return "waveform.path.ecg"
+        case .newsShock: return "bolt.fill"
+        case .neutral: return "scale.3d"
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: regimeIcon)
+                    .font(.title2)
+                    .foregroundColor(regimeColor)
+                
+                Text(result.explanationTitle.uppercased())
+                    .font(.headline)
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                Text(result.regime.rawValue.uppercased())
+                    .font(.caption)
+                    .bold()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(regimeColor.opacity(0.2))
+                    .foregroundColor(regimeColor)
+                    .cornerRadius(6)
+            }
+            
+            Text(result.explanationBody)
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            if let notes = result.learningNotes, !notes.isEmpty {
+                Divider().background(Color.white.opacity(0.1))
+                
+                HStack(alignment: .top) {
+                    Image(systemName: "lightbulb")
+                        .font(.caption)
+                        .foregroundColor(.yellow)
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(notes, id: \.self) { note in
+                            Text(note)
+                                .font(.caption2)
+                                .foregroundColor(.yellow.opacity(0.8))
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(regimeColor.opacity(0.1))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(regimeColor.opacity(0.3), lineWidth: 1)
+        )
     }
 }

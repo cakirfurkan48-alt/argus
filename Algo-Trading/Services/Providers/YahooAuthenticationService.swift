@@ -69,13 +69,22 @@ actor YahooAuthenticationService {
     }
     
     private func refresh() async throws -> (String, String) {
-        print("🔐 YahooAuth: Refreshing Crumb & Cookie (Robust Mode)...")
+        print("🔐 YahooAuth: Refreshing Crumb & Cookie (Robust Mode V2)...")
         
-        // 1. Get Cookies via Quote Page (Most reliable source for session initiation)
-        // We use a major ticker like AAPL to ensure the finance session is initialized.
+        // Standard User Agent used for all requests
+        let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        
+        // 1. Hit FC (Consent/Redirect) - This sets the 'A3' or 'B' cookie effectively
+        // Yahoo uses this to check consent, visiting it ensures cookies are seeded.
+        let fcURL = URL(string: "https://fc.yahoo.com")!
+        var fcReq = URLRequest(url: fcURL)
+        fcReq.setValue(ua, forHTTPHeaderField: "User-Agent")
+        _ = try? await session.data(for: fcReq) // Ignore result, just want cookies
+        
+        // 2. Get Cookies via Quote Page (Most reliable source for session initiation)
         let cookieURL = URL(string: "https://finance.yahoo.com/quote/AAPL")!
         var cookieReq = URLRequest(url: cookieURL)
-        cookieReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
+        cookieReq.setValue(ua, forHTTPHeaderField: "User-Agent")
         
         let (_, response) = try await session.data(for: cookieReq)
         
@@ -83,12 +92,12 @@ actor YahooAuthenticationService {
             throw URLError(.badServerResponse)
         }
         
-        // 2. Refresh Cookies variable from Session Storage
+        // 3. Refresh Cookies variable from Session Storage
         if let cookies = session.configuration.httpCookieStorage?.cookies(for: cookieURL) {
             self.cookie = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
         }
         
-        // 3. Get Crumb (Try query2 first, then query1)
+        // 4. Get Crumb (Try query2 first, then query1)
         let crumbSources = [
             "https://query2.finance.yahoo.com/v1/test/getcrumb",
             "https://query1.finance.yahoo.com/v1/test/getcrumb"
@@ -96,8 +105,11 @@ actor YahooAuthenticationService {
         
         var acquiredCrumb: String? = nil
         
+        // Short pause to let cookies settle?
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+        
         for source in crumbSources {
-            if let c = try? await fetchCrumb(from: source) {
+            if let c = try? await fetchCrumb(from: source, userAgent: ua) {
                 acquiredCrumb = c
                 break
             }
@@ -116,10 +128,10 @@ actor YahooAuthenticationService {
     }
     
     // Helper to fetch crumb with correct headers
-    private func fetchCrumb(from urlString: String) async throws -> String {
+    private func fetchCrumb(from urlString: String, userAgent: String) async throws -> String {
         guard let url = URL(string: urlString) else { return "" }
         var req = URLRequest(url: url)
-        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
+        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         req.setValue("https://finance.yahoo.com/quote/AAPL", forHTTPHeaderField: "Referer")
         
         let (data, response) = try await session.data(for: req)

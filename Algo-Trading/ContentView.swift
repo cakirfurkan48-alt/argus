@@ -5,6 +5,7 @@ struct ContentView: View {
     // @StateObject private var viewModel = TradingViewModel() // Removed local creation
     @State private var isAppReady = false
     @State private var selectedTab = 0
+    @StateObject private var settingsViewModel = SettingsViewModel()
     @State private var showVoiceSheet = false
     
     // Deep Link State
@@ -41,7 +42,7 @@ struct ContentView: View {
                         case 3:
                             PortfolioView(viewModel: viewModel)
                         case 4:
-                            SettingsView(tradingViewModel: viewModel)
+                            SettingsView(settingsViewModel: settingsViewModel)
                         default:
                             MarketView()
                                 .environmentObject(viewModel)

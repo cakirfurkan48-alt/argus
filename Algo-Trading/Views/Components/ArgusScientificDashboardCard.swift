@@ -16,7 +16,7 @@ struct ArgusScientificDashboardCard: View {
             HStack {
                 Image(systemName: "flask")
                     .foregroundColor(.cyan)
-                Text("Scientific Validation")
+                Text("BİLİMSEL DOĞRULAMA")
                     .font(.headline)
                     .foregroundColor(.white)
                 
@@ -29,7 +29,7 @@ struct ArgusScientificDashboardCard: View {
                     } else {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.seal")
-                            Text("Validate")
+                            Text("Analiz Et")
                         }
                         .font(.caption)
                         .foregroundColor(.cyan)
@@ -47,15 +47,15 @@ struct ArgusScientificDashboardCard: View {
                     ScientificMetricBox(title: "Win Rate", value: String(format: "%.1f%%", stats.winRate * 100), color: stats.winRate > 0.5 ? .green : .orange)
                     ScientificMetricBox(title: "Profit Factor", value: String(format: "%.2f", stats.profitFactor), color: stats.profitFactor > 1.5 ? .green : .gray)
                     
-                    ScientificMetricBox(title: "Sharpe Ratio", value: String(format: "%.2f", stats.sharpeRatio), color: stats.sharpeRatio > 1.0 ? .cyan : .gray)
-                    ScientificMetricBox(title: "Max Drawdown", value: String(format: "%.1f%%", stats.maxDrawdown), color: .red)
-                    ScientificMetricBox(title: "Avg Return", value: String(format: "%.2f%%", stats.averageReturn), color: stats.averageReturn > 0 ? .green : .red)
+                    ScientificMetricBox(title: "Sharpe Oranı", value: String(format: "%.2f", stats.sharpeRatio), color: stats.sharpeRatio > 1.0 ? .cyan : .gray)
+                    ScientificMetricBox(title: "Max Kuraklık", value: String(format: "%.1f%%", stats.maxDrawdown), color: .red)
+                    ScientificMetricBox(title: "Ort. Getiri", value: String(format: "%.2f%%", stats.averageReturn), color: stats.averageReturn > 0 ? .green : .red)
                 }
                 
                 // Recent Validations List
                 if !recentResults.isEmpty {
                     Divider().background(Color.gray.opacity(0.3))
-                    Text("Validation Logs")
+                    Text("Doğrulama Günlüğü")
                         .font(.caption)
                         .foregroundColor(.gray)
                     
@@ -68,11 +68,11 @@ struct ArgusScientificDashboardCard: View {
                 if !pendingHypotheses.isEmpty {
                     Divider().background(Color.gray.opacity(0.3))
                     HStack {
-                        Text("Pending Hypotheses")
+                        Text("Bekleyen Hipotezler")
                             .font(.caption)
                             .foregroundColor(.gray)
                         Spacer()
-                        Text("\(pendingHypotheses.filter { $0.isMature }.count) Ready to Verify")
+                        Text("\(pendingHypotheses.filter { $0.isMature }.count) Adet İncelenebilir")
                             .font(.caption2)
                             .foregroundColor(.orange)
                     }
@@ -159,7 +159,7 @@ struct ValidationResultRow: View {
                     .font(.caption)
                     .bold()
                     .foregroundColor(.white)
-                Text("Actual: \(String(format: "%+.2f%%", result.actualChange))")
+                Text("Gerçekleşen: \(String(format: "%+.2f%%", result.actualChange))")
                     .font(.caption2)
                     .foregroundColor(result.actualChange >= 0 ? .green : .red)
             }

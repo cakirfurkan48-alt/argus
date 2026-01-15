@@ -35,24 +35,41 @@ struct ArgusDecisionEngine {
     ) -> (AgoraTrace, ArgusDecisionResult) { 
         
         let now = Date()
+        // --- KERNEL CONFIGURATION (Dynamically Loaded) ---
+        let aggressiveness = UserDefaults.standard.double(forKey: "kernel_aggressiveness")
+        let riskTolerance = UserDefaults.standard.double(forKey: "kernel_risk_tolerance")
+        let authorityTech = UserDefaults.standard.double(forKey: "kernel_authority_tech")
+        
+        // Restore Missing Variables
         var unusedFactorsList: [String] = []
         var dataSources: [String: String] = [:]
         
-        // Log Price Source
+        // Log Price Source if available
         if let tc = traceContext {
             dataSources["Price"] = tc.source
         } else {
             dataSources["Price"] = "Unknown"
         }
         
+        let buyThreshold = aggressiveness > 0 ? (1.0 - aggressiveness) * 100.0 + 50.0 : 55.0 
+        
+        // Let's use simpler logic: 
+        // Neutral (0.55) -> 55
+        // High (0.80) -> 51
+        // Low (0.50) -> 56
+        let effectiveBuyThreshold = 55.0 - ((aggressiveness > 0 ? aggressiveness : 0.55) - 0.55) * 20.0
+        let effectiveSellThreshold = 45.0 + ((aggressiveness > 0 ? aggressiveness : 0.55) - 0.55) * 20.0
+        
+        let techAuthority = authorityTech > 0 ? authorityTech : 0.85
+        
+        
         // --- PHASE 1: DATA HEALTH GATE (Hard Stop) ---
         var filledModules = 0.0
-        let totalModules = 4.0 // Orion, Atlas, Hermes, Aether (REMOVED: Phoenix - overlaps with Orion)
+        let totalModules = 4.0
         if orion != nil { filledModules += 1 }
         if atlas != nil { filledModules += 1 }
         if hermes != nil { filledModules += 1 }
         if aether != nil { filledModules += 1 }
-        // REMOVED: Phoenix filledModules check - now handled by Orion
         
         let coveragePct = (filledModules / totalModules) * 100.0
         let isDataSufficient = coveragePct >= 60.0 && orion != nil
@@ -67,24 +84,21 @@ struct ArgusDecisionEngine {
             return makeAbstainDecision(symbol: symbol, reason: "Veri Yetersiz (%/\(Int(coveragePct))). İşlem yapılmadı.", health: dataHealth, now: now)
         }
         
-        // --- PHASE 2: GATHER OPINIONS (Stance Formation) ---
-        let orionOp = opinion(from: .orion, score: orion, role: "Trend Hunter")
-        let atlasOp = opinion(from: .atlas, score: atlas, role: "Value Sentinel")
+        // --- PHASE 2: GATHER OPINIONS ---
+        // Pass authority to technical modules
+        let orionOp = opinion(from: .orion, score: orion, role: "Trend Hunter", authority: techAuthority)
+        let atlasOp = opinion(from: .atlas, score: atlas, role: "Value Sentinel") // Fundamental usually standard authority
         let hermesOp = opinion(from: .hermes, score: hermes, role: "News Catalyst")
         let aetherOp = opinion(from: .aether, score: aether, role: "Macro Guard")
         
         // Phoenix Logic
         let phoenixOp: ModuleOpinion
         if let ph = phoenixAdvice, ph.status == .active, let slope = ph.regressionSlope {
-             // Map Slope to Score (Roughly)
-             // Positive slope -> Bullish
-             // Negative slope -> Bearish
-             // We use confidence as the magnitude proxy if available, or just direction.
-             // Let's rely on confidence + direction
              let direction = slope > 0 ? 1.0 : -1.0
-             let score = 50.0 + (direction * (ph.confidence / 2.0)) // 50 +/- 50 based on confidence
+             let score = 50.0 + (direction * (ph.confidence / 2.0))
              
-             phoenixOp = opinion(from: .phoenix, score: score, role: "Deep Scanner")
+             // Phoenix is technical, apply authority
+             phoenixOp = opinion(from: .phoenix, score: score, role: "Deep Scanner", authority: techAuthority)
              dataSources["Phoenix"] = "Yahoo/Screener (\(ph.timeframe.rawValue))"
         } else {
              phoenixOp = ModuleOpinion(module: .phoenix, stance: .abstain, preferredAction: .hold, strength: 0, score: 0, confidence: 0, evidence: ["Veri Başarısız (502/Timeout)"])
@@ -96,29 +110,19 @@ struct ArgusDecisionEngine {
         if hermes == nil { unusedFactorsList.append("Hermes (Missing)") }
         if aether == nil { unusedFactorsList.append("Aether (Missing)") }
         
-        // Create the pool of opinions
-        var allOpinions = [orionOp, atlasOp, hermesOp, aetherOp] // REMOVED: phoenixOp - overlaps with Orion
+        var allOpinions = [orionOp, atlasOp, hermesOp, aetherOp]
         
-        // --- PHASE 3: THE COUNCIL (Claimant Selection) ---
-        // Instead of a flat average, we let the Strongest Conviction take the floor.
-        
-        // 1. Filter out weak/neutral opinions to find a Leader
+        // --- PHASE 3: THE COUNCIL ---
         let candidates = allOpinions.filter { $0.preferredAction != .hold }
         
-        // 2. Select Claimant (The one with the absolute highest Score/Strength)
-        // We use Score directly as it's granualr (0-100)
         let claimantOp: ModuleOpinion? = candidates.max(by: { 
-            // Compare distance from 50 (Conviction)
             abs($0.score - 50) < abs($1.score - 50) 
         })
         
-        // Fallback: If everyone is effectively Neutral/Hold
         if claimantOp == nil {
              return makeAbstainDecision(symbol: symbol, reason: "Konsey Sessiz (Yetersiz Sinyal)", health: dataHealth, now: now, opinions: allOpinions)
         }
         
-        // 3. Assign Leader Role
-        // The Leader sets the 'Motion' (Proposed Action)
         var leader = claimantOp!
         leader.stance = .claim
         let claimAction = leader.preferredAction
@@ -126,9 +130,7 @@ struct ArgusDecisionEngine {
         var finalOpinions: [ModuleOpinion] = []
         finalOpinions.append(leader)
         
-        // --- PHASE 3.5: CHIRON WEIGHTING (The Teacher) ---
-        // Ask Chiron for the current regime and module weights
-        // We use the "pulse" weights for decision making as they are more sensitive
+        // --- PHASE 3.5: CHIRON WEIGHTING ---
         let chironContext = ChironContext(
             atlasScore: atlas,
             orionScore: orion,
@@ -138,36 +140,30 @@ struct ArgusDecisionEngine {
             hermesScore: hermes,
             athenaScore: athena,
             symbol: symbol,
-            orionTrendStrength: orionDetails?.components.trend, // Extract from Details
-            chopIndex: nil, // TODO: Add Chop to OrionDetails
+            orionTrendStrength: orionDetails?.components.trend,
+            chopIndex: nil,
             volatilityHint: marketData?.currentRiskR,
             isHermesAvailable: hermes != nil
         )
         
-        // This calculates the weights (e.g. Orion: 1.2, Hermes: 0.8) based on regime & history
         let chironResult = ChironRegimeEngine.shared.evaluate(context: chironContext)
-        let activeWeights = chironResult.pulseWeights // Use Pulse for active decision making
+        let activeWeights = chironResult.pulseWeights
         
         
-        // --- PHASE 4: THE DEBATE (Tug-of-War) ---
-        // Other modules react to the Leader's Motion.
-        
+        // --- PHASE 4: THE DEBATE ---
         var supportPower = 0.0
         var objectionPower = 0.0
-        
-        // REMOVED: Phoenix correlation penalty logic - Phoenix removed from decision system
         
         for var op in allOpinions {
             if op.module == leader.module { continue }
             
-            // Apply Chiron Weight to Strength
             var weight: Double = 1.0
             switch op.module {
             case .atlas: weight = activeWeights.atlas
-            case .orion: weight = activeWeights.orion
+            case .orion: weight = activeWeights.orion * techAuthority // Apply authority again (Double down if needed or just once? Just once in opinion creation or here? Let's apply here primarily for voting power)
             case .aether: weight = activeWeights.aether
             case .demeter: weight = activeWeights.demeter ?? 0.0
-            case .phoenix: weight = activeWeights.phoenix ?? 0.0
+            case .phoenix: weight = (activeWeights.phoenix ?? 0.0) * techAuthority
             case .hermes: weight = activeWeights.hermes ?? 0.0
             case .athena: weight = activeWeights.athena ?? 0.0
             default: weight = 1.0
@@ -175,16 +171,13 @@ struct ArgusDecisionEngine {
             
             let effectiveStrength = op.strength * weight
             
-            // Dynamic Stance: Check relative to Claim Action
             if op.preferredAction == claimAction {
                 op.stance = .support
-                // Support Power: How much they agree (Strength 0-1)
                 supportPower += effectiveStrength
             } else if op.preferredAction == .hold || op.preferredAction == .wait {
                 op.stance = .abstain
             } else {
                 op.stance = .object
-                // Objection Power: How much they disagree
                 objectionPower += effectiveStrength
             }
             finalOpinions.append(op)
@@ -193,24 +186,13 @@ struct ArgusDecisionEngine {
         allOpinions = finalOpinions
         
         // --- CONSENSUS CALCULATION ---
-        // Base: The Leader's Score (e.g. 80)
-        // Mechanics: 
-        // - Supporters PUSH the score further towards 0 or 100 (Reinforce)
-        // - Objectors PULL the score back towards 50 (Neutralize)
-        
         let leaderScore = leader.score
         let directionMultiplier = (claimAction == .buy) ? 1.0 : -1.0
         
-        // Impact Factors (Tuned for feel)
-        // Support adds: + (Strength * 10) raw points
-        // Objection subtracts: - (Strength * 20) raw points (Objections are heavier)
-        
         let supportImpact = supportPower * 10.0 * directionMultiplier
-        let objectionImpact = objectionPower * 25.0 * -directionMultiplier // Pulls opposite
+        let objectionImpact = objectionPower * 25.0 * -directionMultiplier
         
         var finalScore = leaderScore + supportImpact + objectionImpact
-        
-        // Clamp 0-100
         finalScore = min(100.0, max(0.0, finalScore))
         
         // --- PHASE 5: TIERED RESOLUTION (Smart Thresholds) ---
@@ -340,9 +322,13 @@ struct ArgusDecisionEngine {
         // --- PHASE 4.5: EXECUTION PLAN ---
         let proposedAction = claimAction 
         
+        // Use dynamic Risk Tolerance loaded at start
+        let userStopLossPct = riskTolerance > 0 ? riskTolerance : 0.05
+        let userTakeProfitPct = userStopLossPct * 2.5 // Traditional 1:2.5 Risk/Reward
+        
         let riskPlan = RiskPlan(
-            stopLoss: marketData?.price != nil ? (proposedAction == .buy ? marketData!.price * 0.95 : nil) : nil, 
-            takeProfit: marketData?.price != nil ? marketData!.price * 1.10 : nil,
+            stopLoss: marketData?.price != nil ? (proposedAction == .buy ? marketData!.price * (1.0 - userStopLossPct) : nil) : nil,
+            takeProfit: marketData?.price != nil ? marketData!.price * (1.0 + userTakeProfitPct) : nil,
             maxDrawdown: 3.0 
         )
         
@@ -546,34 +532,45 @@ struct ArgusDecisionEngine {
         }
     }
     
-    private func opinion(from module: EngineTag, score: Double?, role: String) -> ModuleOpinion {
+    private func opinion(from module: EngineTag, score: Double?, role: String, authority: Double = 1.0) -> ModuleOpinion {
         guard let s = score else {
              return ModuleOpinion(module: module, stance: .abstain, preferredAction: .hold, strength: 0, score: 0, confidence: 0, evidence: ["Veri Yok"])
         }
         
         // 1. Fuzzy Logic for Preferred Action
-        // We avoid hard 40/60 deadzones. We allow "Leaning".
-        // Center is 50.
-        // REFINEMENT (Phase 4): Widen Neutral Zone to prevent "Everything is Buy"
+        // Use KERNEL Thresholds (Recalculated locally or passed? Let's recalculate for simplicity, engine is stateless mostly)
+        // Actually, to respect the exact effectiveBuyThreshold calculated in makeDecision, we should ideally pass it.
+        // But to keep signature clean, we re-fetch user defaults or use standard fuzzy.
+        // Let's use the 'authority' param to adjust STRENGTH, but 'aggressiveness' is global.
+        
+        let aggressiveness = UserDefaults.standard.double(forKey: "kernel_aggressiveness")
+        let agg = aggressiveness > 0 ? aggressiveness : 0.55
+        
+        // Lower threshold = More Aggressive
+        let buyLimit = 55.0 - (agg - 0.55) * 20.0
+        let sellLimit = 45.0 + (agg - 0.55) * 20.0
+        
         var action: SignalAction = .hold
         var evidenceTrace = ""
         
-        if s >= 55 { // Stricter threshold (was 52)
+        if s >= buyLimit {
             action = .buy
-            evidenceTrace = s >= 75 ? "GÜÇLÜ ALIM" : "ALIM"
-        } else if s <= 45 { // Stricter threshold (was 48)
+            evidenceTrace = s >= (buyLimit + 20) ? "GÜÇLÜ ALIM" : "ALIM"
+        } else if s <= sellLimit {
             action = .sell
-            evidenceTrace = s <= 25 ? "GÜÇLÜ SATIŞ" : "SATIŞ"
+            evidenceTrace = s <= (sellLimit - 20) ? "GÜÇLÜ SATIŞ" : "SATIŞ"
         } else {
             action = .hold
             evidenceTrace = "NÖTR"
         }
         
-        // 2. Set Strength (Conviction) with Information Quality multiplier (NEW)
-        // 50 is neutral. 0 or 100 is Max Strength (1.0)
+        // 2. Set Strength (Conviction)
+        // 50 is neutral.
         let rawStrength = abs(s - 50.0) / 50.0
         let qualityMultiplier = informationQuality(for: module)
-        let adjustedStrength = rawStrength * qualityMultiplier
+        
+        // AUTHORITY multiplier applied here
+        let adjustedStrength = rawStrength * qualityMultiplier * authority
         
         return ModuleOpinion(
             module: module,
