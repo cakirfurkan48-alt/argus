@@ -47,7 +47,7 @@ struct ObservatoryContainerView: View {
                 .font(.system(size: 18))
                 .foregroundColor(SanctumTheme.titanGold)
             
-            Text("HEIMDALL OBSERVATORY")
+            Text("GÖZLEMEVİ")
                 .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .tracking(2)
                 .foregroundColor(.white)
@@ -76,12 +76,13 @@ struct ObservatoryContainerView: View {
                     }
                 }) {
                     VStack(spacing: 6) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             Image(systemName: tab.icon)
-                                .font(.system(size: 12))
+                                .font(.system(size: 11))
                             Text(tab.title)
-                                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                .tracking(1)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                         .foregroundColor(selectedTab == tab ? SanctumTheme.hologramBlue : SanctumTheme.ghostGrey)
                         .padding(.vertical, 12)
@@ -117,9 +118,9 @@ enum ObservatoryTab: String, CaseIterable {
     
     var title: String {
         switch self {
-        case .timeline: return "TIMELINE"
-        case .learning: return "LEARNING"
-        case .health: return "SYSTEM_HEALTH"
+        case .timeline: return "ZAMANÇİZ"
+        case .learning: return "ÖĞRENME"
+        case .health: return "SAĞLIK"
         }
     }
     
@@ -257,19 +258,19 @@ struct ObservatoryHealthContentView: View {
                         color: metrics.sharpe > 1 ? .green : (metrics.sharpe > 0.5 ? .yellow : .red)
                     )
                     MetricCardView(
-                        title: "Hit Rate",
+                        title: "İsabet",
                         value: String(format: "%.0f%%", metrics.hitRate * 100),
                         icon: "target",
                         color: metrics.hitRate > 0.55 ? .green : .yellow
                     )
                     MetricCardView(
-                        title: "Profit Factor",
+                        title: "Kâr Faktörü",
                         value: String(format: "%.2f", metrics.profitFactor),
                         icon: "dollarsign.circle",
                         color: metrics.profitFactor > 1.5 ? .green : .yellow
                     )
                     MetricCardView(
-                        title: "Max DD",
+                        title: "Maks DD",
                         value: String(format: "%.1f%%", metrics.maxDrawdown),
                         icon: "arrow.down.right",
                         color: metrics.maxDrawdown < 10 ? .green : .red
