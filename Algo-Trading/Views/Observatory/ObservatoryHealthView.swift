@@ -2,6 +2,8 @@ import SwiftUI
 
 // MARK: - Observatory Health View
 /// Displays system health metrics, drift detection, and data quality alerts
+// MARK: - Observatory Health View
+/// Displays system health metrics, drift detection, and data quality alerts
 struct ObservatoryHealthView: View {
     @State private var metrics: PerformanceMetrics = .empty
     @State private var distribution: PredictionDistribution = .empty
@@ -9,182 +11,182 @@ struct ObservatoryHealthView: View {
     @State private var isLoading = true
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Performance Section
-                    performanceSection
-                    
-                    // Distribution Section
-                    distributionSection
-                    
-                    // Alerts Section
-                    alertsSection
-                }
-                .padding()
+        ScrollView {
+            VStack(spacing: 24) {
+                // 1. Performance HUD (Grid)
+                performanceHUD
+                
+                // 2. Drift Analysis (Energy Bar)
+                driftEnergyBar
+                
+                // 3. System Logs (Alerts)
+                systemLogConsole
             }
-            .navigationTitle("📊 Sistem Sağlığı")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: loadData) {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-            }
-            .onAppear {
-                loadData()
-            }
+            .padding(.top, 20)
+            .padding(.horizontal)
+            .padding(.bottom, 40)
+        }
+        .onAppear {
+            loadData()
         }
     }
     
-    // MARK: - Performance Section
-    private var performanceSection: some View {
+    // MARK: - Performance HUD
+    private var performanceHUD: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Son 30 Gün Performansı", systemImage: "chart.line.uptrend.xyaxis")
-                .font(.headline)
+            Label("SYSTEM_PERFORMANCE", systemImage: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(SanctumTheme.ghostGrey)
             
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                MetricCardView(
-                    title: "Sharpe Ratio",
+                HoloMetricCard(
+                    title: "SHARPE",
                     value: String(format: "%.2f", metrics.sharpe),
                     icon: "chart.xyaxis.line",
-                    color: metrics.sharpe > 1.0 ? .green : (metrics.sharpe > 0.5 ? .yellow : .red)
+                    color: metrics.sharpe > 1.0 ? SanctumTheme.auroraGreen : (metrics.sharpe > 0.5 ? SanctumTheme.titanGold : SanctumTheme.crimsonRed)
                 )
                 
-                MetricCardView(
-                    title: "Hit Rate",
+                HoloMetricCard(
+                    title: "HIT_RATE",
                     value: String(format: "%.0f%%", metrics.hitRate * 100),
                     icon: "target",
-                    color: metrics.hitRate > 0.55 ? .green : (metrics.hitRate > 0.45 ? .yellow : .red)
+                    color: metrics.hitRate > 0.55 ? SanctumTheme.auroraGreen : (metrics.hitRate > 0.45 ? SanctumTheme.titanGold : SanctumTheme.crimsonRed)
                 )
                 
-                MetricCardView(
-                    title: "Profit Factor",
+                HoloMetricCard(
+                    title: "PROFIT_FACTOR",
                     value: String(format: "%.2f", metrics.profitFactor),
                     icon: "dollarsign.circle",
-                    color: metrics.profitFactor > 1.5 ? .green : (metrics.profitFactor > 1.0 ? .yellow : .red)
+                    color: metrics.profitFactor > 1.5 ? SanctumTheme.auroraGreen : (metrics.profitFactor > 1.0 ? SanctumTheme.titanGold : SanctumTheme.crimsonRed)
                 )
                 
-                MetricCardView(
-                    title: "Max Drawdown",
+                HoloMetricCard(
+                    title: "MAX_DD",
                     value: String(format: "%.1f%%", metrics.maxDrawdown),
                     icon: "arrow.down.right",
-                    color: metrics.maxDrawdown < 10 ? .green : (metrics.maxDrawdown < 20 ? .yellow : .red)
+                    color: metrics.maxDrawdown < 10 ? SanctumTheme.auroraGreen : (metrics.maxDrawdown < 20 ? SanctumTheme.titanGold : SanctumTheme.crimsonRed)
                 )
             }
         }
-        .padding()
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
     }
     
-    // MARK: - Distribution Section (Prediction Drift)
-    private var distributionSection: some View {
+    // MARK: - Drift Energy Bar
+    private var driftEnergyBar: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Çıktı Dağılımı (Prediction Drift)", systemImage: "chart.pie")
-                .font(.headline)
+            Label("PREDICTION_DRIFT", systemImage: "chart.pie")
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(SanctumTheme.ghostGrey)
             
-            HStack(spacing: 4) {
-                // BUY
-                Rectangle()
-                    .fill(Color.green)
-                    .frame(width: CGFloat(distribution.buyPercent) * 2, height: 24)
-                    .overlay(
-                        Text(String(format: "%.0f%%", distribution.buyPercent))
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                    )
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    // BUY
+                    Rectangle()
+                        .fill(SanctumTheme.auroraGreen)
+                        .frame(width: max(0, CGFloat(distribution.buyPercent / 100) * (UIScreen.main.bounds.width - 40)))
+                    
+                    // HOLD
+                    Rectangle()
+                        .fill(SanctumTheme.ghostGrey.opacity(0.3))
+                        .frame(width: max(0, CGFloat(distribution.holdPercent / 100) * (UIScreen.main.bounds.width - 40)))
+                    
+                    // SELL
+                    Rectangle()
+                        .fill(SanctumTheme.crimsonRed)
+                        .frame(width: max(0, CGFloat(distribution.sellPercent / 100) * (UIScreen.main.bounds.width - 40)))
+                }
+                .frame(height: 12)
+                .clipShape(RoundedRectangle(cornerRadius: 2))
                 
-                // HOLD
-                Rectangle()
-                    .fill(Color.gray)
-                    .frame(width: CGFloat(distribution.holdPercent) * 2, height: 24)
-                    .overlay(
-                        Text(String(format: "%.0f%%", distribution.holdPercent))
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                    )
-                
-                // SELL
-                Rectangle()
-                    .fill(Color.red)
-                    .frame(width: CGFloat(distribution.sellPercent) * 2, height: 24)
-                    .overlay(
-                        Text(String(format: "%.0f%%", distribution.sellPercent))
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                    )
+                // Labels below bar
+                HStack {
+                    Text("BUY \(Int(distribution.buyPercent))%")
+                        .foregroundColor(SanctumTheme.auroraGreen)
+                    Spacer()
+                    Text("HOLD \(Int(distribution.holdPercent))%")
+                        .foregroundColor(SanctumTheme.ghostGrey)
+                    Spacer()
+                    Text("SELL \(Int(distribution.sellPercent))%")
+                        .foregroundColor(SanctumTheme.crimsonRed)
+                }
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .padding(.top, 6)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            
-            HStack {
-                Label("AL", systemImage: "arrow.up")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                Spacer()
-                Label("BEKLE", systemImage: "minus")
-                    .font(.caption)
-                    .foregroundStyle(.gray)
-                Spacer()
-                Label("SAT", systemImage: "arrow.down")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
+            .padding(12)
+            .background(SanctumTheme.glassMaterial)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
             
             // Drift Warning
             if distribution.isDrifting {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text("Çıktı dağılımı dengesiz! (\(distribution.driftReason))")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                        .font(.system(size: 10))
+                        .foregroundStyle(SanctumTheme.titanGold)
+                    Text("DRIFT DETECTED: \(distribution.driftReason)")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(SanctumTheme.titanGold)
                 }
-                .padding(.top, 4)
+                .padding(8)
+                .background(SanctumTheme.titanGold.opacity(0.1))
+                .cornerRadius(4)
             }
         }
-        .padding()
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
     }
     
-    // MARK: - Alerts Section
-    private var alertsSection: some View {
+    // MARK: - System Log Console
+    private var systemLogConsole: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Veri Kalitesi Uyarıları", systemImage: "exclamationmark.shield")
-                .font(.headline)
+            Label("SYSTEM_LOGS", systemImage: "exclamationmark.shield")
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(SanctumTheme.ghostGrey)
             
             if alerts.isEmpty {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Text("Tüm sistemler sağlıklı")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SanctumTheme.auroraGreen)
+                    Text("ALL SYSTEMS NOMINAL")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(SanctumTheme.ghostGrey)
                 }
-                .padding(.vertical, 8)
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SanctumTheme.glassMaterial)
+                .cornerRadius(8)
             } else {
                 ForEach(alerts) { alert in
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: 12) {
                         Image(systemName: alert.icon)
+                            .font(.system(size: 14))
                             .foregroundStyle(alert.color)
-                        VStack(alignment: .leading, spacing: 2) {
+                        
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(alert.title)
-                                .font(.subheadline.weight(.medium))
+                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                .foregroundColor(.white)
                             Text(alert.message)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(SanctumTheme.ghostGrey)
                         }
+                        
                         Spacer()
+                        
                         Text(alert.formattedTime)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(SanctumTheme.ghostGrey.opacity(0.5))
                     }
-                    .padding(.vertical, 4)
+                    .padding(12)
+                    .background(SanctumTheme.glassMaterial)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(alert.color.opacity(0.3), lineWidth: 1)
+                    )
                 }
             }
         }
-        .padding()
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
     }
     
     // MARK: - Data Loading
@@ -204,7 +206,7 @@ struct ObservatoryHealthView: View {
             let losses = abs(pnls.filter { $0 < 0 }.reduce(0, +))
             let profitFactor = losses > 0 ? profits / losses : 2.0
             
-            // Simple Sharpe approximation
+            // Simple Sharpe approximation (dummy calculation for UI demo if no proper history)
             let avgPnl = pnls.isEmpty ? 0 : pnls.reduce(0, +) / Double(pnls.count)
             let variance = pnls.isEmpty ? 1 : pnls.map { pow($0 - avgPnl, 2) }.reduce(0, +) / Double(pnls.count)
             let stdDev = sqrt(variance)
@@ -232,7 +234,7 @@ struct ObservatoryHealthView: View {
             let holdPct = Double(holdCount) / total * 100
             
             let isDrifting = buyPct > 70 || sellPct > 70 || holdPct > 80
-            let driftReason = buyPct > 70 ? "Aşırı AL" : (sellPct > 70 ? "Aşırı SAT" : (holdPct > 80 ? "Aşırı BEKLE" : ""))
+            let driftReason = buyPct > 70 ? "EXCESS BUY" : (sellPct > 70 ? "EXCESS SELL" : (holdPct > 80 ? "EXCESS HOLD" : ""))
             
             await MainActor.run {
                 self.metrics = PerformanceMetrics(
@@ -250,7 +252,6 @@ struct ObservatoryHealthView: View {
                     driftReason: driftReason
                 )
                 
-                // Mock alerts for now
                 self.alerts = []
                 self.isLoading = false
             }
@@ -258,8 +259,8 @@ struct ObservatoryHealthView: View {
     }
 }
 
-// MARK: - Metric Card View
-struct MetricCardView: View {
+// MARK: - Holo Metric Card
+struct HoloMetricCard: View {
     let title: String
     let value: String
     let icon: String
@@ -270,19 +271,32 @@ struct MetricCardView: View {
             HStack {
                 Image(systemName: icon)
                     .foregroundStyle(color)
+                    .font(.system(size: 14))
                 Spacer()
             }
             
             Text(value)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(color)
+                .font(.system(size: 20, weight: .black, design: .monospaced))
+                .foregroundStyle(.white)
             
             Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(SanctumTheme.ghostGrey)
         }
         .padding()
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemBackground)))
+        .background(SanctumTheme.glassMaterial)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    LinearGradient(
+                        colors: [color.opacity(0.3), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
     }
 }
 

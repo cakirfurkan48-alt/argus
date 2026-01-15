@@ -2,34 +2,111 @@ import SwiftUI
 
 // MARK: - Observatory Container View
 /// Main container view for Observatory with tab-based navigation
+// MARK: - Observatory Container View
+/// Main container view for Observatory with tab-based navigation
 struct ObservatoryContainerView: View {
     @State private var selectedTab: ObservatoryTab = .timeline
+    @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Tab Picker
-            Picker("Görünüm", selection: $selectedTab) {
-                ForEach(ObservatoryTab.allCases, id: \.self) { tab in
-                    Label(tab.title, systemImage: tab.icon)
-                        .tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.top, 8)
+        ZStack {
+            // 1. Background
+            SanctumTheme.bg.edgesIgnoringSafeArea(.all)
+            NeuralNetworkBackground().edgesIgnoringSafeArea(.all).opacity(0.3)
             
-            // Content
-            switch selectedTab {
-            case .timeline:
-                ObservatoryTimelineContentView()
-            case .learning:
-                ObservatoryLearningContentView()
-            case .health:
-                ObservatoryHealthContentView()
+            VStack(spacing: 0) {
+                // 2. Header
+                observatoryHeader
+                
+                // 3. Custom Tab Bar
+                cyberTabBar
+                
+                // 4. Content Area
+                ZStack {
+                    switch selectedTab {
+                    case .timeline:
+                        ObservatoryTimelineContentView()
+                    case .learning:
+                        ObservatoryLearningContentView()
+                    case .health:
+                        ObservatoryHealthContentView()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
             }
         }
-        .navigationTitle("🔭 Observatory")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
+    }
+    
+    // MARK: - Components
+    
+    private var observatoryHeader: some View {
+        HStack {
+            Image(systemName: "binoculars.fill")
+                .font(.system(size: 18))
+                .foregroundColor(SanctumTheme.titanGold)
+            
+            Text("HEIMDALL OBSERVATORY")
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .tracking(2)
+                .foregroundColor(.white)
+            
+            Spacer()
+            
+            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(SanctumTheme.ghostGrey)
+                    .padding(8)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Circle())
+            }
+        }
+        .padding()
+        .background(SanctumTheme.glassMaterial)
+    }
+    
+    private var cyberTabBar: some View {
+        HStack(spacing: 0) {
+            ForEach(ObservatoryTab.allCases, id: \.self) { tab in
+                Button(action: {
+                    withAnimation(.spring(response: 0.3)) {
+                        selectedTab = tab
+                    }
+                }) {
+                    VStack(spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 12))
+                            Text(tab.title)
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .tracking(1)
+                        }
+                        .foregroundColor(selectedTab == tab ? SanctumTheme.hologramBlue : SanctumTheme.ghostGrey)
+                        .padding(.vertical, 12)
+                        
+                        // Active Indicator Line
+                        Rectangle()
+                            .fill(selectedTab == tab ? SanctumTheme.hologramBlue : Color.clear)
+                            .frame(height: 2)
+                            .shadow(color: SanctumTheme.hologramBlue, radius: 4)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        selectedTab == tab ? 
+                        SanctumTheme.hologramBlue.opacity(0.05) : 
+                        Color.clear
+                    )
+                }
+            }
+        }
+        .padding(.horizontal)
+        .background(
+            Rectangle()
+                .fill(SanctumTheme.glassMaterial)
+                .shadow(color: Color.black.opacity(0.2), radius: 5, x: 0, y: 5)
+        )
     }
 }
 
@@ -40,17 +117,17 @@ enum ObservatoryTab: String, CaseIterable {
     
     var title: String {
         switch self {
-        case .timeline: return "Zaman Çizelgesi"
-        case .learning: return "Öğrenme"
-        case .health: return "Sağlık"
+        case .timeline: return "TIMELINE"
+        case .learning: return "LEARNING"
+        case .health: return "SYSTEM_HEALTH"
         }
     }
     
     var icon: String {
         switch self {
-        case .timeline: return "clock"
-        case .learning: return "brain"
-        case .health: return "heart.text.square"
+        case .timeline: return "clock.arrow.circlepath"
+        case .learning: return "brain.head.profile"
+        case .health: return "waveform.path.ecg"
         }
     }
 }
@@ -252,6 +329,136 @@ struct ObservatoryHealthContentView: View {
                 self.isLoading = false
             }
         }
+    }
+}
+
+// MARK: - Decision Card View
+struct DecisionCardView: View {
+    let decision: DecisionCard
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(decision.symbol)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                Text(decision.action)
+                    .font(.system(size: 11, weight: .medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(decision.actionColor.opacity(0.2))
+                    .foregroundColor(decision.actionColor)
+                    .cornerRadius(4)
+            }
+            
+            // Factor bilgilerini göster
+            if !decision.topFactors.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(decision.topFactors.prefix(3), id: \.name) { factor in
+                        Text("\(factor.name): \(Int(factor.value))")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(factor.value >= 50 ? .green : .red)
+                    }
+                }
+            }
+            
+            HStack {
+                Label(decision.market, systemImage: "globe")
+                    .font(.system(size: 10))
+                    .foregroundColor(SanctumTheme.ghostGrey)
+                
+                Spacer()
+                
+                if let pnl = decision.actualPnl {
+                    Text(String(format: "%.2f%%", pnl))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundColor(pnl >= 0 ? .green : .red)
+                }
+            }
+        }
+        .padding()
+        .background(SanctumTheme.glassMaterial)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(SanctumTheme.hologramBlue.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Learning Event Card View
+struct LearningEventCardView: View {
+    let event: LearningEvent
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "brain.head.profile")
+                    .foregroundColor(SanctumTheme.hologramBlue)
+                
+                Text("ÖĞRENME")
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                Text(event.timestamp, style: .date)
+                    .font(.system(size: 10))
+                    .foregroundColor(SanctumTheme.ghostGrey)
+            }
+            
+            Text(event.reason)
+                .font(.system(size: 12))
+                .foregroundColor(SanctumTheme.ghostGrey)
+                .lineLimit(3)
+            
+            // Weight değişimlerini göster
+            Text(event.summaryText)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(SanctumTheme.hologramBlue)
+        }
+        .padding()
+        .background(SanctumTheme.glassMaterial)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(SanctumTheme.hologramBlue.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Metric Card View
+struct MetricCardView: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .foregroundColor(.white)
+            
+            Text(title)
+                .font(.system(size: 11))
+                .foregroundColor(SanctumTheme.ghostGrey)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(SanctumTheme.glassMaterial)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
     }
 }
 

@@ -2,88 +2,97 @@ import SwiftUI
 
 // MARK: - Observatory Timeline View
 /// Displays a list of Argus decisions as "story cards"
+// MARK: - Observatory Timeline View
+/// Displays a list of Argus decisions as "story cards"
 struct ObservatoryTimelineView: View {
     @State private var decisions: [DecisionCard] = []
     @State private var isLoading = true
     @State private var selectedFilter: TimelineFilter = .all
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Filter Picker
-                Picker("Filtre", selection: $selectedFilter) {
+        VStack(spacing: 0) {
+            // Filter Picker (Neon Style)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
                     ForEach(TimelineFilter.allCases, id: \.self) { filter in
-                        Text(filter.displayName).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.top, 8)
-                
-                // Timeline List
-                if isLoading {
-                    Spacer()
-                    ProgressView("Zaman çizelgesi yükleniyor...")
-                    Spacer()
-                } else if decisions.isEmpty {
-                    Spacer()
-                    VStack(spacing: 16) {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .font(.system(size: 60))
-                            .foregroundStyle(.secondary)
-                        Text("Henüz karar kaydı yok")
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                        Text("Argus kararlar aldıkça burada görünecekler.")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(filteredDecisions) { decision in
-                                DecisionCardView(decision: decision)
-                            }
+                        Button(action: { selectedFilter = filter }) {
+                            Text(filter.displayName)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    selectedFilter == filter ? 
+                                    SanctumTheme.hologramBlue.opacity(0.2) : 
+                                    Color.white.opacity(0.05)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(
+                                            selectedFilter == filter ? 
+                                            SanctumTheme.hologramBlue : 
+                                            Color.white.opacity(0.1), 
+                                            lineWidth: 1
+                                        )
+                                )
+                                .cornerRadius(8)
+                                .foregroundColor(
+                                    selectedFilter == filter ? 
+                                    SanctumTheme.hologramBlue : 
+                                    SanctumTheme.ghostGrey
+                                )
                         }
-                        .padding()
                     }
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 12)
             }
-            .navigationTitle("🔭 Observatory")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: loadDecisions) {
-                        Image(systemName: "arrow.clockwise")
+            .background(Color.black.opacity(0.2))
+            
+            // Timeline List
+            if isLoading {
+                Spacer()
+                ProgressView().tint(SanctumTheme.hologramBlue)
+                Spacer()
+            } else if decisions.isEmpty {
+                Spacer()
+                VStack(spacing: 16) {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 60))
+                        .foregroundStyle(SanctumTheme.ghostGrey.opacity(0.3))
+                    Text("NO DATA DETECTED")
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundStyle(SanctumTheme.ghostGrey)
+                }
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(filteredDecisions) { decision in
+                            HoloDecisionCardView(decision: decision)
+                        }
                     }
+                    .padding()
                 }
             }
-            .onAppear {
-                loadDecisions()
-            }
+        }
+        .onAppear {
+            loadDecisions()
         }
     }
     
     private var filteredDecisions: [DecisionCard] {
         switch selectedFilter {
-        case .all:
-            return decisions
-        case .pending:
-            return decisions.filter { $0.outcome == .pending }
-        case .matured:
-            return decisions.filter { $0.outcome == .matured }
-        case .bist:
-            return decisions.filter { $0.market == "BIST" }
-        case .global:
-            return decisions.filter { $0.market == "US" }
+        case .all: return decisions
+        case .pending: return decisions.filter { $0.outcome == .pending }
+        case .matured: return decisions.filter { $0.outcome == .matured }
+        case .bist: return decisions.filter { $0.market == "BIST" }
+        case .global: return decisions.filter { $0.market == "US" }
         }
     }
     
     private func loadDecisions() {
         isLoading = true
         Task {
-            // Load from ArgusLedger
             let events = ArgusLedger.shared.loadRecentDecisions(limit: 100)
             await MainActor.run {
                 self.decisions = events
@@ -93,105 +102,117 @@ struct ObservatoryTimelineView: View {
     }
 }
 
-// MARK: - Decision Card View
-struct DecisionCardView: View {
+// MARK: - Holo Decision Card
+struct HoloDecisionCardView: View {
     let decision: DecisionCard
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header
+            // Header: Symbol + Date
             HStack {
-                // Symbol Badge
                 Text(decision.symbol)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
-                // Market Badge
-                Text(decision.market)
-                    .font(.caption2)
+                    .font(.system(size: 16, weight: .black, design: .monospaced))
+                    .foregroundColor(.white)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(decision.market == "BIST" ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2))
-                    .clipShape(Capsule())
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(4)
+                
+                Text(decision.market)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(SanctumTheme.ghostGrey)
                 
                 Spacer()
                 
-                // Timestamp
                 Text(decision.formattedDate)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(SanctumTheme.ghostGrey)
             }
             
-            // Action & Confidence
+            Divider().background(Color.white.opacity(0.1))
+            
+            // Action Section
             HStack {
-                // Action Badge
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Image(systemName: decision.actionIcon)
+                        .font(.system(size: 16))
                     Text(decision.action)
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .tracking(1)
                 }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(decision.actionColor)
-                
-                Text("(\(Int(decision.confidence * 100))%)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .foregroundColor(decision.actionColor)
                 
                 Spacer()
+                
+                // Confidence Badge
+                HStack(spacing: 2) {
+                    Text("CONF:")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(SanctumTheme.ghostGrey)
+                    Text("\(Int(decision.confidence * 100))%")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                }
+                .padding(6)
+                .background(Color.black.opacity(0.4))
+                .cornerRadius(4)
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.white.opacity(0.1), lineWidth: 1))
             }
             
-            // Top Factors
+            // Factors Grid
             HStack(spacing: 8) {
                 ForEach(decision.topFactors.prefix(3), id: \.name) { factor in
-                    HStack(spacing: 2) {
-                        Text(factor.emoji)
-                            .font(.caption)
-                        Text("\(factor.name)")
-                            .font(.caption2)
-                        Text(factor.value >= 0 ? "+\(Int(factor.value))" : "\(Int(factor.value))")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(factor.value >= 50 ? .green : (factor.value >= 30 ? .secondary : .red))
+                    HStack(spacing: 3) {
+                        Text(factor.name.prefix(3).uppercased())
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(SanctumTheme.ghostGrey)
+                        Text("\(Int(factor.value))")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(factor.value >= 50 ? .green : .red)
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(Color.secondary.opacity(0.1))
-                    .clipShape(Capsule())
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(4)
                 }
             }
             
-            Divider()
-            
-            // Horizon & Outcome
-            HStack {
-                // Horizon
-                Label(decision.horizon.rawValue, systemImage: "timer")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
-                // Outcome
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(decision.outcomeColor)
-                        .frame(width: 8, height: 8)
-                    Text(decision.outcome.displayName)
-                        .font(.caption)
-                }
-                
-                // PnL (if matured)
-                if decision.outcome == .matured, let pnl = decision.actualPnl {
-                    Text(String(format: "%+.2f%%", pnl))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(pnl >= 0 ? .green : .red)
+            // Footer: Outcome Status
+            if decision.outcome != .pending {
+                Divider().background(Color.white.opacity(0.1))
+                HStack {
+                    Image(systemName: decision.outcome == .matured ? "checkmark.circle.fill" : "clock")
+                        .font(.system(size: 10))
+                        .foregroundColor(decision.outcomeColor)
+                    Text(decision.outcome.displayName.uppercased())
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundColor(decision.outcomeColor)
+                    
+                    Spacer()
+                    
+                    if let pnl = decision.actualPnl {
+                        Text(String(format: "%+.2f%%", pnl))
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundColor(pnl >= 0 ? SanctumTheme.auroraGreen : SanctumTheme.crimsonRed)
+                    }
                 }
             }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .padding(16)
+        .background(SanctumTheme.glassMaterial)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    LinearGradient(
+                        colors: [decision.actionColor.opacity(0.5), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
         )
+        .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 4)
     }
 }
 
