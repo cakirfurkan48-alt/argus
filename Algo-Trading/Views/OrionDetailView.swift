@@ -200,6 +200,10 @@ struct OrionDetailView: View {
                         }
                         .padding(.horizontal, 16)
                         
+                        // MARK: 2.5. CHIMERA İÇGÖRÜ (DNA Özeti)
+                        ChimeraInsightCard(symbol: symbol, orion: orion)
+                            .padding(.horizontal, 16)
+                        
                         // MARK: 3. TACTICAL FEEDBACK
                         HStack(spacing: 12) {
                              Image(systemName: "hand.tap.fill")
@@ -814,3 +818,122 @@ struct PatternAlertCard: View {
         )
     }
 }
+
+// MARK: - CHIMERA İÇGÖRÜ KARTI
+struct ChimeraInsightCard: View {
+    let symbol: String
+    let orion: OrionScoreResult
+    
+    private var chimeraResult: ChimeraFusionResult {
+        let regime = ChironRegimeEngine.shared.globalResult.regime
+        
+        return ChimeraSynergyEngine.shared.fuse(
+            symbol: symbol,
+            orion: orion,
+            hermesImpactScore: nil, // Orion kartında Hermes yok
+            titanScore: nil, // Atlas verisi de yok
+            currentPrice: 0,
+            marketRegime: regime
+        )
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack {
+                Image(systemName: "dna")
+                    .font(.caption)
+                    .foregroundColor(.cyan)
+                
+                Text("CHIMERA DNA")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.cyan)
+                
+                Spacer()
+                
+                // Sürücü Badge
+                Text(chimeraResult.primaryDriver)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.cyan.opacity(0.2))
+                    .foregroundColor(.cyan)
+                    .cornerRadius(6)
+            }
+            
+            // DNA Bar'ları
+            VStack(spacing: 8) {
+                DNABar(label: "MOM", value: chimeraResult.dna.momentum, color: .orange)
+                DNABar(label: "TREND", value: chimeraResult.dna.trend, color: .purple)
+                DNABar(label: "YAPI", value: chimeraResult.dna.structure, color: .blue)
+            }
+            
+            // Sinyal (varsa)
+            if let signal = chimeraResult.signals.first {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(signal.severity > 0.7 ? Color.red : Color.orange)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(signal.title)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(signal.severity > 0.7 ? .red : .orange)
+                    
+                    Spacer()
+                    
+                    Text(signal.description)
+                        .font(.system(size: 9))
+                        .foregroundColor(.gray)
+                        .lineLimit(1)
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Theme.secondaryBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.cyan.opacity(0.2), lineWidth: 1)
+                )
+        )
+    }
+}
+
+// MARK: - DNA Bar Component
+struct DNABar: View {
+    let label: String
+    let value: Double // 0-100
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.gray)
+                .frame(width: 45, alignment: .leading)
+            
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // Track
+                    Capsule()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 6)
+                    
+                    // Fill
+                    Capsule()
+                        .fill(color)
+                        .frame(width: geo.size.width * (value / 100.0), height: 6)
+                }
+            }
+            .frame(height: 6)
+            
+            Text("\(Int(value))")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(width: 25, alignment: .trailing)
+        }
+    }
+}
+

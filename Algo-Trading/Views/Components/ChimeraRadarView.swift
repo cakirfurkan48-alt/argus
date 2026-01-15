@@ -18,7 +18,7 @@ struct ChimeraRadarView: View {
                 dna.trend / 100.0,
                 dna.value / 100.0,
                 dna.sentiment / 100.0,
-                dna.volatility / 100.0
+                dna.structure / 100.0
             ])
             .fill(LinearGradient(
                 gradient: Gradient(colors: [Color.cyan.opacity(0.5), Color.blue.opacity(0.2)]),
@@ -31,7 +31,7 @@ struct ChimeraRadarView: View {
                     dna.trend / 100.0,
                     dna.value / 100.0,
                     dna.sentiment / 100.0,
-                    dna.volatility / 100.0
+                    dna.structure / 100.0
                 ])
                 .stroke(Color.cyan, lineWidth: 2)
             )
@@ -76,7 +76,7 @@ struct RadarLabels: View {
         GeometryReader { geometry in
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
             let radius = min(geometry.size.width, geometry.size.height) / 2
-            let labels = ["MOMENTUM", "TREND", "DEĞER", "ALGI", "İSTİKRAR"]
+            let labels = ["MOM", "TREND", "DEĞER", "ALGI", "YAPI"]
             
             ForEach(0..<5) { i in
                 let angle = CGFloat(i) * (2 * CGFloat.pi / 5) - CGFloat.pi / 2

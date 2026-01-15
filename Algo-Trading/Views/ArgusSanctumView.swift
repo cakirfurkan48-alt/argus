@@ -488,29 +488,6 @@ struct CenterCoreView: View {
     // Haptics
     private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
     
-    // Chimera Computation
-    private var chimeraResult: ChimeraFusionResult {
-        let orion = viewModel.orionScores[symbol]
-        let hermesInsight = viewModel.newsInsightsBySymbol[symbol]?.first
-        let hermesImpact = hermesInsight?.impactScore ?? 50.0 // 0-100 score
-        
-        let fundScore = viewModel.getFundamentalScore(for: symbol)?.totalScore
-        let price = viewModel.quotes[symbol]?.currentPrice ?? 0.0
-        
-        // Default Regime (Fallback if no Chiron)
-        let regime = ChironRegimeEngine.shared.globalResult.regime 
-        
-        return ChimeraSynergyEngine.shared.fuse(
-            symbol: symbol,
-            orion: orion,
-            hermesImpactScore: hermesImpact,
-            titanScore: fundScore,
-            currentPrice: price,
-            marketRegime: regime
-        )
-    }
-
-    
     var body: some View {
         ZStack {
             // 1. Base Compass Ring (Static)
@@ -597,33 +574,28 @@ struct CenterCoreView: View {
                     }
             )
             
-            // 3. Inner Data Display
-            ZStack {
-                Circle()
-                    .fill(Color(hex: "1C1C1E").opacity(0.95))
-                    .frame(width: 120, height: 120)
-                    .overlay(
-                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
-                
-                // LAYER 1: Chimera Radar (Background - always visible as subtle DNA)
-                ChimeraRadarView(dna: chimeraResult.dna)
-                    .scaleEffect(0.45)
-                    .opacity(focusedModuleName == nil && !showDecision ? 0.3 : 0.0) // Subtle background
-                    .animation(.easeInOut(duration: 0.3), value: showDecision)
-            }
-            .onTapGesture {
-                withAnimation(.spring()) {
-                    // Toggle between Council and Chimera DNA view
-                    showDecision.toggle()
-                    focusedModuleName = nil
+            // 3. Inner Data Display (TEMİZ KONSEY)
+            Circle()
+                .fill(Color(hex: "1C1C1E").opacity(0.95))
+                .frame(width: 120, height: 120)
+                .overlay(
+                    Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+                .onTapGesture {
+                    withAnimation(.spring()) {
+                        focusedModuleName = nil
+                    }
+                    impactFeedback.impactOccurred(intensity: 0.7)
                 }
-                impactFeedback.impactOccurred(intensity: 0.7)
-            }
+                .onLongPressGesture(minimumDuration: 0.5) {
+                    // Uzun basınca Chimera DNA Sheet aç
+                    showDecision = true
+                    impactFeedback.impactOccurred(intensity: 1.0)
+                }
             
-            // LAYER 2: Text Overlays (Primary Content)
+            // LAYER 2: Text Overlays
             if let moduleName = focusedModuleName {
-                // Showing Selected Module Logic (when orbit is tapped)
+                // Modül Detayı (orbit'e dokunulunca)
                 VStack(spacing: 4) {
                     Text(moduleName)
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -644,39 +616,8 @@ struct CenterCoreView: View {
                 .padding(8)
                 .background(Color.black.opacity(0.8).cornerRadius(8))
                 .transition(.scale.combined(with: .opacity))
-            } else if showDecision {
-                // CHIMERA DNA VIEW (Full Radar when center tapped)
-                VStack(spacing: 4) {
-                    Text("DNA")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .tracking(2)
-                        .foregroundColor(Color.cyan)
-                    
-                    ChimeraRadarView(dna: chimeraResult.dna)
-                        .scaleEffect(0.5)
-                    
-                    Text(chimeraResult.primaryDriver)
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.7))
-                    
-                    // SMART SIGNALS (Deep Value, Bull Trap, etc.)
-                    if let signal = chimeraResult.signals.first {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(signal.severity > 0.7 ? Color.red : Color.orange)
-                                .frame(width: 6, height: 6)
-                            Text(signal.title)
-                                .font(.system(size: 7, weight: .bold, design: .monospaced))
-                                .foregroundColor(signal.severity > 0.7 ? .red : .orange)
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.black.opacity(0.6).cornerRadius(4))
-                    }
-                }
-                .transition(.scale.combined(with: .opacity))
             } else {
-                // DEFAULT: GRAND COUNCIL DECISION (Varsayılan görünüm)
+                // VARSAYILAN: KONSEY KARARI (TEMİZ)
                 VStack(spacing: 4) {
                     Text("KONSEY")
                         .font(.system(size: 8, design: .monospaced))
@@ -716,7 +657,6 @@ struct CenterCoreView: View {
             }
         }
         .onAppear {
-            // Initial state: Show Council decision
             showDecision = false
         }
     }
