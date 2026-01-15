@@ -406,6 +406,9 @@ struct TerminalItem: Identifiable, Equatable {
     
     // Forecast
     let forecast: PrometheusForecast?
+    
+    // Chimera Signal (NEW)
+    let chimeraSignal: ChimeraSignal?
 }
 
 // MARK: - Transaction History

@@ -19,10 +19,26 @@ class TradingViewModel: ObservableObject {
     @Published var terminalItems: [TerminalItem] = []
     
     func refreshTerminal() {
+        let regime = ChironRegimeEngine.shared.globalResult.regime
+        
         let newItems = watchlist.map { symbol -> TerminalItem in
             let isBist = symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol)
             let quote = quotes[symbol]
             let decision = grandDecisions[symbol]
+            
+            // Chimera Signal Computation
+            let orion = orionScores[symbol]
+            let hermesImpact = newsInsightsBySymbol[symbol]?.first?.impactScore
+            let fundScore = getFundamentalScore(for: symbol)?.totalScore
+            
+            let chimeraResult = ChimeraSynergyEngine.shared.fuse(
+                symbol: symbol,
+                orion: orion,
+                hermesImpactScore: hermesImpact,
+                titanScore: fundScore,
+                currentPrice: quote?.currentPrice ?? 0,
+                marketRegime: regime
+            )
             
             return TerminalItem(
                 id: symbol,
@@ -36,7 +52,8 @@ class TradingViewModel: ObservableObject {
                 councilScore: decision?.confidence,
                 action: decision?.action ?? .neutral,
                 dataQuality: dataHealthBySymbol[symbol]?.qualityScore ?? 0,
-                forecast: prometheusForecastBySymbol[symbol]
+                forecast: prometheusForecastBySymbol[symbol],
+                chimeraSignal: chimeraResult.signals.first
             )
         }
         

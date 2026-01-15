@@ -412,7 +412,7 @@ struct TerminalStockRow: View {
             
             Spacer()
             
-            // Action Signal
+            // Action Signal + Chimera Badge
             VStack(alignment: .trailing, spacing: 4) {
                 Text(actionLocalizedString(item.action))
                     .font(.system(size: 11, weight: .black))
@@ -421,6 +421,22 @@ struct TerminalStockRow: View {
                     .background(actionColor(item.action).opacity(0.2))
                     .foregroundColor(actionColor(item.action))
                     .cornerRadius(4)
+                
+                // Chimera Signal Badge (Deep Value, Bull Trap, etc.)
+                if let signal = item.chimeraSignal {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(signal.severity > 0.7 ? Color.red : Color.orange)
+                            .frame(width: 5, height: 5)
+                        Text(signal.title)
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(signal.severity > 0.7 ? .red : .orange)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.black.opacity(0.3))
+                    .cornerRadius(4)
+                }
                 
                 if item.dataQuality < 100 {
                     HStack(spacing: 2) {

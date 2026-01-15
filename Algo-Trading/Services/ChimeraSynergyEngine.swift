@@ -19,12 +19,24 @@ struct ChimeraFusionResult: Sendable {
     let regimeContext: String
 }
 
-struct ChimeraSignal: Identifiable, Sendable {
-    let id = UUID()
+struct ChimeraSignal: Identifiable, Sendable, Equatable {
+    let id: UUID
     let type: ChimeraSignalType
     let title: String
     let description: String
     let severity: Double // 0-1 (1 = Critical)
+    
+    init(type: ChimeraSignalType, title: String, description: String, severity: Double) {
+        self.id = UUID()
+        self.type = type
+        self.title = title
+        self.description = description
+        self.severity = severity
+    }
+    
+    static func == (lhs: ChimeraSignal, rhs: ChimeraSignal) -> Bool {
+        lhs.type == rhs.type && lhs.title == rhs.title
+    }
 }
 
 enum ChimeraSignalType: String, Sendable {
