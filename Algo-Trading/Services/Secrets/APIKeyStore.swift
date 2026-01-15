@@ -36,6 +36,7 @@ class APIKeyStore: ObservableObject {
                 case .eodhd: keys[.eodhd] = Secrets.eodhdKey
                 case .gemini: keys[.gemini] = Secrets.geminiKey
                 case .fred: keys[.fred] = Secrets.fredKey
+                case .simfin: keys[.simfin] = Secrets.simfinKey
                 }
             }
         }
@@ -70,6 +71,7 @@ class APIKeyStore: ObservableObject {
         case .eodhd: secret = Secrets.eodhdKey
         case .gemini: secret = Secrets.geminiKey
         case .fred: secret = Secrets.fredKey
+        case .simfin: secret = Secrets.simfinKey
         }
         
         if let secret = secret, !secret.isEmpty, !secret.starts(with: "YOUR_") {

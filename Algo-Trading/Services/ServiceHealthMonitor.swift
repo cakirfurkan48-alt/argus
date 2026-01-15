@@ -11,6 +11,7 @@ enum APIProvider: String, CaseIterable, Identifiable, Codable {
     case marketstack = "MarketStack"
     case gemini = "Gemini AI"
     case fred = "FRED"
+    case simfin = "SimFin"
     
     var id: String { rawValue }
 }

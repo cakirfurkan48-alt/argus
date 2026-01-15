@@ -51,7 +51,14 @@ final class HeimdallOrchestrator {
         let provider = "yahoo"
         let endpoint = "/fundamentals"
         
+        // BIST hisseleri için sadece Yahoo (SimFin US-only)
+        let isBIST = symbol.hasSuffix(".IS")
+        
         guard await HeimdallCircuitBreaker.shared.canRequest(provider: provider) else {
+            // Yahoo circuit açık - SimFin'e düş (sadece US için)
+            if !isBIST {
+                return try await fetchFromSimFin(symbol: symbol)
+            }
             throw HeimdallCoreError(category: .rateLimited, code: 503, message: "Circuit open", bodyPrefix: "")
         }
         
@@ -67,6 +74,28 @@ final class HeimdallOrchestrator {
         } catch {
             await HeimdallCircuitBreaker.shared.reportFailure(provider: provider, error: error)
             await HeimdallLogger.shared.error("fetch_failed", provider: provider, errorClass: classifyError(error), errorMessage: error.localizedDescription, endpoint: endpoint)
+            
+            // Fallback: SimFin (sadece US hisseleri için)
+            if !isBIST {
+                print("🔄 HEIMDALL: Yahoo failed, falling back to SimFin for \(symbol)")
+                return try await fetchFromSimFin(symbol: symbol)
+            }
+            throw error
+        }
+    }
+    
+    /// SimFin fallback for US stocks
+    private func fetchFromSimFin(symbol: String) async throws -> FinancialsData {
+        let provider = "simfin"
+        let start = Date()
+        
+        do {
+            let data = try await SimFinProvider.shared.fetchFundamentals(symbol: symbol)
+            let latency = Int(Date().timeIntervalSince(start) * 1000)
+            await HeimdallLogger.shared.info("fetch_success", provider: provider, endpoint: "/fundamentals", symbol: symbol, latencyMs: latency)
+            return data
+        } catch {
+            await HeimdallLogger.shared.error("fetch_failed", provider: provider, errorClass: classifyError(error), errorMessage: error.localizedDescription, endpoint: "/fundamentals")
             throw error
         }
     }

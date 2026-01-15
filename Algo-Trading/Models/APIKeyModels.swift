@@ -16,6 +16,7 @@ public enum ArgusProvider: String, CaseIterable, Codable, Sendable {
     
     // Macro / Economics
     case fred = "FRED"
+    case simfin = "SimFin"
     
     // AI / Intelligence
     case groq = "Groq"
@@ -38,6 +39,7 @@ public enum ArgusProvider: String, CaseIterable, Codable, Sendable {
         case .marketStack: return "MarketStack"
         case .coinApi: return "CoinAPI"
         case .fred: return "FRED (St. Louis Fed)"
+        case .simfin: return "SimFin Fundamentals"
         case .groq: return "Groq AI"
         case .gemini: return "Google Gemini"
         case .openAI: return "OpenAI"

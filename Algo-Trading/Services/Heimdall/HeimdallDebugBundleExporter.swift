@@ -72,6 +72,7 @@ actor HeimdallDebugBundleExporter {
             case .marketstack: argusProvider = .marketStack
             case .gemini: argusProvider = .gemini
             case .fred: argusProvider = .fred
+            case .simfin: argusProvider = .simfin
             }
             
             return APIKeyMetadata(
