@@ -557,9 +557,23 @@ extension TradingViewModel {
     
     // MARK: - Stop Loss & Take Profit Checks
     
+    /// Cooldown tracker - aynı sembol için tekrarlı stop loss kontrolü engellenir
+    private static var stopLossCooldowns: [String: Date] = [:]
+    private static let stopLossCooldownDuration: TimeInterval = 300 // 5 dakika
+    
     func checkStopLoss(for trade: Trade, currentPrice: Double) {
         guard let stopPrice = trade.stopLoss else { return }
+        
+        // Cooldown kontrolü - aynı sembol için son 5 dakika içinde tetiklendiyse atla
+        if let lastTrigger = Self.stopLossCooldowns[trade.symbol],
+           Date().timeIntervalSince(lastTrigger) < Self.stopLossCooldownDuration {
+            return // Cooldown aktif, spam önlendi
+        }
+        
         if currentPrice <= stopPrice {
+            // Cooldown'u kaydet
+            Self.stopLossCooldowns[trade.symbol] = Date()
+            
             print("🚨 Auto-Pilot: Stop Loss Triggered for \(trade.symbol) at \(currentPrice) (Stop: \(stopPrice))")
             Task {
                 await self.executeExit(trade: trade, reason: "Stop Loss Triggered", price: currentPrice)

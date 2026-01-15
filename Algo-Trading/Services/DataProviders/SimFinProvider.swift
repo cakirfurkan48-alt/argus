@@ -71,13 +71,15 @@ final class SimFinProvider: HeimdallProvider, Sendable {
         // bs = Balance Sheet
         // cf = Cash Flow
         
-        let urlString = "\(baseURL)/companies/statements?ticker=\(symbol)&statement=\(statement)&period=fy&fyear=0&api-key=\(apiKey)"
+        // V3 API: /companies/statements/compact with Authorization header
+        let urlString = "\(baseURL)/companies/statements/compact?ticker=\(symbol)&statements=\(statement)"
         
         guard let url = URL(string: urlString) else { return nil }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -88,7 +90,7 @@ final class SimFinProvider: HeimdallProvider, Sendable {
             }
         }
         
-        // Parse response
+        // Parse response - V3 returns array directly
         do {
             let decoded = try JSONDecoder().decode([SimFinStatementResponse].self, from: data)
             return decoded.first
