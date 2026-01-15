@@ -21,6 +21,7 @@ struct ArgusCockpitView: View {
     @State private var hideLowQualityData: Bool = true
     @State private var searchText: String = ""
     @State private var selectedMarket: MarketTab = .global
+    @State private var systemLogs: [ChironLearningEvent] = [] // Chiron Feed Data
     
     // Overlay State
     @State private var selectedSymbolForModule: String? = nil
@@ -117,6 +118,11 @@ struct ArgusCockpitView: View {
                             
                             // ChironCockpitWidget removed (moving to Feed later)
                             
+                            // MARK: - SYSTEM INTELLIGENCE FEED
+                            ChironTerminalFeed(events: systemLogs)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 8)
+                            
                             // Terminal List
                             ScrollView {
                                 LazyVStack(spacing: 0) {
@@ -171,6 +177,7 @@ struct ArgusCockpitView: View {
                         Button(action: {
                             Task {
                                 viewModel.refreshTerminal()
+                                await loadLogs()
                             }
                         }) {
                             Image(systemName: "arrow.clockwise")
@@ -200,14 +207,20 @@ struct ArgusCockpitView: View {
         .onAppear {
              // View açıldığında veriyi tazele
              viewModel.refreshTerminal()
+             Task { await loadLogs() }
         }
         .task {
             await viewModel.bootstrapTerminalData()
+            await loadLogs()
         }
         // Watchlist değişirse terminali güncelle
         .onChange(of: viewModel.watchlist) { _ in
             viewModel.refreshTerminal()
         }
+    }
+    
+    private func loadLogs() async {
+        systemLogs = await ChironDataLakeService.shared.loadLearningEvents()
     }
     
     private func openModule(_ type: ArgusSanctumView.ModuleType, for symbol: String) {
