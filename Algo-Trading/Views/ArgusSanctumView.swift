@@ -597,7 +597,7 @@ struct CenterCoreView: View {
                     }
             )
             
-            // 3. Inner Data Display (CHIMERA RADAR)
+            // 3. Inner Data Display
             ZStack {
                 Circle()
                     .fill(Color(hex: "1C1C1E").opacity(0.95))
@@ -606,29 +606,28 @@ struct CenterCoreView: View {
                         Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
                     )
                 
-                // The Radar
-                if !showDecision && focusedModuleName == nil {
-                    ChimeraRadarView(dna: chimeraResult.dna)
-                        .scaleEffect(0.5) // Fit inside 120px
-                        .opacity(0.8)
-                        .transition(.opacity)
-                }
+                // LAYER 1: Chimera Radar (Background - always visible as subtle DNA)
+                ChimeraRadarView(dna: chimeraResult.dna)
+                    .scaleEffect(0.45)
+                    .opacity(focusedModuleName == nil && !showDecision ? 0.3 : 0.0) // Subtle background
+                    .animation(.easeInOut(duration: 0.3), value: showDecision)
             }
             .onTapGesture {
-                withAnimation {
+                withAnimation(.spring()) {
+                    // Toggle between Council and Chimera DNA view
+                    showDecision.toggle()
                     focusedModuleName = nil
                 }
                 impactFeedback.impactOccurred(intensity: 0.7)
             }
             
-            // 4. Decision Text (Overlays Radar when Active)
+            // LAYER 2: Text Overlays (Primary Content)
             if let moduleName = focusedModuleName {
-                // Showing Selected Module Logic
+                // Showing Selected Module Logic (when orbit is tapped)
                 VStack(spacing: 4) {
                     Text(moduleName)
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(Color(hex: "4A90E2"))
-                        .background(Color.black.opacity(0.6))
                     
                     if let decision = viewModel.grandDecisions[symbol] {
                         if let bist = decision.bistDetails {
@@ -642,18 +641,47 @@ struct CenterCoreView: View {
                             .foregroundColor(.gray)
                     }
                 }
-                .transition(.scale)
+                .padding(8)
+                .background(Color.black.opacity(0.8).cornerRadius(8))
+                .transition(.scale.combined(with: .opacity))
             } else if showDecision {
-                // Showing GRAND DECISION (Default) if explicit trigger via button
-                // But normally we show Radar.
-                // Let's keep Decision text only if 'showDecision' is force-toggled externaly.
-                // For now, if showDecision is true, we overlay.
-                 VStack(spacing: 4) {
+                // CHIMERA DNA VIEW (Full Radar when center tapped)
+                VStack(spacing: 4) {
+                    Text("DNA")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(2)
+                        .foregroundColor(Color.cyan)
+                    
+                    ChimeraRadarView(dna: chimeraResult.dna)
+                        .scaleEffect(0.5)
+                    
+                    Text(chimeraResult.primaryDriver)
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.7))
+                    
+                    // SMART SIGNALS (Deep Value, Bull Trap, etc.)
+                    if let signal = chimeraResult.signals.first {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(signal.severity > 0.7 ? Color.red : Color.orange)
+                                .frame(width: 6, height: 6)
+                            Text(signal.title)
+                                .font(.system(size: 7, weight: .bold, design: .monospaced))
+                                .foregroundColor(signal.severity > 0.7 ? .red : .orange)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.black.opacity(0.6).cornerRadius(4))
+                    }
+                }
+                .transition(.scale.combined(with: .opacity))
+            } else {
+                // DEFAULT: GRAND COUNCIL DECISION (Varsayılan görünüm)
+                VStack(spacing: 4) {
                     Text("KONSEY")
                         .font(.system(size: 8, design: .monospaced))
                         .tracking(2)
                         .foregroundColor(.gray)
-                        .background(Color.black.opacity(0.6))
                     
                     if let decision = viewModel.grandDecisions[symbol] {
                         Text(decision.action.rawValue)
@@ -665,19 +693,31 @@ struct CenterCoreView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 4)
                             .minimumScaleFactor(0.8)
-                            .background(Color.black.opacity(0.6).cornerRadius(4))
                         
                         Text("\(Int(decision.confidence * 100))% GÜVEN")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.white.opacity(0.8))
-                            .background(Color.black.opacity(0.6))
+                        
+                        if !decision.vetoes.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark.shield")
+                                    .font(.system(size: 8))
+                                Text(decision.vetoes.first?.module ?? "")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            }
+                            .foregroundColor(.red.opacity(0.8))
+                            .padding(.top, 2)
+                        }
+                    } else {
+                        ProgressView().scaleEffect(0.8).tint(.white)
                     }
                 }
-                .transition(.scale)
+                .transition(.scale.combined(with: .opacity))
             }
         }
         .onAppear {
-            // Initial animation
+            // Initial state: Show Council decision
+            showDecision = false
         }
     }
     
