@@ -763,7 +763,7 @@ struct AgoraDebateSheet: View {
         HERMES Haber Analizi Modülü, son haberlerin etkisini değerlendirir.
         
         Bu hisse için:
-        • Duygu Durumu: \(hermes.sentiment.rawValue)
+        • Duygu Durumu: \(hermes.sentiment.displayTitle)
         • Etki Seviyesi: \(hermes.isHighImpact ? "YÜKSEK" : "Normal")
         
         Öne çıkan haberler: \(headlines.isEmpty ? "Analiz edilmedi" : headlines)

@@ -15,6 +15,7 @@ struct MarketView: View {
     @State private var showSearch = false // showAddSymbolSheet idi, showSearch yaptık
     @State private var showNotifications = false
     @State private var showAetherDetail = false
+    @State private var showEducation = false // NEW
     
     // Filtered Watchlist - ARTIK WatchlistViewModel'DEN OKUYOR (Performans iyileştirmesi)
     var filteredWatchlist: [String] {
@@ -84,6 +85,7 @@ struct MarketView: View {
                                     viewModel: viewModel,
                                     watchlist: filteredWatchlist, // Zaten global filtrelenmiş
                                     showAetherDetail: $showAetherDetail,
+                                    showEducation: $showEducation,
                                     deleteAction: { symbol in
                                         deleteSymbol(symbol)
                                     }
@@ -123,6 +125,9 @@ struct MarketView: View {
             }
             .sheet(isPresented: $showAetherDetail) {
                 if let macro = viewModel.macroRating { ArgusAetherDetailView(rating: macro) }
+            }
+            .sheet(isPresented: $showEducation) {
+                ChironEducationCard(result: ChironRegimeEngine.shared.lastResult, isPresented: $showEducation)
             }
             .frame(maxWidth: .infinity)
         }
@@ -166,12 +171,13 @@ struct GlobalCockpitView: View {
     @EnvironmentObject var watchlistVM: WatchlistViewModel // Quotes için yeni sistem
     let watchlist: [String]
     @Binding var showAetherDetail: Bool
+    @Binding var showEducation: Bool // NEW
     let deleteAction: (String) -> Void
     
     var body: some View {
         VStack(spacing: 0) {
-            // Aether HUD
-            AetherHUDView(
+            // Aether HUD (New Futuristic Design)
+            AetherDashboardHUD(
                 rating: viewModel.macroRating,
                 onTap: { showAetherDetail = true }
             )
@@ -185,7 +191,12 @@ struct GlobalCockpitView: View {
                 } 
             }
             
-            ScoutStoriesBar().padding(.top, 8)
+            // CHIRON NEURAL LINK (PULSE) - NEW!
+            ChironNeuralLink(showEducation: $showEducation)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+            
+            // ScoutStoriesBar REMOVED from here (Moved to Terminal)
             
             SmartTickerStrip(viewModel: viewModel)
                 .padding(.top, 16)

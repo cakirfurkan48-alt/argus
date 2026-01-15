@@ -148,7 +148,7 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
         if let data = UserDefaults.standard.data(forKey: regimePersistenceKey),
            let result = try? JSONDecoder().decode(ChironResult.self, from: data) {
             lock.lock()
-            _lastResult = result
+            _lastGlobalResult = result
             lock.unlock()
             
             // Notify UI
@@ -159,98 +159,67 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
         }
     }
     
-    // UI için son durumu saklar (Default: Neutral)
-    private var _lastResult: ChironResult = ChironResult(
+    // MARK: - State Management (Global vs Local)
+    
+    // UI için Global Piyasa Durumu (Neural Link buna bağlanacak)
+    private var _lastGlobalResult: ChironResult = ChironResult(
         regime: .neutral,
         coreWeights: ModuleWeights(atlas: 0.3, orion: 0.2, aether: 0.2, demeter: 0.1, phoenix: 0.1, hermes: 0.05, athena: 0.05),
         pulseWeights: ModuleWeights(atlas: 0.1, orion: 0.3, aether: 0.1, demeter: 0.1, phoenix: 0.2, hermes: 0.15, athena: 0.05),
         explanationTitle: "SİSTEM BAŞLATILIYOR",
-        explanationBody: "Analiz motoru veri akışını bekliyor... İlk veri seti ile adaptasyon başlayacak.",
+        explanationBody: "Global analiz motoru veri akışını bekliyor...",
         learningNotes: []
     )
     
-    public var lastResult: ChironResult {
+    // UI Erişimi
+    public var globalResult: ChironResult {
         get {
             lock.lock()
             defer { lock.unlock() }
-            return _lastResult
+            return _lastGlobalResult
         }
     }
     
-    // MARK: - Symbol Override Lookup (NEW)
+    // Deprecated: Use globalResult for UI, or use return value for Logic
+    public var lastResult: ChironResult { globalResult }
     
-    /// Returns learned local weights for a specific symbol, if available
-    func getSymbolOverride(symbol: String) -> [String: Double]? {
-        guard let overrides = dynamicConfig?.perSymbolOverrides else { return nil }
-        return overrides.first(where: { $0.symbol == symbol })?.orionLocalWeights
-    }
+    // MARK: - Evaluation Methods
     
-    /// Returns all symbol overrides for debugging/display
-    func getAllSymbolOverrides() -> [ChironOptimizationOutput.PerSymbolOverride] {
-        return dynamicConfig?.perSymbolOverrides ?? []
-    }
-    
-    // MARK: - Chiron Akıllı Öğrenme (NEW)
-    
-    /// Bileşen performansına dayalı öğrenilmiş Orion ağırlıklarını döndürür
-    /// ComponentPerformanceService üzerinden trade geçmişini analiz eder
-    func getLearnedOrionWeights(symbol: String) -> OrionWeightSnapshot? {
-        // Önce sembol özel performance'a bak
-        let symbolStats = ComponentPerformanceService.shared.analyzePerformance(for: symbol)
+    /// Global Piyasa Analizi (Tek seferde tüm sistemi etkiler)
+    /// Genellikle Aether (Makro) ve VIX değiştiğinde çağrılır.
+    func evaluateGlobal(context: ChironContext) -> ChironResult {
+        let result = internalEvaluate(context: context)
         
-        // En az 5 trade ile sinyal olmalı
-        let hasEnoughData = symbolStats.reduce(0) { $0 + $1.signalCount } >= 5
+        lock.lock()
+        _lastGlobalResult = result
+        lock.unlock()
         
-        if hasEnoughData, let learned = ComponentPerformanceService.shared.calculateLearnedWeights(symbol: symbol) {
-            print("🧠 Chiron: \(symbol) için öğrenilmiş ağırlıklar kullanılıyor - \(learned.summary)")
-            return learned
+        saveRegimeToDisk(result)
+        
+        // UI'ı Güncelle
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
         }
         
-        // Fallback: Global performance'a bak
-        let globalStats = ComponentPerformanceService.shared.analyzeGlobalPerformance()
-        let hasGlobalData = globalStats.reduce(0) { $0 + $1.signalCount } >= 10
-        
-        if hasGlobalData, let globalLearned = ComponentPerformanceService.shared.calculateLearnedWeights(symbol: nil) {
-            print("🧠 Chiron: Global öğrenilmiş ağırlıklar kullanılıyor - \(globalLearned.summary)")
-            return globalLearned
-        }
-        
-        return nil // Yeterli veri yok, default kullanılacak
+        return result
     }
     
-    /// Belirli bir sembol için öğrenilmiş ağırlık var mı?
-    func hasLearnedWeights(symbol: String) -> Bool {
-        return getLearnedOrionWeights(symbol: symbol) != nil
-    }
-    
-    /// Öğrenme durumu özeti (UI için)
-    func getLearningStatus(symbol: String) -> (hasLearning: Bool, confidence: Double, note: String) {
-        let stats = ComponentPerformanceService.shared.analyzePerformance(for: symbol)
-        let totalSignals = stats.reduce(0) { $0 + $1.signalCount }
-        
-        if totalSignals >= 10 {
-            let avgReliability = stats.map { $0.reliability }.reduce(0, +) / Double(stats.count)
-            return (true, avgReliability, "\(totalSignals) trade analiz edildi")
-        } else if totalSignals >= 5 {
-            return (true, 0.5, "Öğrenme devam ediyor (\(totalSignals)/10 trade)")
-        } else {
-            return (false, 0.0, "Yeterli veri yok (\(totalSignals)/5 trade)")
-        }
-    }
-    
+    /// Lokal Hisse Analizi (Sadece o hisse için karar üretir, Global UI'ı bozmaz)
+    /// ArgusDecisionEngine tarafından her hisse için ayrı çağrılır.
     func evaluate(context: ChironContext) -> ChironResult {
-        // 1. Detect Regime
+        return internalEvaluate(context: context)
+    }
+    
+    private func internalEvaluate(context: ChironContext) -> ChironResult {
+        // 1. Detect Regime (Local or Global based on context)
         let regime = detectRegime(context: context)
         
         // 2. Select Base Weights
         var baseWeights = getBaseWeights(for: regime)
         
-        // 2.1 Apply Dynamic Logic (Pillar 8: Cold Start / Adaptive)
+        // 2.1 Apply Dynamic Logic
         if let dynamic = determineDynamicWeights() {
-            // Check if we also have saved config? 
-            // For now, let's allow the real-time logic to override or blend with base.
-            // Let's use a 50/50 blend between "Regime Default" and "Learned/VIX"
-            baseWeights.core = blend(w1: baseWeights.core, w2: dynamic.core, factor: 0.6) // 60% dynamic
+            baseWeights.core = blend(w1: baseWeights.core, w2: dynamic.core, factor: 0.6)
             baseWeights.pulse = blend(w1: baseWeights.pulse, w2: dynamic.pulse, factor: 0.6)
         }
         
@@ -265,7 +234,7 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
         // 5. Generate Explanation
         let (title, body) = generateExplanation(regime: regime, context: context, finalCore: finalCore)
         
-        let result = ChironResult(
+        return ChironResult(
             regime: regime,
             coreWeights: finalCore,
             pulseWeights: finalPulse,
@@ -273,19 +242,6 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
             explanationBody: body,
             learningNotes: dynamicConfig?.learningNotes
         )
-        
-        lock.lock()
-        _lastResult = result
-        lock.unlock()
-        
-        saveRegimeToDisk(result)
-        
-        // Notify UI Reactively
-        DispatchQueue.main.async {
-            self.objectWillChange.send()
-        }
-        
-        return result
     }
     
     // MARK: - Logic Internals
@@ -678,5 +634,74 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
             maxR: maxRiskR,
             reason: "Risk bütçesi uygun (\(String(format: "%.1f", potentialTotalR))R / \(maxRiskR)R)."
         )
+    }
+}
+
+// MARK: - UI Helpers for ChironInsightsView
+extension ChironRegimeEngine {
+    
+    /// Returns the learned Orion weights for a given symbol, or global defaults.
+    /// Note: Maps older Optimization Model to newer Orion V2 Snapshot if needed.
+    func getLearnedOrionWeights(symbol: String) -> OrionWeightSnapshot? {
+        // 1. Try to find per-symbol override
+        if let output = dynamicConfig,
+           let overrides = output.perSymbolOverrides,
+           let specific = overrides.first(where: { $0.symbol == symbol }) {
+            
+            // Map dictionary to Snapshot
+            // Assuming dictionary keys match "trend", "momentum", etc.
+            let dict = specific.orionLocalWeights
+            return OrionWeightSnapshot(
+                structure: dict["structure"] ?? 0.30,
+                trend: dict["trend"] ?? 0.30,
+                momentum: dict["momentum"] ?? 0.25,
+                pattern: dict["pattern"] ?? 0.10,
+                volatility: dict["volatility"] ?? 0.05
+            ).normalized()
+        }
+        
+        // 2. Global AI Weights
+        if let output = dynamicConfig {
+            let ai = output.newOrionWeights
+            // Mapping AI (v1/1.5) to Orion V2
+            // AI output treats 'relStrength' and others. We map available ones and default Structure/Pattern.
+            return OrionWeightSnapshot(
+                structure: 0.30, // Not currently optimized by AI Main Loop
+                trend: ai.trend,
+                momentum: ai.momentum,
+                pattern: 0.10, // Not currently optimized
+                volatility: ai.volatility
+            ).normalized()
+        }
+        
+        // 3. Fallback
+        return OrionWeightSnapshot.default
+    }
+    
+    /// Returns the learning status for UI display.
+    /// Returns: (hasLearning, confidence 0-1, note)
+    func getLearningStatus(symbol: String?) -> (Bool, Double, String) {
+        let logs = TradeLogStore.shared.fetchLogs()
+        
+        if let sym = symbol {
+            let symbolLogs = logs.filter { $0.symbol == sym }
+            let count = symbolLogs.count
+            
+            if count < 5 {
+                return (false, 0.0, "Yetersiz veri (\(count)/5 trade).")
+            } else {
+                let confidence = min(Double(count) / 20.0, 1.0)
+                return (true, confidence, "\(count) işlem analiz edildi.")
+            }
+        } else {
+            // Global Status
+            let count = logs.count
+            if count < 10 {
+                return (false, 0.0, "Global havuzda yetersiz veri.")
+            } else {
+                let confidence = min(Double(count) / 50.0, 1.0)
+                return (true, confidence, "Global havuz aktif (\(count) işlem).")
+            }
+        }
     }
 }

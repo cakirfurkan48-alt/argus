@@ -295,7 +295,7 @@ struct ArgusSanctumView: View {
                     .foregroundColor((quote.percentChange ?? 0) >= 0 ? SanctumTheme.auroraGreen : SanctumTheme.crimsonRed)
             }
         }
-        .padding(.top, 20)
+        .padding(.top, 50)
     }
     
     // 3. CENTER CORE
@@ -483,10 +483,33 @@ struct CenterCoreView: View {
     // Dial Interaction State
     @State private var knobRotation: Double = 0.0
     @State private var isDragging: Bool = false
-    @State private var focusedModuleName: String? = nil // Shows module decision instead of main
+    @State private var focusedModuleName: String? = nil
     
     // Haptics
     private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+    
+    // Chimera Computation
+    private var chimeraResult: ChimeraFusionResult {
+        let orion = viewModel.orionScores[symbol]
+        let hermesInsight = viewModel.newsInsightsBySymbol[symbol]?.first
+        let hermesImpact = hermesInsight?.impactScore ?? 50.0 // 0-100 score
+        
+        let fundScore = viewModel.getFundamentalScore(for: symbol)?.totalScore
+        let price = viewModel.quotes[symbol]?.currentPrice ?? 0.0
+        
+        // Default Regime (Fallback if no Chiron)
+        let regime = ChironRegimeEngine.shared.globalResult.regime 
+        
+        return ChimeraSynergyEngine.shared.fuse(
+            symbol: symbol,
+            orion: orion,
+            hermesImpactScore: hermesImpact,
+            titanScore: fundScore,
+            currentPrice: price,
+            marketRegime: regime
+        )
+    }
+
     
     var body: some View {
         ZStack {
@@ -574,26 +597,38 @@ struct CenterCoreView: View {
                     }
             )
             
-            // 3. Inner Data Display
-            Circle()
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                .frame(width: 120, height: 120)
-                .background(Circle().fill(Color(hex: "1C1C1E").opacity(0.95)))
-                .onTapGesture {
-                    // RESET DIAL
-                    withAnimation {
-                        focusedModuleName = nil
-                    }
-                    impactFeedback.impactOccurred(intensity: 0.7)
+            // 3. Inner Data Display (CHIMERA RADAR)
+            ZStack {
+                Circle()
+                    .fill(Color(hex: "1C1C1E").opacity(0.95))
+                    .frame(width: 120, height: 120)
+                    .overlay(
+                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                
+                // The Radar
+                if !showDecision && focusedModuleName == nil {
+                    ChimeraRadarView(dna: chimeraResult.dna)
+                        .scaleEffect(0.5) // Fit inside 120px
+                        .opacity(0.8)
+                        .transition(.opacity)
                 }
+            }
+            .onTapGesture {
+                withAnimation {
+                    focusedModuleName = nil
+                }
+                impactFeedback.impactOccurred(intensity: 0.7)
+            }
             
-            // 4. Decision Text
+            // 4. Decision Text (Overlays Radar when Active)
             if let moduleName = focusedModuleName {
                 // Showing Selected Module Logic
                 VStack(spacing: 4) {
                     Text(moduleName)
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(Color(hex: "4A90E2"))
+                        .background(Color.black.opacity(0.6))
                     
                     if let decision = viewModel.grandDecisions[symbol] {
                         if let bist = decision.bistDetails {
@@ -607,13 +642,18 @@ struct CenterCoreView: View {
                             .foregroundColor(.gray)
                     }
                 }
+                .transition(.scale)
             } else if showDecision {
-                // Showing GRAND DECISION (Default)
-                VStack(spacing: 4) {
+                // Showing GRAND DECISION (Default) if explicit trigger via button
+                // But normally we show Radar.
+                // Let's keep Decision text only if 'showDecision' is force-toggled externaly.
+                // For now, if showDecision is true, we overlay.
+                 VStack(spacing: 4) {
                     Text("KONSEY")
                         .font(.system(size: 8, design: .monospaced))
                         .tracking(2)
                         .foregroundColor(.gray)
+                        .background(Color.black.opacity(0.6))
                     
                     if let decision = viewModel.grandDecisions[symbol] {
                         Text(decision.action.rawValue)
@@ -625,32 +665,19 @@ struct CenterCoreView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 4)
                             .minimumScaleFactor(0.8)
+                            .background(Color.black.opacity(0.6).cornerRadius(4))
                         
                         Text("\(Int(decision.confidence * 100))% GÜVEN")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.white.opacity(0.8))
-                        
-                        if !decision.vetoes.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "xmark.shield")
-                                    .font(.system(size: 8))
-                                Text(decision.vetoes.first?.module ?? "")
-                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            }
-                            .foregroundColor(.red.opacity(0.8))
-                            .padding(.top, 2)
-                        }
-                    } else {
-                        Text("...")
-                            .font(.system(size: 16, design: .monospaced))
+                            .background(Color.black.opacity(0.6))
                     }
                 }
-            } else {
-                ProgressView().scaleEffect(0.8).tint(.white)
+                .transition(.scale)
             }
         }
         .onAppear {
-            // Initial animation removed to start at 0 (Top)
+            // Initial animation
         }
     }
     
@@ -678,7 +705,7 @@ struct CenterCoreView: View {
                 case .sirkiye: return "AETHER"
                 case .kulis: return "HERMES"
                 case .moneyflow: return "POSEIDON"
-                case .rejim: return "CHIRON" // Rejim is usually mapped to Chiron or Aether logic depending on context. Keeping CHIRON for Rejim consistent with other mappings if that's the intent, OR map to AETHER if Rejim is macro. 
+                case .rejim: return "CHIRON" 
                 default: return "ORION"
                 }
             }
@@ -1212,7 +1239,7 @@ struct HoloPanelView: View {
                             proposerName: "Hermes Habercisi",
                             action: .hold,
                             confidence: 1.0,
-                            reasoning: "Duygu Durumu: \(hermesDecision.sentiment.rawValue)\nEtki: \(hermesDecision.isHighImpact ? "YÜKSEK" : "Normal")",
+                            reasoning: "Duygu Durumu: \(hermesDecision.sentiment.displayTitle)\nEtki: \(hermesDecision.isHighImpact ? "YÜKSEK" : "Normal")",
                             entryPrice: nil,
                             stopLoss: nil,
                             target: nil

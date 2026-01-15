@@ -30,56 +30,63 @@ struct AetherDashboardHUD: View {
                 )
                 
                 if let r = rating {
-                    HStack(spacing: 20) {
-                        // MARK: - Central Score (Big Reactor)
+                    HStack(spacing: 0) {
+                        // MARK: - Central Score (Big Reactor) - LEFT SIDE
                         ZStack {
-                            // Outer Glow
+                            // Glow
                             Circle()
                                 .fill(scoreColor(r.numericScore).opacity(0.1))
-                                .frame(width: 90, height: 90)
-                                .blur(radius: 10)
-                            
-                            // Progress Ring Background
-                            Circle()
-                                .stroke(Color.white.opacity(0.1), lineWidth: 8)
                                 .frame(width: 80, height: 80)
+                                .blur(radius: 15)
                             
-                            // Active Progress Ring
-                            Circle()
-                                .trim(from: 0, to: animateRings ? r.numericScore / 100 : 0)
-                                .stroke(
-                                    AngularGradient(
-                                        gradient: Gradient(colors: [scoreColor(r.numericScore).opacity(0.5), scoreColor(r.numericScore)]),
-                                        center: .center
-                                    ),
-                                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
-                                )
-                                .frame(width: 80, height: 80)
-                                .rotationEffect(.degrees(-90))
-                                .animation(.easeOut(duration: 1.5), value: animateRings)
+                            // Tracks
+                            ZStack {
+                                Circle()
+                                    .trim(from: 0.15, to: 0.85) // Open bottom
+                                    .stroke(Color.white.opacity(0.1), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                                    .rotationEffect(.degrees(90))
+                                
+                                Circle()
+                                    .trim(from: 0.15, to: 0.15 + (0.7 * (animateRings ? r.numericScore / 100 : 0)))
+                                    .stroke(
+                                        AngularGradient(
+                                            gradient: Gradient(colors: [scoreColor(r.numericScore).opacity(0.5), scoreColor(r.numericScore)]),
+                                            center: .center
+                                        ),
+                                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                                    )
+                                    .rotationEffect(.degrees(90))
+                                    .animation(.easeOut(duration: 1.5), value: animateRings)
+                            }
+                            .frame(width: 90, height: 90)
                             
                             // Inner Data
                             VStack(spacing: 2) {
                                 Text("\(Int(r.numericScore))")
-                                    .font(.system(size: 32, weight: .black, design: .rounded))
+                                    .font(.system(size: 36, weight: .black, design: .rounded))
                                     .foregroundColor(.white)
                                     .shadow(color: scoreColor(r.numericScore).opacity(0.5), radius: 5)
                                 
                                 Text(r.regime.displayName.uppercased())
-                                    .font(.system(size: 8, weight: .bold))
+                                    .font(.system(size: 9, weight: .bold))
                                     .foregroundColor(scoreColor(r.numericScore))
                                     .multilineTextAlignment(.center)
-                                    .lineLimit(1)
-                                    .padding(.horizontal, 4)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.5)
+                                    .frame(maxWidth: 70)
                             }
                         }
+                        .frame(width: 110) // Fixed width for left side
                         
-                        // MARK: - 3-Part Tachometer (Leading / Coincident / Lagging)
+                        // Spacer
+                        Spacer()
+                        
+                        // MARK: - 3-Part Tachometer (Right Side)
                         VStack(spacing: 12) {
                             // Header
                             HStack {
                                 Image(systemName: "globe.americas.fill")
-                                    .font(.caption)
+                                    .font(.caption2)
                                     .foregroundColor(.cyan)
                                 Text("AETHER MACRO SYSTEM")
                                     .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -87,13 +94,13 @@ struct AetherDashboardHUD: View {
                                     .tracking(1)
                                 Spacer()
                                 Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray.opacity(0.5))
                             }
                             
-                            HStack(spacing: 12) {
-                                // 1. Leading (Öncü)
-                                MacroGauge(
+                            HStack(alignment: .top, spacing: 12) {
+                                // 1. Leading
+                                ArcGauge(
                                     label: "LEADING",
                                     score: r.leadingScore ?? 50,
                                     color: .green,
@@ -101,8 +108,8 @@ struct AetherDashboardHUD: View {
                                     animate: animateRings
                                 )
                                 
-                                // 2. Coincident (Eşzamanlı)
-                                MacroGauge(
+                                // 2. Coincident
+                                ArcGauge(
                                     label: "COINCIDENT",
                                     score: r.coincidentScore ?? 50,
                                     color: .yellow,
@@ -110,8 +117,8 @@ struct AetherDashboardHUD: View {
                                     animate: animateRings
                                 )
                                 
-                                // 3. Lagging (Gecikmeli)
-                                MacroGauge(
+                                // 3. Lagging
+                                ArcGauge(
                                     label: "LAGGING",
                                     score: r.laggingScore ?? 50,
                                     color: .red,
@@ -120,6 +127,7 @@ struct AetherDashboardHUD: View {
                                 )
                             }
                         }
+                        .padding(.trailing, 16)
                     }
                     .padding(16)
                 } else {
@@ -134,7 +142,7 @@ struct AetherDashboardHUD: View {
                     .padding()
                 }
             }
-            .frame(height: 130)
+            .frame(height: 140)
             .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(PlainButtonStyle())
@@ -152,8 +160,8 @@ struct AetherDashboardHUD: View {
     }
 }
 
-// Subcomponent: Individual Macro Gauge (Semi-Circle)
-struct MacroGauge: View {
+// Improved Arc Gauge that avoids overlaps
+struct ArcGauge: View {
     let label: String
     let score: Double
     let color: Color
@@ -163,45 +171,48 @@ struct MacroGauge: View {
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                // Track
+                // Background Arc (220 degrees)
                 Circle()
-                    .trim(from: 0.5, to: 1.0)
-                    .stroke(Color.white.opacity(0.1), style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .frame(width: 50, height: 50)
-                    .rotationEffect(.degrees(90)) // Yarım daire üstte olsun diye değil, gauge mantığı
-                    .offset(y: 10) // Yarım daire görünümü için
+                    .trim(from: 0.2, to: 0.8) // Open bottom wide
+                    .stroke(Color.white.opacity(0.1), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(90))
+                    .frame(width: 44, height: 44)
                 
-                // Fill
+                // Active Arc
                 Circle()
-                    .trim(from: 0.5, to: 0.5 + (animate ? (score / 100) * 0.5 : 0))
+                    .trim(from: 0.2, to: 0.2 + (0.6 * (animate ? score / 100 : 0)))
                     .stroke(
                         AngularGradient(
                             gradient: Gradient(colors: [color.opacity(0.3), color]),
                             center: .center
                         ),
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round)
                     )
-                    .frame(width: 50, height: 50)
-                    .rotationEffect(.degrees(180)) // Soldan başlasın
+                    .rotationEffect(.degrees(90))
+                    .frame(width: 44, height: 44)
                     .animation(.easeOut(duration: 1.0).delay(0.2), value: animate)
-                    .offset(y: 10)
                 
-                // Icon/Score in center
+                // Inner Value
                 VStack(spacing: 0) {
-                    Image(systemName: icon)
-                        .font(.system(size: 10))
-                        .foregroundColor(color)
-                        .offset(y: -5)
                     Text("\(Int(score))")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.white)
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 8))
+                        .foregroundColor(color.opacity(0.8))
+                        .padding(.top, 2)
                 }
             }
-            .frame(height: 35) // Cut off bottom
+            .frame(height: 48) // Fixed height container
             
+            // Label outside the gauge stack
             Text(label)
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .font(.system(size: 7, weight: .bold, design: .monospaced))
                 .foregroundColor(.gray)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5) // Allow shrinking for "COINCIDENT"
+                .frame(width: 50)
         }
     }
 }

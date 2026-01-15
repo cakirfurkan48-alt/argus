@@ -25,9 +25,17 @@ struct SentimentPulseCard: View {
             }
             
             if isLoading {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .purple))
-                    .frame(height: 100)
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                        .scaleEffect(1.2)
+                    
+                    Text("Hermes piyasaya kulak kabarttı...")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundColor(.purple.opacity(0.8))
+                        .transition(.opacity)
+                }
+                .frame(height: 100)
             } else if let sentiment = sentiment {
                 // Main Sentiment Display
                 HStack(spacing: 20) {
@@ -179,6 +187,9 @@ struct SentimentPulseCard: View {
     
     private func loadSentiment() async {
         isLoading = true
+        
+        // UX: Ensure loading message is visible
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
         
         // Fetch sentiment from Hermes cache
         sentiment = await HermesLLMService.shared.getQuickSentiment(for: symbol)

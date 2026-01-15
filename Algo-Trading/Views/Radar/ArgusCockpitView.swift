@@ -103,20 +103,15 @@ struct ArgusCockpitView: View {
                                 selectedMarket: selectedMarket
                             )
                             
-                            // MARK: - AETHER HUD (NEW HEADER)
-                            AetherDashboardHUD(rating: viewModel.macroRating) {
-                                // On Tap: Refresh Macro or Open Detail
-                                Task {
-                                    // await viewModel.refreshMacro() // If exists, or just open detail?
-                                    // navigation to detail could go here
-                                }
-                            }
-                            .padding(.top, 8)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 8)
-                            .background(Color(hex: "080b14"))
+                            // MARK: - SCOUT STORIES (INTELLIGENCE HUB)
+                            ScoutStoriesBar()
+                                .padding(.top, 8)
+                                .padding(.bottom, 8)
                             
-                            // ChironCockpitWidget removed (moving to Feed later)
+                            // MARK: - Chiron Widget
+                            ChironCockpitWidget()
+                                .padding(.vertical, 8)
+                                .background(Color(hex: "080b14"))
                             
                             // MARK: - SYSTEM INTELLIGENCE FEED
                             ChironTerminalFeed(events: systemLogs)

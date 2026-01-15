@@ -369,6 +369,8 @@ extension TradingViewModel {
         // 4. Trigger Argus Recalculation (to update Atlas/Etf scores affected by news)
         // Background task to keep UI responsive
         Task {
+            // UX: Ensure loading state is visible for at least 2 seconds so user sees "Hermes listening" message
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             await loadArgusData(for: symbol)
         }
     }

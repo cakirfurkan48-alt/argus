@@ -299,6 +299,23 @@ extension TradingViewModel {
                 self.macroRating = rating
                 self.syncWidgetData() // Update widget when macro data is ready
                 self.objectWillChange.send() // Notify UI of update time change
+                
+                // CHIRON SYNC: Update Neural Link immediately
+                let context = ChironContext(
+                    atlasScore: nil,
+                    orionScore: nil,
+                    aetherScore: rating.numericScore,
+                    demeterScore: nil,
+                    phoenixScore: nil,
+                    hermesScore: nil,
+                    athenaScore: nil,
+                    symbol: "GLOBAL",
+                    orionTrendStrength: nil,
+                    chopIndex: nil,
+                    volatilityHint: nil, // TODO: Add Global VIX here later
+                    isHermesAvailable: false
+                )
+                _ = ChironRegimeEngine.shared.evaluateGlobal(context: context)
             }
         }
     }

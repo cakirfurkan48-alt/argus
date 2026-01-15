@@ -1021,7 +1021,7 @@ struct GlobalModuleDetailCard: View {
             
             // 2️⃣ WINNING PROPOSAL (Ana Öneri)
             if let proposal = decision.winningProposal {
-                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "lightbulb.fill")
                             .foregroundColor(moduleColor)
@@ -1030,7 +1030,7 @@ struct GlobalModuleDetailCard: View {
                             .foregroundColor(.white)
                     }
                     
-                    Text(proposal.reasoning)
+                    Text(cleanReasoning(proposal.reasoning))
                         .font(.body)
                         .foregroundColor(.white.opacity(0.9))
                         .fixedSize(horizontal: false, vertical: true)
@@ -1099,6 +1099,16 @@ struct GlobalModuleDetailCard: View {
         .padding(16)
         .background(Theme.cardBackground)
         .cornerRadius(16)
+    }
+    
+    // Helper to clean raw strings
+    private func cleanReasoning(_ text: String) -> String {
+        return text
+            .replacingOccurrences(of: "weak_positive", with: "Olumlu (Zayıf)")
+            .replacingOccurrences(of: "strong_positive", with: "Güçlü Olumlu")
+            .replacingOccurrences(of: "weak_negative", with: "Olumsuz (Zayıf)")
+            .replacingOccurrences(of: "strong_negative", with: "Güçlü Olumsuz")
+            .replacingOccurrences(of: "neutral", with: "Nötr")
     }
     
     // MARK: - Computed Properties

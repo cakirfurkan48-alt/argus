@@ -4,12 +4,6 @@ struct HermesFeedView: View {
     @ObservedObject var viewModel: TradingViewModel
     @State private var selectedScope = 0 // 0: Takip Listem, 1: Genel Piyasa
     
-    // Grid Setup
-    let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible())
-    ]
-    
     var currentInsights: [NewsInsight] {
         return selectedScope == 0 ? viewModel.watchlistNewsInsights : viewModel.generalNewsInsights
     }
@@ -20,10 +14,10 @@ struct HermesFeedView: View {
                 Theme.background.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    
-                    // 1. Selector
+                    // 1. Sleek Scope Selector
                     ScopeSelectorBar(selectedScope: $selectedScope)
-                        .padding(.vertical)
+                        .padding(.vertical, 12)
+                        .background(Theme.background)
                         .onChange(of: selectedScope) { _, newValue in
                             if newValue == 0 && viewModel.watchlistNewsInsights.isEmpty {
                                 viewModel.loadWatchlistFeed()
@@ -33,7 +27,7 @@ struct HermesFeedView: View {
                         }
                     
                     if currentInsights.isEmpty {
-                         EmptyStateView(
+                        EmptyStateView(
                             scope: selectedScope,
                             isLoading: viewModel.isLoadingNews,
                             errorMessage: viewModel.newsErrorMessage,
@@ -41,60 +35,51 @@ struct HermesFeedView: View {
                                 if selectedScope == 0 { viewModel.loadWatchlistFeed() }
                                 else { viewModel.loadGeneralFeed() }
                             }
-                         )
+                        )
                     } else {
                         ScrollView {
-                            LazyVGrid(columns: columns, spacing: 16) {
-                                // Section Header for Grid
-                                Section(header:
-                                    HStack {
-                                        Text("Öne Çıkanlar")
-                                            .font(.headline)
-                                            .foregroundColor(Theme.textPrimary)
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal)
-                                    .padding(.top, 8)
-                                ) {
-                                    ForEach(currentInsights) { insight in
-                                        if insight.symbol != "MARKET" && insight.symbol != "GENERAL" {
-                                            NavigationLink(destination: StockDetailView(symbol: insight.symbol, viewModel: viewModel)) {
-                                                DiscoveryNewsCard(insight: insight)
-                                            }
-                                        } else {
-                                            DiscoveryNewsCard(insight: insight)
+                            LazyVStack(spacing: 0) { // Single Column, No spacing (handled by dividers or card padding)
+                                ForEach(currentInsights) { insight in
+                                    if insight.symbol != "MARKET" && insight.symbol != "GENERAL" {
+                                        NavigationLink(destination: StockDetailView(symbol: insight.symbol, viewModel: viewModel)) {
+                                            DiscoveryProCard(insight: insight)
                                         }
+                                        .buttonStyle(PlainButtonStyle())
+                                    } else {
+                                        DiscoveryProCard(insight: insight)
                                     }
+                                    
+                                    Divider()
+                                        .background(Theme.border.opacity(0.3))
+                                        .padding(.horizontal)
                                 }
                             }
-                            .padding(.horizontal)
                             .padding(.bottom, 80)
                         }
                         .refreshable {
-                            if selectedScope == 0 {
-                                viewModel.loadWatchlistFeed()
-                            } else {
-                                viewModel.loadGeneralFeed()
-                            }
+                            if selectedScope == 0 { viewModel.loadWatchlistFeed() }
+                            else { viewModel.loadGeneralFeed() }
                         }
                     }
                 }
             }
-            .navigationTitle("Keşfet & Haberler")
+            .navigationTitle("HERMES FEED")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                 ToolbarItem(placement: .navigationBarTrailing) {
-                     if viewModel.isLoadingNews {
-                         ProgressView()
-                     } else {
-                         Button(action: {
-                             if selectedScope == 0 { viewModel.loadWatchlistFeed() }
-                             else { viewModel.loadGeneralFeed() }
-                         }) {
-                             Image(systemName: "arrow.clockwise")
-                         }
-                     }
-                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if viewModel.isLoadingNews {
+                        ProgressView().scaleEffect(0.8)
+                    } else {
+                        Button(action: {
+                            if selectedScope == 0 { viewModel.loadWatchlistFeed() }
+                            else { viewModel.loadGeneralFeed() }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 14))
+                                .foregroundColor(Theme.tint)
+                        }
+                    }
+                }
             }
         }
     }
@@ -106,115 +91,120 @@ struct ScopeSelectorBar: View {
     @Binding var selectedScope: Int
     
     var body: some View {
-        HStack {
-            Button(action: { withAnimation { selectedScope = 0 } }) {
-                Text("Takip Listem")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity)
-                    .background(selectedScope == 0 ? Theme.tint : Color.clear)
-                    .foregroundColor(selectedScope == 0 ? .white : Theme.textSecondary)
-                    .cornerRadius(8)
+        HStack(spacing: 0) {
+            ScopeButton(title: "PORTFÖY & TAKİP", isSelected: selectedScope == 0) {
+                withAnimation { selectedScope = 0 }
             }
             
-            Button(action: { withAnimation { selectedScope = 1 } }) {
-                Text("Genel Piyasa")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity)
-                    .background(selectedScope == 1 ? Theme.tint : Color.clear)
-                    .foregroundColor(selectedScope == 1 ? .white : Theme.textSecondary)
-                    .cornerRadius(8)
+            // Vertical Divider
+            Rectangle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 1, height: 20)
+            
+            ScopeButton(title: "GENEL PİYASA", isSelected: selectedScope == 1) {
+                withAnimation { selectedScope = 1 }
             }
         }
         .padding(4)
-        .background(Theme.secondaryBackground)
-        .cornerRadius(12)
+        .background(Theme.secondaryBackground.opacity(0.5))
+        .cornerRadius(10)
         .padding(.horizontal)
     }
 }
 
-struct DiscoveryNewsCard: View {
+struct ScopeButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .monospaced))
+                .foregroundColor(isSelected ? .white : .gray)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(isSelected ? Theme.tint.opacity(0.2) : Color.clear)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isSelected ? Theme.tint.opacity(0.5) : Color.clear, lineWidth: 1)
+                )
+        }
+    }
+}
+
+struct DiscoveryProCard: View {
     let insight: NewsInsight
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Header: Symbol & Sentiment Badge
-            HStack {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header: Symbol, Time
+            HStack(alignment: .center) {
                 Text(insight.symbol)
-                    .font(.caption)
-                    .bold()
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundColor(Theme.tint)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Theme.background)
-                    .foregroundColor(Theme.textPrimary)
+                    .background(Theme.tint.opacity(0.1))
                     .cornerRadius(4)
                 
                 Spacer()
                 
-                // Enhanced Sentiment Badge
-                HStack(spacing: 4) {
-                    Text(insight.sentiment.displayTitle) // Türkçe Başlık
-                        .font(.caption2)
-                        .fontWeight(.bold)
+                Text(timeAgo(insight.createdAt).uppercased())
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(.gray)
+            }
+            
+            // Content
+            VStack(alignment: .leading, spacing: 6) {
+                Text(insight.headline)
+                    .font(.system(size: 15, weight: .medium)) // Clean readable font
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                if !insight.impactSentenceTR.isEmpty {
+                    Text("Analiz: \(insight.impactSentenceTR)")
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray.opacity(0.9))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            
+            // Footer: Sentiment & Viral
+            HStack {
+                // Sentiment Pill
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(colorForSentiment(insight.sentiment))
+                        .frame(width: 8, height: 8)
+                    
+                    Text(insight.sentiment.displayTitle.uppercased())
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(colorForSentiment(insight.sentiment))
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(colorForSentiment(insight.sentiment).opacity(0.15))
-                .foregroundColor(colorForSentiment(insight.sentiment))
-                .cornerRadius(8)
-            }
-            
-            // Headline
-            Text(insight.headline)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Theme.textPrimary)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-            
-            // Impact Comment (Detay)
-            // Kullanıcı bu detayı istedi
-            if !insight.impactSentenceTR.isEmpty {
-                Text(insight.impactSentenceTR)
-                    .font(.caption)
-                    .italic()
-                    .foregroundColor(Theme.textSecondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
-            }
-            
-            Spacer(minLength: 0)
-            
-            // Footer: Time & Viral
-            HStack {
-                Text(timeAgo(insight.createdAt))
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                .background(colorForSentiment(insight.sentiment).opacity(0.1))
+                .cornerRadius(6)
                 
                 Spacer()
                 
                 if HermesHypeEngine.shared.isViral(symbol: insight.symbol) {
-                    HStack(spacing: 2) {
+                    HStack(spacing: 4) {
                         Image(systemName: "flame.fill")
-                        Text("Viral")
+                            .font(.caption2)
+                        Text("YÜKSEK ETKİLEŞİM")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
                     }
-                    .font(.caption2)
                     .foregroundColor(.orange)
                 }
             }
         }
-        .padding(12)
-        .frame(minHeight: 160) // Kart yüksekliği biraz artırıldı
-        .background(Theme.cardBackground)
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Theme.border.opacity(0.3), lineWidth: 1)
-        )
+        .padding(16)
+        .background(Color.clear) // Clean list look
     }
     
     private func colorForSentiment(_ s: NewsSentiment) -> Color {
@@ -229,7 +219,7 @@ struct DiscoveryNewsCard: View {
     
     private func timeAgo(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
+        formatter.unitsStyle = .full
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
@@ -245,22 +235,33 @@ struct EmptyStateView: View {
             Spacer()
             
             ZStack {
-                Circle().fill(Theme.secondaryBackground).frame(width: 120, height: 120)
-                ArgusEyeView(mode: .hermes, size: 80)
+                Circle()
+                    .fill(Theme.secondaryBackground)
+                    .frame(width: 100, height: 100)
+                    .blur(radius: 5)
+                
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 40))
+                    .foregroundColor(Theme.tint.opacity(0.5))
             }
             
-            VStack(spacing: 8) {
-                Text(scope == 0 ? "Takip Listesi Taranıyor" : "Piyasa Taranıyor")
-                    .font(.title3)
-                    .bold()
+            VStack(spacing: 12) {
+                Text(scope == 0 ? "PORTFÖY TARANIYOR" : "PİYASA TARANIYOR")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundColor(Theme.textPrimary)
                 
-                Text(isLoading ? "Hermes yapay zekası haberleri analiz ediyor..." : "Veri bulunamadı veya henüz analiz yapılmadı.")
-                    .font(.body)
-                    .foregroundColor(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                if isLoading {
+                    Text("Hermes yapay zekası haber akışını analiz ediyor...")
+                        .font(.caption)
+                        .foregroundColor(Theme.textSecondary)
+                } else {
+                    Text("Henüz kritik bir haber tespit edilmedi.")
+                        .font(.caption)
+                        .foregroundColor(Theme.textSecondary)
+                }
             }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
             
             if let error = errorMessage {
                  Text(error)
@@ -273,17 +274,20 @@ struct EmptyStateView: View {
             
             if !isLoading {
                 Button(action: onRetry) {
-                    Text("Analizi Başlat")
-                        .bold()
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 16)
-                        .background(Theme.tint)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                        Text("YENİDEN TARA")
+                    }
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color.black)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(Theme.tint)
+                    .cornerRadius(8)
                 }
             } else {
                 ProgressView()
-                    .scaleEffect(1.2)
+                    .scaleEffect(1.0)
             }
             
             Spacer()
