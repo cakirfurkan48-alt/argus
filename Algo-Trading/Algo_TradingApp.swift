@@ -31,10 +31,10 @@ struct Algo_TradingApp: App {
             Task { @MainActor in
                 LearningPersistenceManager.shared.setContext(modelContainer.mainContext)
                 
-                // ONE-TIME PORTFOLIO RESET (v4 Migration - Temiz Başlangıç)
-                let resetKey = "portfolio_v4_reset_done"
+                // ONE-TIME PORTFOLIO RESET (v5 Migration - Zorla Temiz Başlangıç)
+                let resetKey = "portfolio_v5_reset_done"
                 if !UserDefaults.standard.bool(forKey: resetKey) {
-                    print("🔄 ONE-TIME RESET: Portföy sıfırlanıyor (v4 migration)...")
+                    print("🔄 ONE-TIME RESET: Portföy sıfırlanıyor (v5 migration)...")
                     PortfolioEngine.shared.resetPortfolio()
                     UserDefaults.standard.set(true, forKey: resetKey)
                     print("✅ ONE-TIME RESET: Tamamlandı. USD: $100K, TRY: ₺1M")

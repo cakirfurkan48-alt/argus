@@ -2,7 +2,13 @@ import SwiftUI
 
 struct ArgusAthenaSheet: View {
     let result: AthenaFactorResult?
+    let signals: [ChimeraSignal]  // Chimera Smart Signals
     @Environment(\.presentationMode) var presentationMode
+    
+    init(result: AthenaFactorResult?, signals: [ChimeraSignal] = []) {
+        self.result = result
+        self.signals = signals
+    }
     
     var body: some View {
         ZStack {
@@ -20,7 +26,7 @@ struct ArgusAthenaSheet: View {
                     }
                     
                     VStack(alignment: .leading) {
-                        Text("Athena Faktör Analizi")
+                        Text("Athena Faktor Analizi")
                             .font(.headline)
                         Text("Smart Beta & Strateji")
                             .font(.caption)
@@ -40,6 +46,12 @@ struct ArgusAthenaSheet: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
+                        // CHIMERA SMART SIGNALS (YENİ)
+                        if !signals.isEmpty {
+                            AthenaCard(signals: signals)
+                                .padding(.top)
+                        }
+                        
                         if let result = result {
                             // 1. Main Card Reuse
                             AthenaFactorCard(result: result)
@@ -47,7 +59,7 @@ struct ArgusAthenaSheet: View {
                             
                             // 2. Explanation / Insight
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Analiz Özeti")
+                                Text("Analiz Ozeti")
                                     .font(.headline)
                                     .padding(.horizontal)
                                 
@@ -62,22 +74,22 @@ struct ArgusAthenaSheet: View {
                             
                             // 3. Definitions
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Faktör Tanımları")
+                                Text("Faktor Tanimlari")
                                     .font(.headline)
                                     .padding(.horizontal)
                                 
-                                definitionRow(title: "Değer (Value)", desc: "Hissenin fiyatının kazanç ve varlıklarına göre ucuzluğunu ölçer.")
-                                definitionRow(title: "Kalite (Quality)", desc: "Şirketin karlılık, borçluluk ve yönetim kalitesini ölçer.")
-                                definitionRow(title: "Momentum", desc: "Fiyatın yükseliş trendi ve gücünü ölçer.")
-                                definitionRow(title: "Risk (Low Vol)", desc: "Fiyat hareketlerindeki dalgalanma ve istikrarı ölçer.")
+                                definitionRow(title: "Deger (Value)", desc: "Hissenin fiyatinin kazanc ve varliklarina gore ucuzlugunu olcer.")
+                                definitionRow(title: "Kalite (Quality)", desc: "Sirketin karlilik, borcluluk ve yonetim kalitesini olcer.")
+                                definitionRow(title: "Momentum", desc: "Fiyatin yukselis trendi ve gucunu olcer.")
+                                definitionRow(title: "Risk (Low Vol)", desc: "Fiyat hareketlerindeki dalgalanma ve istikrari olcer.")
                             }
                             .padding(.bottom, 40)
-                        } else {
+                        } else if signals.isEmpty {
                             VStack(spacing: 16) {
                                 Image(systemName: "exclamationmark.triangle")
                                     .font(.system(size: 40))
                                     .foregroundColor(.yellow)
-                                Text("Analiz verisi bulunamadı.")
+                                Text("Analiz verisi bulunamadi.")
                                     .foregroundColor(.secondary)
                             }
                             .padding(.top, 60)
