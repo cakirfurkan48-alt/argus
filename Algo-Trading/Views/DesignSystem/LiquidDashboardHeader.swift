@@ -19,46 +19,17 @@ struct LiquidDashboardHeader: View {
     private var currencySymbol: String { isBist ? "₺" : "$" }
     
     // Data Calculation
-    // Unified Calculation (Global + BIST)
-    private var totalEquityTRY: Double {
-        let globalEquityTRY = viewModel.getEquity() * viewModel.usdTryRate
-        let bistEquityTRY = viewModel.getBistEquity()
-        return globalEquityTRY + bistEquityTRY
+    // Data Calculation
+    private var equity: Double {
+        isBist ? viewModel.getBistEquity() : viewModel.getEquity()
     }
     
-    private var totalEquityUSD: Double {
-        let globalEquityUSD = viewModel.getEquity()
-        let bistEquityUSD = viewModel.getBistEquity() / (viewModel.usdTryRate > 0 ? viewModel.usdTryRate : 35.0)
-        return globalEquityUSD + bistEquityUSD
-    }
-    
-    private var displayEquity: Double {
-        isBist ? totalEquityTRY : totalEquityUSD
-    }
-    
-    // Unified Cash
-    private var totalCashTRY: Double {
-        (viewModel.balance * viewModel.usdTryRate) + viewModel.bistBalance
-    }
-    
-    private var totalCashUSD: Double {
-        viewModel.balance + (viewModel.bistBalance / (viewModel.usdTryRate > 0 ? viewModel.usdTryRate : 35.0))
-    }
-    
-    private var displayCash: Double {
-        isBist ? totalCashTRY : totalCashUSD
+    private var balance: Double {
+        isBist ? viewModel.bistBalance : viewModel.balance
     }
     
     private var realized: Double {
-        // Global realized (USD) convert to TRY if needed
-        let globalUSD = viewModel.getRealizedPnL()
-        let rate = viewModel.usdTryRate > 0 ? viewModel.usdTryRate : 35.0
-        
-        if isBist {
-            return globalUSD * rate // Show Global PnL in TRY (Unified) + BIST Realized (0 for now)
-        } else {
-            return globalUSD
-        }
+        isBist ? 0.0 : viewModel.getRealizedPnL()
     }
     
     private var unrealized: Double {
@@ -102,12 +73,12 @@ struct LiquidDashboardHeader: View {
                 
                 // 2. Main Balance (Center)
                 VStack(spacing: 6) {
-                    Text("TOPLAM VARLIK (NET WORTH)")
+                    Text(isBist ? "BIST PORTFÖY DEĞERİ" : "TOPLAM VARLIK")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .tracking(2)
                         .foregroundColor(Color.white.opacity(0.6))
                     
-                    Text("\(currencySymbol)\(String(format: "%.0f", displayEquity))")
+                    Text("\(currencySymbol)\(String(format: "%.0f", equity))")
                         .font(.system(size: 48, weight: .black, design: .rounded))
                         .foregroundColor(.white)
                         .shadow(color: themeColor.opacity(0.5), radius: 15)
@@ -115,8 +86,8 @@ struct LiquidDashboardHeader: View {
                 
                 // 3. Stats Grid
                 HStack(spacing: 20) {
-                    statPill(title: "TOPLAM NAKİT", value: displayCash, color: .white.opacity(0.9))
-                    statPill(title: "NET K/Z (Bu Pazar)", value: realized + unrealized, color: (realized + unrealized) >= 0 ? Theme.positive : Theme.negative)
+                    statPill(title: "NAKİT", value: balance, color: .white.opacity(0.9))
+                    statPill(title: "NET K/Z", value: realized + unrealized, color: (realized + unrealized) >= 0 ? Theme.positive : Theme.negative)
                 }
                 .padding(.bottom, 10)
             }
