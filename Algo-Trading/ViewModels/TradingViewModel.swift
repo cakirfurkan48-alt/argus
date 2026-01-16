@@ -102,6 +102,10 @@ class TradingViewModel: ObservableObject {
     @Published var activeBacktestResult: BacktestResult?
     @Published var kapDisclosures: [String: [KAPDataService.KAPNews]] = [:] // Symbol -> KAP Haberleri
     
+    // BIST Macro & Flow Data
+    @Published var tcmbData: TCMBDataService.TCMBMacroSnapshot?
+    @Published var foreignFlowData: [String: ForeignInvestorFlowService.ForeignFlowData] = [:]
+    
     // BIST Reports
     @Published var bistDailyReport: String?
     @Published var bistWeeklyReport: String?

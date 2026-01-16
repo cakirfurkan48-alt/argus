@@ -141,7 +141,7 @@ extension TradingViewModel {
         
         // 2. Gather Inputs (Now that data is likely fetched)
         
-        let aetherScore: Double? = MacroRegimeService.shared.getCachedRating()?.numericScore
+        var aetherScore: Double? = MacroRegimeService.shared.getCachedRating()?.numericScore
         let orionScore: Double? = orionScores[symbol]?.score
         
         // CORRECTION: Check if Score Store knows it's an ETF (e.g. from FMP)
@@ -337,6 +337,61 @@ extension TradingViewModel {
         
         let phoenixAdvice = await PhoenixScenarioEngine.shared.analyze(symbol: symbol, timeframe: ptf)
         
+        // 🆕 SIRKIYE ENTEGRASYONU (Makro Rüzgar)
+        if isBist {
+            // 1. Veri Yoksa Çek (Lazy Loading)
+            if self.tcmbData == nil {
+                self.tcmbData = await TCMBDataService.shared.getMacroSnapshot()
+            }
+            
+            let flowData = await ForeignInvestorFlowService.shared.getFlowData(for: symbol)
+            await MainActor.run {
+                if let fd = flowData { self.foreignFlowData[symbol] = fd }
+            }
+            
+            // 2. Sirkiye Input Hazırla
+            let inflation = self.tcmbData?.inflation
+            let policyRate = self.tcmbData?.policyRate
+            let usdTry = self.quotes["USDTRY"]?.currentPrice ?? 35.0
+            
+            // Yabanci Takas Skoru (0-100 arasi donusum)
+            var flowScore = 50.0
+            if let fd = flowData {
+                switch fd.trend {
+                case .strongBuy: flowScore = 90
+                case .buy: flowScore = 70
+                case .neutral: flowScore = 50
+                case .sell: flowScore = 30
+                case .strongSell: flowScore = 10
+                }
+            }
+
+            let input = SirkiyeEngine.SirkiyeInput(
+                usdTry: usdTry,
+                usdTryPrevious: self.quotes["USDTRY"]?.previousClose ?? 35.0,
+                dxy: nil, brentOil: nil, globalVix: nil,
+                newsSnapshot: hermesSnapshot,
+                // V2 Fields
+                currentInflation: inflation,
+                policyRate: policyRate,
+                xu100Change: nil, xu100Value: nil, goldPrice: nil
+            )
+            
+            // 3. Sirkiye Rejimi Hesapla
+            let regime = await SirkiyeEngine.shared.calculateMarketRegime(input: input, foreignFlowScore: flowScore)
+            
+            // 4. Argus Decision için 'aetherScore'u güncelle
+            // Sirkiye skoru, BIST sembolleri için Aether (Global Makro) skorunun yerini alır.
+            if let baseAether = aetherScore {
+                // Global + Lokal harmanlama (Lokal baskın)
+                aetherScore = (baseAether * 0.3) + (regime.score * 0.7)
+            } else {
+                aetherScore = regime.score
+            }
+            
+            print("🇹🇷 Sirkiye Rejimi (\(symbol)): \(regime.description) (Çarpan: \(regime.multiplier)x, Skor: \(Int(regime.score)))")
+        }
+
         // 8. DECISION ENGINE (The Brain)
         // ------------------------------
         
@@ -502,6 +557,7 @@ extension TradingViewModel {
                          globalVix: 20.0,
                          newsSnapshot: hermesSnapshot,
                          currentInflation: 45.0,
+                         policyRate: 50.0,
                          xu100Change: nil,
                          xu100Value: nil,
                          goldPrice: nil

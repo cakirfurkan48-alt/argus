@@ -1430,6 +1430,7 @@ struct BistHoloPanelView: View {
             globalVix: 15.0,
             newsSnapshot: nil,
             currentInflation: 45.0,
+            policyRate: 50.0,
             xu100Change: nil,
             xu100Value: nil,
             goldPrice: nil

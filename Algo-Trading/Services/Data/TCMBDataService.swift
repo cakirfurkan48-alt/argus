@@ -225,6 +225,7 @@ extension TCMBDataService {
             globalVix: 15.0, // VIX icin ayri kaynak gerekli
             newsSnapshot: nil,
             currentInflation: snapshot.inflation,
+            policyRate: snapshot.policyRate,
             xu100Change: nil,
             xu100Value: snapshot.bist100,
             goldPrice: snapshot.goldPrice

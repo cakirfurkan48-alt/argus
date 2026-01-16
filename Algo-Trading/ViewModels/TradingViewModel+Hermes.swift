@@ -305,6 +305,7 @@ extension TradingViewModel {
             newsSnapshot: hermesSnapshot,
             // V2 Fields
             currentInflation: 45.0, // TCMB'den çekilecek, şimdilik tahmini
+            policyRate: 50.0,
             xu100Change: nil,       // XU100 günlük değişim
             xu100Value: nil,        // XU100 değeri
             goldPrice: nil          // Gram Altın TL

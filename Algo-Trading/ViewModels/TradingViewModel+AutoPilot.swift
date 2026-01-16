@@ -117,6 +117,7 @@ extension TradingViewModel {
                                     globalVix: macro.vix,
                                     newsSnapshot: nil,
                                     currentInflation: 45.0,
+                                    policyRate: 50.0,
                                     xu100Change: nil,
                                     xu100Value: nil,
                                     goldPrice: nil

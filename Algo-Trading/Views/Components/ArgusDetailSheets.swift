@@ -67,7 +67,11 @@ struct ArgusHermesSheet: View {
     let symbol: String
     
     var body: some View {
-        HermesSheetView(viewModel: viewModel, symbol: symbol)
+        if symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol) {
+            ArgusBistHub(symbol: symbol, viewModel: viewModel)
+        } else {
+            HermesSheetView(viewModel: viewModel, symbol: symbol)
+        }
     }
 }
 

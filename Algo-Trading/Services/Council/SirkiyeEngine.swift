@@ -16,10 +16,39 @@ actor SirkiyeEngine {
         let newsSnapshot: HermesNewsSnapshot? // For Political Cortex
         
         // V2 Fields
-        let currentInflation: Double? // Yıllık TÜFE (%)
-        let xu100Change: Double?      // XU100 günlük değişim (%)
-        let xu100Value: Double?       // XU100 değeri
-        let goldPrice: Double?        // Gram Altın TL
+        // V2 Fields
+        var currentInflation: Double? = nil
+        var policyRate: Double? = nil
+        var xu100Change: Double? = nil
+        var xu100Value: Double? = nil
+        var goldPrice: Double? = nil
+        
+        // Custom Init for Backward Compatibility
+        init(
+            usdTry: Double, 
+            usdTryPrevious: Double, 
+            dxy: Double?, 
+            brentOil: Double?, 
+            globalVix: Double?, 
+            newsSnapshot: HermesNewsSnapshot?, 
+            currentInflation: Double? = nil, 
+            policyRate: Double? = nil, 
+            xu100Change: Double? = nil, 
+            xu100Value: Double? = nil, 
+            goldPrice: Double? = nil
+        ) {
+            self.usdTry = usdTry
+            self.usdTryPrevious = usdTryPrevious
+            self.dxy = dxy
+            self.brentOil = brentOil
+            self.globalVix = globalVix
+            self.newsSnapshot = newsSnapshot
+            self.currentInflation = currentInflation
+            self.policyRate = policyRate
+            self.xu100Change = xu100Change
+            self.xu100Value = xu100Value
+            self.goldPrice = goldPrice
+        }
     }
     
     // V2: Reel Getiri Analizi sonucu
@@ -29,6 +58,15 @@ actor SirkiyeEngine {
         let realReturn: Double       // Reel getiri = Nominal - Enflasyon
         let verdict: String          // "Pozitif Reel Getiri" veya "Negatif Reel Getiri"
         let isPositive: Bool
+    }
+    
+    // V3: BIST Piyasa Rüzgarı & Çarpan
+    struct SirkiyeRegime: Sendable {
+        let multiplier: Double       // 0.5x - 1.5x (Skor çarpanı)
+        let score: Double            // 0-100 (BIST İştah Skoru)
+        let description: String      // "Yabancı girişi ve negatif reel faiz borsayı destekliyor"
+        let foreignFlowTrend: String // "Pozitif" / "Negatif"
+        let macroOutlook: String     // "Enflasyonist Ortam" vs
     }
     
     // MARK: - Public API
@@ -121,7 +159,90 @@ actor SirkiyeEngine {
         )
     }
     
-    // MARK: - Political Cortex (Standardized Historical Data)
+    // MARK: - Market Regime Calculation (V3)
+    
+    func calculateMarketRegime(input: SirkiyeInput, foreignFlowScore: Double?) -> SirkiyeRegime {
+        var score = 50.0
+        var reasons: [String] = []
+        var flowTrend = "Nötr"
+        var macroOutlook = "Dengeli"
+        
+        // 1. Reel Getiri Analizi (Inflation vs Policy Rate)
+        if let inflation = input.currentInflation, let rate = input.policyRate {
+            let realRate = rate - inflation
+            
+            if realRate < -5 {
+                // Derin Negatif Reel Faiz -> Enflasyondan Korunma Talebi
+                score += 20
+                reasons.append("Negatif Reel Faiz (Enflasyon Rallisi)")
+                macroOutlook = "Yüksek Enflasyon"
+            } else if realRate > 5 {
+                // Pozitif Reel Faiz -> Alternatif Maliyet Artışı
+                score -= 15
+                reasons.append("Mevduat Faizi Cazip (Borsadan Çıkış)")
+                macroOutlook = "Sıkı Para Politikası"
+            } else {
+                macroOutlook = "Nötr Reel Faiz"
+            }
+        }
+        
+        // 2. Yabancı Yatırımcı Algısı (Smart Money)
+        if let flow = foreignFlowScore {
+            if flow > 65 {
+                score += 25
+                reasons.append("Güçlü Yabancı Girişi")
+                flowTrend = "Pozitif (Giriş)"
+            } else if flow > 55 {
+                score += 10
+                reasons.append("Ilımlı Yabancı Girişi")
+                flowTrend = "Hafif Pozitif"
+            } else if flow < 35 {
+                score -= 20
+                reasons.append("Yabancı Çıkışı")
+                flowTrend = "Negatif (Çıkış)"
+            } else {
+                flowTrend = "Yatay"
+            }
+        }
+        
+        // 3. Kur Stresi (USD/TRY)
+        let fxChange = (input.usdTry - input.usdTryPrevious) / input.usdTryPrevious * 100.0
+        if fxChange > 3.0 {
+            score -= 30
+            reasons.append("Kur Şoku (>> %3)")
+        } else if fxChange > 1.0 {
+            score -= 10
+            reasons.append("Kurda Hareketlilik")
+        } else if fxChange < -0.5 {
+            score += 5
+            reasons.append("Kur Stabil/Geriliyor")
+        }
+        
+        // 4. Politik Stres (Kısaca)
+        let (_, politicalMode, _) = analyzePoliticalAtmosphere(news: input.newsSnapshot)
+        if politicalMode == .fear {
+            score -= 20
+            reasons.append("Politik Gerginlik")
+        } else if politicalMode == .panic {
+            score = 0 // Panik durumunda rejim çöker
+            reasons.append("POLİTİK KRİZ")
+        }
+        
+        // Normalizasyon ve Çarpan
+        score = max(0, min(100, score))
+        let multiplier = 0.5 + (score / 100.0) // 0.5x ile 1.5x arası
+        
+        let desc = reasons.isEmpty ? "Piyasa dinamikleri nötr." : reasons.joined(separator: ", ")
+        
+        return SirkiyeRegime(
+            multiplier: multiplier,
+            score: score,
+            description: desc,
+            foreignFlowTrend: flowTrend,
+            macroOutlook: macroOutlook
+        )
+    }
+
     
     // 1. Regime & Systemic Crisis (Severity: 100 - PANIC)
     // Triggers: Regime change, legal coups, direct democracy threats.
