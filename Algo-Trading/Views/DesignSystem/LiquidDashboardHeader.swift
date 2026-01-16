@@ -19,22 +19,46 @@ struct LiquidDashboardHeader: View {
     private var currencySymbol: String { isBist ? "₺" : "$" }
     
     // Data Calculation
-    private var equity: Double {
-        isBist ? viewModel.getBistEquity() : viewModel.getEquity()
+    // Unified Calculation (Global + BIST)
+    private var totalEquityTRY: Double {
+        let globalEquityTRY = viewModel.getEquity() * viewModel.usdTryRate
+        let bistEquityTRY = viewModel.getBistEquity()
+        return globalEquityTRY + bistEquityTRY
     }
     
-    private var balance: Double {
-        isBist ? viewModel.bistBalance : viewModel.balance
+    private var totalEquityUSD: Double {
+        let globalEquityUSD = viewModel.getEquity()
+        let bistEquityUSD = viewModel.getBistEquity() / (viewModel.usdTryRate > 0 ? viewModel.usdTryRate : 35.0)
+        return globalEquityUSD + bistEquityUSD
+    }
+    
+    private var displayEquity: Double {
+        isBist ? totalEquityTRY : totalEquityUSD
+    }
+    
+    // Unified Cash
+    private var totalCashTRY: Double {
+        (viewModel.balance * viewModel.usdTryRate) + viewModel.bistBalance
+    }
+    
+    private var totalCashUSD: Double {
+        viewModel.balance + (viewModel.bistBalance / (viewModel.usdTryRate > 0 ? viewModel.usdTryRate : 35.0))
+    }
+    
+    private var displayCash: Double {
+        isBist ? totalCashTRY : totalCashUSD
     }
     
     private var realized: Double {
-        // Simple mock or real calculation depending on available extensions
-        isBist ? 0.0 : viewModel.getRealizedPnL() 
-        // Note: Real implementation might need the full calculation logic from HolographicBalanceCard
-        // For now, I will use a simplified access or need to duplicate logic if extensions aren't enough.
-        // viewModel.getRealizedPnL() works for Global.
-        // For BIST, let's look at HolographicBalanceCard logic:
-        // return viewModel.portfolio.filter { !$0.isOpen && ($0.symbol.hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol($0.symbol)) }.reduce(0.0) { $0 + $1.profit }
+        // Global realized (USD) convert to TRY if needed
+        let globalUSD = viewModel.getRealizedPnL()
+        let rate = viewModel.usdTryRate > 0 ? viewModel.usdTryRate : 35.0
+        
+        if isBist {
+            return globalUSD * rate // Show Global PnL in TRY (Unified) + BIST Realized (0 for now)
+        } else {
+            return globalUSD
+        }
     }
     
     private var unrealized: Double {
@@ -78,12 +102,12 @@ struct LiquidDashboardHeader: View {
                 
                 // 2. Main Balance (Center)
                 VStack(spacing: 6) {
-                    Text(isBist ? "BIST PORTFÖY DEĞERİ" : "TOPLAM VARLIK")
+                    Text("TOPLAM VARLIK (NET WORTH)")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .tracking(2)
                         .foregroundColor(Color.white.opacity(0.6))
                     
-                    Text("\(currencySymbol)\(String(format: "%.0f", equity))")
+                    Text("\(currencySymbol)\(String(format: "%.0f", displayEquity))")
                         .font(.system(size: 48, weight: .black, design: .rounded))
                         .foregroundColor(.white)
                         .shadow(color: themeColor.opacity(0.5), radius: 15)
@@ -91,8 +115,8 @@ struct LiquidDashboardHeader: View {
                 
                 // 3. Stats Grid
                 HStack(spacing: 20) {
-                    statPill(title: "NAKİT", value: balance, color: .white.opacity(0.9))
-                    statPill(title: "NET K/Z", value: realized + unrealized, color: (realized + unrealized) >= 0 ? Theme.positive : Theme.negative)
+                    statPill(title: "TOPLAM NAKİT", value: displayCash, color: .white.opacity(0.9))
+                    statPill(title: "NET K/Z (Bu Pazar)", value: realized + unrealized, color: (realized + unrealized) >= 0 ? Theme.positive : Theme.negative)
                 }
                 .padding(.bottom, 10)
             }
