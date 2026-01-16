@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-    // ChironOptimizationModels map (Added for compatibility if needed in same file, but they are in separate files)
+
 
 /// Represents the detected market condition for a specific asset.
 enum MarketRegime: String, Codable, Sendable {
@@ -111,6 +111,11 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
     private let persistenceKey = "ChironLearnedWeights"
     private let regimePersistenceKey = "ChironLastRegimeResult"
     
+    // MARK: - Logger
+    private func log(_ message: String, level: ArgusLogger.LogLevel = .info) {
+        Task { await ArgusLogger.shared.log(message, level: level, category: "CHIRON") }
+    }
+    
     init() {
         loadFromDisk()
         loadRegimeFromDisk()
@@ -153,7 +158,7 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
             let coreSum = result.coreWeights.orion + result.coreWeights.atlas + result.coreWeights.aether
             
             guard pulseSum > 0.01 && coreSum > 0.01 else {
-                print("⚠️ Chiron: Disk'ten gelen ağırlıklar bozuk (toplam=0), default kullanılıyor.")
+                log("⚠️ Chiron: Disk'ten gelen ağırlıklar bozuk (toplam=0), default kullanılıyor.", level: .warning)
                 // Bozuk veriyi siliyoruz
                 UserDefaults.standard.removeObject(forKey: regimePersistenceKey)
                 return
@@ -261,7 +266,7 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
     private func detectRegime(context: ChironContext) -> MarketRegime {
         let orion = context.orionScore ?? 50
         let aether = context.aetherScore ?? 50
-        // let demeter = context.demeterScore ?? 50 // Unused for regime yet, mostly Aether drives Risk
+        // Demeter (Sector) is integrated via Aether Macro risk currently
         let hermes = context.hermesScore ?? 50
         let chop = context.chopIndex ?? 50
         let vol = context.volatilityHint ?? 0
