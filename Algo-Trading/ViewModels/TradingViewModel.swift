@@ -251,9 +251,10 @@ class TradingViewModel: ObservableObject {
     init() {
         // Init is now lightweight.
         loadWatchlist() // Ensure watchlist is ready immediately (Real Data)
-        loadPortfolio()
-        loadBalance()
-        loadTransactions()
+        
+        // MIGRATION: PortfolioEngine'den veri çek (Artık tek kaynak PortfolioEngine)
+        setupPortfolioEngineBridge()
+        
         setupStreamingObservation()
         
         // Ekonomik takvim beklenti hatırlatması kontrolü
@@ -262,6 +263,38 @@ class TradingViewModel: ObservableObject {
         }
         
         setupTradeBrainObservers()
+    }
+    
+    /// PortfolioEngine ile senkronizasyon - Tek Kaynak köprüsü
+    private func setupPortfolioEngineBridge() {
+        // Portfolio senkronizasyonu
+        PortfolioEngine.shared.$trades
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] trades in
+                self?.portfolio = trades
+            }
+            .store(in: &cancellables)
+        
+        // Global Balance senkronizasyonu
+        PortfolioEngine.shared.$globalBalance
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newBalance in
+                // didSet tetiklenmemesi için direkt atama
+                if self?.balance != newBalance {
+                    self?.balance = newBalance
+                }
+            }
+            .store(in: &cancellables)
+        
+        // BIST Balance senkronizasyonu
+        PortfolioEngine.shared.$bistBalance
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newBalance in
+                if self?.bistBalance != newBalance {
+                    self?.bistBalance = newBalance
+                }
+            }
+            .store(in: &cancellables)
     }
     
     private func setupStreamingObservation() {
