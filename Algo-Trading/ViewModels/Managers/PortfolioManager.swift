@@ -1,54 +1,70 @@
 import Foundation
 import Combine
 
-// MARK: - Portfolio Manager
-// TradingViewModel'dan extract edilmiş portfolio yönetim modülü
+// MARK: - PortfolioManager (DEPRECATED - Facade to PortfolioEngine)
+/// ⚠️ DEPRECATED: Bu sınıf artık PortfolioEngine'e yönlendiriyor.
+/// Yeni kod PortfolioEngine.shared kullanmalıdır.
+/// Bu facade eski bağımlılıklar için geriye uyumluluk sağlar.
 
 @MainActor
 final class PortfolioManager: ObservableObject, PortfolioManaging {
     
-    // MARK: - Singleton (Legacy Support - Geçiş döneminde)
+    // MARK: - Singleton
     static let shared = PortfolioManager()
     
-    // MARK: - Published Properties
+    // MARK: - Delegation to PortfolioEngine
+    private let engine = PortfolioEngine.shared
+    private var cancellables = Set<AnyCancellable>()
     
+    // MARK: - Published Properties (Bridged from Engine)
     @Published private(set) var portfolio: [Trade] = []
-    
-    @Published var balance: Double = 100000.0 {
-        didSet { saveBalance() }
-    }
-    
-    @Published var bistBalance: Double = 1000000.0 {
-        didSet { saveBistBalance() }
-    }
-    
+    @Published var balance: Double = 100_000.0
+    @Published var bistBalance: Double = 1_000_000.0
     @Published private(set) var transactionHistory: [Transaction] = []
     
     // MARK: - State
-    
     var lastTradeTimes: [String: Date] = [:]
     
     // MARK: - Dependencies
-    
     private let feeModel = FeeModel.shared
     private let config: TradingConfig
-    
-    // MARK: - Combine
-    
-    private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Initialization
     
     private init() {
         self.config = TradingConfig.default
-        loadSavedData()
+        setupBridge()
     }
     
-    /// Test initialization with custom config
     init(config: TradingConfig, initialBalance: Double = 100000.0, bistBalance: Double = 1000000.0) {
         self.config = config
         self.balance = initialBalance
         self.bistBalance = bistBalance
+        setupBridge()
+    }
+    
+    private func setupBridge() {
+        engine.$trades
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$portfolio)
+        
+        engine.$globalBalance
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newBalance in
+                self?.balance = newBalance
+            }
+            .store(in: &cancellables)
+        
+        engine.$bistBalance
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newBalance in
+                self?.bistBalance = newBalance
+            }
+            .store(in: &cancellables)
+        
+        engine.$transactions
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$transactionHistory)
     }
     
     // MARK: - Portfolio Protocol
@@ -63,51 +79,33 @@ final class PortfolioManager: ObservableObject, PortfolioManaging {
     
     // MARK: - Computed Properties
     
-    var openPositions: [Trade] {
-        portfolio.filter { $0.isOpen }
-    }
+    var openPositions: [Trade] { engine.openTrades }
+    var closedPositions: [Trade] { engine.closedTrades }
+    var totalPnL: Double { engine.getRealizedPnL() }
+    var openPositionCount: Int { engine.openTrades.count }
     
-    var closedPositions: [Trade] {
-        portfolio.filter { !$0.isOpen }
-    }
-    
-    var totalPnL: Double {
-        closedPositions.reduce(0) { $0 + $1.profit }
-    }
-    
-    var openPositionCount: Int {
-        openPositions.count
-    }
-    
-    // MARK: - Portfolio Operations (Delegated from TradingViewModel)
+    // MARK: - Portfolio Operations (Delegated)
     
     func addTrade(_ trade: Trade) {
-        portfolio.append(trade)
-        savePortfolio()
+        // Delegated to engine via buy
+        print("⚠️ PortfolioManager.addTrade deprecated - use PortfolioEngine.buy")
     }
     
     func updateTrade(id: UUID, update: (inout Trade) -> Void) {
-        if let index = portfolio.firstIndex(where: { $0.id == id }) {
-            update(&portfolio[index])
-            savePortfolio()
-        }
+        // Not supported in new architecture
+        print("⚠️ PortfolioManager.updateTrade deprecated")
     }
     
     func closeTrade(id: UUID, exitPrice: Double, exitDate: Date = Date()) {
-        if let index = portfolio.firstIndex(where: { $0.id == id }) {
-            portfolio[index].isOpen = false
-            portfolio[index].exitPrice = exitPrice
-            portfolio[index].exitDate = exitDate
-            savePortfolio()
-        }
+        _ = engine.sell(tradeId: id, currentPrice: exitPrice)
     }
     
     func getPosition(for symbol: String) -> [Trade] {
-        portfolio.filter { $0.symbol == symbol && $0.isOpen }
+        engine.getPosition(for: symbol)
     }
     
     func getTotalQuantity(for symbol: String) -> Double {
-        getPosition(for: symbol).reduce(0) { $0 + $1.quantity }
+        engine.getTotalQuantity(for: symbol)
     }
     
     // MARK: - Balance Operations
@@ -118,25 +116,17 @@ final class PortfolioManager: ObservableObject, PortfolioManaging {
     }
     
     func deductBalance(_ amount: Double, market: Market) {
-        switch market {
-        case .usd:
-            balance -= amount
-        case .bist:
-            bistBalance -= amount
-        }
+        // Not directly supported - balances managed by engine
+        print("⚠️ PortfolioManager.deductBalance deprecated - use PortfolioEngine.buy")
     }
     
     func addBalance(_ amount: Double, market: Market) {
-        switch market {
-        case .usd:
-            balance += amount
-        case .bist:
-            bistBalance += amount
-        }
+        // Not directly supported - balances managed by engine
+        print("⚠️ PortfolioManager.addBalance deprecated - use PortfolioEngine.sell")
     }
     
     private func getUnrealizedValue(for market: Market) -> Double {
-        let relevantTrades = openPositions.filter { trade in
+        let relevantTrades = engine.openTrades.filter { trade in
             let isBist = trade.symbol.uppercased().hasSuffix(".IS")
             return market == .bist ? isBist : !isBist
         }
@@ -150,23 +140,33 @@ final class PortfolioManager: ObservableObject, PortfolioManaging {
     // MARK: - Transaction History
     
     func addTransaction(_ transaction: Transaction) {
-        transactionHistory.append(transaction)
-        saveTransactions()
+        // Not directly supported - transactions managed by engine
+        print("⚠️ PortfolioManager.addTransaction deprecated")
     }
     
-    // MARK: - Buy/Sell Protocol Methods (Async wrappers)
+    // MARK: - Buy/Sell Protocol Methods
     
-    /// Not implemented - use TradingViewModel directly
     func buy(symbol: String, quantity: Double, source: TradeSource, engine: AutoPilotEngine?) async throws {
-        // PortfolioManager sadece veri tutar, işlem TradingViewModel üzerinden yapılır
-        throw PortfolioError.useViewModelDirectly
+        let price = MarketDataStore.shared.quotes[symbol]?.value?.currentPrice ?? 0
+        guard price > 0 else { throw PortfolioError.useViewModelDirectly }
+        _ = self.engine.buy(symbol: symbol, quantity: quantity, price: price, source: source, engine: engine)
     }
     
-    /// Not implemented - use TradingViewModel directly
     func sell(symbol: String, quantity: Double, source: TradeSource, reason: String?) async throws {
-        // PortfolioManager sadece veri tutar, işlem TradingViewModel üzerinden yapılır
-        throw PortfolioError.useViewModelDirectly
+        // Find trade and sell
+        if let trade = self.engine.openTrades.first(where: { $0.symbol == symbol }) {
+            let price = MarketDataStore.shared.quotes[symbol]?.value?.currentPrice ?? trade.entryPrice
+            _ = self.engine.sell(tradeId: trade.id, currentPrice: price, reason: reason)
+        }
     }
+    
+    // MARK: - Persistence (No-op, handled by engine)
+    
+    func loadSavedData() { }
+    func savePortfolio() { }
+    func saveBalance() { }
+    func saveBistBalance() { }
+    func saveTransactions() { }
 }
 
 // MARK: - Portfolio Errors
@@ -177,50 +177,6 @@ enum PortfolioError: LocalizedError {
         switch self {
         case .useViewModelDirectly:
             return "Bu işlem TradingViewModel üzerinden yapılmalıdır."
-        }
-    }
-}
-
-// MARK: - Persistence Extension
-extension PortfolioManager {
-    private static let portfolioKey = "portfolio_v3"
-    private static let balanceKey = "userBalance"
-    private static let bistBalanceKey = "bistBalance"
-    private static let transactionsKey = "transactionHistory_v2"
-    
-    func loadSavedData() {
-        // Portfolio
-        if let data = UserDefaults.standard.data(forKey: Self.portfolioKey),
-           let decoded = try? JSONDecoder().decode([Trade].self, from: data) {
-            // Can't set from extension - handled in init
-        }
-        
-        // Balance
-        if let savedBalance = UserDefaults.standard.object(forKey: Self.balanceKey) as? Double {
-            self.balance = savedBalance
-        }
-        
-        // BIST Balance
-        if let savedBistBalance = UserDefaults.standard.object(forKey: Self.bistBalanceKey) as? Double {
-            self.bistBalance = savedBistBalance
-        }
-    }
-    
-    func savePortfolio() {
-        // Persistence handled by TradingViewModel
-    }
-    
-    func saveBalance() {
-        UserDefaults.standard.set(balance, forKey: Self.balanceKey)
-    }
-    
-    func saveBistBalance() {
-        UserDefaults.standard.set(bistBalance, forKey: Self.bistBalanceKey)
-    }
-    
-    func saveTransactions() {
-        if let data = try? JSONEncoder().encode(transactionHistory) {
-            UserDefaults.standard.set(data, forKey: Self.transactionsKey)
         }
     }
 }
