@@ -595,6 +595,7 @@ actor BorsaPyProvider {
             pe: pe,
             pb: pb,
             marketCap: calculatedMarketCap,
+            eps: derivedEPS,
             timestamp: Date()
         )
     }
@@ -907,6 +908,7 @@ struct BistFinancials: Codable, Sendable {
     let pe: Double? // F/K
     let pb: Double? // PD/DD
     let marketCap: Double? // Piyasa Değeri
+    let eps: Double? // Hisse Başına Kar (EPS)
     
     let timestamp: Date
     

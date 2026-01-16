@@ -31,6 +31,7 @@ struct FinancialsData: Codable, @unchecked Sendable {
     let priceToBook: Double?
     let evToEbitda: Double?
     let dividendYield: Double?
+    let earningsPerShare: Double? // NEW: BIST Scraper icin Hisse Basina Kar
     
     // Growth Estimate
     let forwardGrowthEstimate: Double?
@@ -58,7 +59,7 @@ struct FinancialsData: Codable, @unchecked Sendable {
         case totalRevenue, netIncome, totalShareholderEquity, marketCap
         case revenueHistory, netIncomeHistory
         case ebitda, shortTermDebt, longTermDebt, operatingCashflow, capitalExpenditures, cashAndCashEquivalents
-        case peRatio, forwardPERatio, priceToBook, evToEbitda, dividendYield
+        case peRatio, forwardPERatio, priceToBook, evToEbitda, dividendYield, earningsPerShare
         case forwardGrowthEstimate, isETF
         case grossMargin, operatingMargin, profitMargin, returnOnEquity, returnOnAssets
         case debtToEquity, currentRatio, freeCashFlow, enterpriseValue, pegRatio, priceToSales
@@ -88,6 +89,7 @@ struct FinancialsData: Codable, @unchecked Sendable {
         self.priceToBook = try container.decodeIfPresent(Double.self, forKey: .priceToBook)
         self.evToEbitda = try container.decodeIfPresent(Double.self, forKey: .evToEbitda)
         self.dividendYield = try container.decodeIfPresent(Double.self, forKey: .dividendYield)
+        self.earningsPerShare = try container.decodeIfPresent(Double.self, forKey: .earningsPerShare)
         self.forwardGrowthEstimate = try container.decodeIfPresent(Double.self, forKey: .forwardGrowthEstimate)
         // Extended Metrics
         self.grossMargin = try container.decodeIfPresent(Double.self, forKey: .grossMargin)
@@ -108,7 +110,7 @@ struct FinancialsData: Codable, @unchecked Sendable {
     }
     
     // Default Memberwise Init
-    init(symbol: String, currency: String, lastUpdated: Date, totalRevenue: Double?, netIncome: Double?, totalShareholderEquity: Double?, marketCap: Double?, revenueHistory: [Double], netIncomeHistory: [Double], ebitda: Double?, shortTermDebt: Double?, longTermDebt: Double?, operatingCashflow: Double?, capitalExpenditures: Double?, cashAndCashEquivalents: Double?, peRatio: Double?, forwardPERatio: Double?, priceToBook: Double?, evToEbitda: Double?, dividendYield: Double?, forwardGrowthEstimate: Double?, isETF: Bool = false, grossMargin: Double? = nil, operatingMargin: Double? = nil, profitMargin: Double? = nil, returnOnEquity: Double? = nil, returnOnAssets: Double? = nil, debtToEquity: Double? = nil, currentRatio: Double? = nil, freeCashFlow: Double? = nil, enterpriseValue: Double? = nil, pegRatio: Double? = nil, priceToSales: Double? = nil, revenueGrowth: Double? = nil, earningsGrowth: Double? = nil) {
+    init(symbol: String, currency: String, lastUpdated: Date, totalRevenue: Double?, netIncome: Double?, totalShareholderEquity: Double?, marketCap: Double?, revenueHistory: [Double], netIncomeHistory: [Double], ebitda: Double?, shortTermDebt: Double?, longTermDebt: Double?, operatingCashflow: Double?, capitalExpenditures: Double?, cashAndCashEquivalents: Double?, peRatio: Double?, forwardPERatio: Double?, priceToBook: Double?, evToEbitda: Double?, dividendYield: Double?, earningsPerShare: Double? = nil, forwardGrowthEstimate: Double?, isETF: Bool = false, grossMargin: Double? = nil, operatingMargin: Double? = nil, profitMargin: Double? = nil, returnOnEquity: Double? = nil, returnOnAssets: Double? = nil, debtToEquity: Double? = nil, currentRatio: Double? = nil, freeCashFlow: Double? = nil, enterpriseValue: Double? = nil, pegRatio: Double? = nil, priceToSales: Double? = nil, revenueGrowth: Double? = nil, earningsGrowth: Double? = nil) {
         self.symbol = symbol
         self.currency = currency
         self.lastUpdated = lastUpdated
@@ -129,6 +131,7 @@ struct FinancialsData: Codable, @unchecked Sendable {
         self.priceToBook = priceToBook
         self.evToEbitda = evToEbitda
         self.dividendYield = dividendYield
+        self.earningsPerShare = earningsPerShare
         self.forwardGrowthEstimate = forwardGrowthEstimate
         self.isETF = isETF
         self.grossMargin = grossMargin
@@ -169,6 +172,7 @@ struct FinancialsData: Codable, @unchecked Sendable {
             priceToBook: nil,
             evToEbitda: nil,
             dividendYield: nil,
+            earningsPerShare: nil,
             forwardGrowthEstimate: nil
         )
     }

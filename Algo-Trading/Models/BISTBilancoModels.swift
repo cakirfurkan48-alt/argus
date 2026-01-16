@@ -129,9 +129,10 @@ struct BISTDegerlemeVerisi: Codable {
     let pddd: BISTMetrik         // PD/DD (P/B)
     let fdFavok: BISTMetrik      // FD/FAVÖK (EV/EBITDA)
     let fkBuyume: BISTMetrik?    // F/K / Büyüme (PEG)
+    let eps: BISTMetrik?         // NEW: Hisse Başına Kar (EPS)
     
     var tumMetrikler: [BISTMetrik] {
-        [fk, pddd, fdFavok, fkBuyume].compactMap { $0 }
+        [fk, pddd, fdFavok, fkBuyume, eps].compactMap { $0 }
     }
 }
 

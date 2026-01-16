@@ -85,16 +85,39 @@ actor BISTBilancoEngine {
         let riskVerisi = analizRisk(finansallar: finansallar, quote: quote)
         
         // 5. Bölüm skorlarını hesapla (SADECE VERİ MEVCUT OLANLAR)
+        // 5. Bölüm skorlarını hesapla (SADECE VERİ MEVCUT OLANLAR)
         let degerleme = hesaplaBolumSkoru(degerlemeVerisi.tumMetrikler)
-        // Not: Aşağıdaki bölümler BorsaPy'den veri gelmediği için devre dışı bırakıldı
-        let karlilik = 50.0 // Veri yok - default
+        let karlilik = hesaplaBolumSkoru(karlilikVerisi.tumMetrikler)
         let buyume = 50.0   // Veri yok - default  
-        let saglik = 50.0   // Veri yok - default
+        let saglik = hesaplaBolumSkoru(saglikVerisi.tumMetrikler)
         let nakit = 50.0    // Veri yok - default
-        let temettu = 50.0  // Veri yok - default
+        let temettu = hesaplaBolumSkoru(temettuVerisi.tumMetrikler)
         
-        // 6. Toplam skor (SADECE DEĞERleme kullanılıyor çünkü diğerlerinde veri yok)
-        let toplamSkor = degerleme
+        // 6. Toplam skor (Ağırlıklı Ortalama)
+        // Veri kalitesine göre dinamik ağırlıklandırma yapılabilir
+        // Şimdilik Değerleme ve Karlılık en güvenilir veriler
+        var toplamPuan = 0.0
+        var toplamAgirlik = 0.0
+        
+        // Değerleme (%40)
+        if degerleme > 0 {
+            toplamPuan += degerleme * 0.4
+            toplamAgirlik += 0.4
+        }
+        
+        // Karlılık (%40)
+        if karlilik > 0 {
+            toplamPuan += karlilik * 0.4
+            toplamAgirlik += 0.4
+        }
+        
+        // Sağlık (%20)
+        if saglik > 0 && saglik != 50 { // 50 default ise alma
+            toplamPuan += saglik * 0.2
+            toplamAgirlik += 0.2
+        }
+        
+        let toplamSkor = toplamAgirlik > 0 ? (toplamPuan / toplamAgirlik) : 50.0
         
         // 7. Şirket profili
         let profil = BISTSirketProfili(
@@ -215,7 +238,20 @@ actor BISTBilancoEngine {
             egitimNotu: "PEG oranı, F/K'yı şirketin büyüme oranına böler. 1'in altı ucuz, 1'in üstü pahalı kabul edilir."
         )
         
-        return BISTDegerlemeVerisi(fk: fk, pddd: pddd, fdFavok: fdFavok, fkBuyume: fkBuyume)
+        let eps = olusturMetrik(
+            id: "eps",
+            isim: "Hisse Başına Kar (EPS)",
+            deger: finansallar.earningsPerShare,
+            sektorOrt: nil,
+            formul: "Net Kar / Ödenmiş Sermaye",
+            egitim: "Hisse başına kar, şirketin her bir hisse senedi için ne kadar kar ürettiğini gösterir. Temettü ödeme potansiyelinin ana kaynağıdır."
+        ) { deger, _ in
+            if deger < 0 { return (.kotu, 20, "Zarar: Hisse başı eksi yazıyor.") }
+            if deger > 0 { return (.iyi, 80, "Pozitif kar üretimi.") }
+            return (.notr, 50, "Nötr")
+        }
+        
+        return BISTDegerlemeVerisi(fk: fk, pddd: pddd, fdFavok: fdFavok, fkBuyume: fkBuyume, eps: eps)
     }
     
     // MARK: - Karlılık Analizi
@@ -568,6 +604,7 @@ actor BISTBilancoEngine {
             priceToBook: bist.pb,
             evToEbitda: (bist.ebitda != nil && bist.ebitda! > 0) ? enterpriseValue / bist.ebitda! : nil,
             dividendYield: nil,
+            earningsPerShare: bist.eps, // MOVED HERE
             forwardGrowthEstimate: nil,
             isETF: false,
             grossMargin: bist.grossMargin,
@@ -575,6 +612,7 @@ actor BISTBilancoEngine {
             profitMargin: bist.netMargin,
             returnOnEquity: bist.roe,
             returnOnAssets: bist.roa,
+
             debtToEquity: bist.debtToEquity,
             currentRatio: bist.currentRatio,
             freeCashFlow: nil,
