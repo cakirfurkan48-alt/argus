@@ -149,6 +149,49 @@ struct ArgusDecisionEngine {
         let chironResult = ChironRegimeEngine.shared.evaluate(context: chironContext)
         let activeWeights = chironResult.pulseWeights
         
+        // --- PHASE 3.7: CHIMERA SIGNAL INTEGRATION ---
+        // Chimera sinyalleri Konsey tartışmasına dahil edilir
+        let chimeraResult = ChimeraSynergyEngine.shared.fuse(
+            symbol: symbol,
+            orion: orionDetails,
+            hermesImpactScore: hermes,
+            titanScore: atlas,
+            currentPrice: marketData?.price ?? 0,
+            marketRegime: chironResult.regime
+        )
+        
+        // Chimera sinyali varsa, Konsey'e modül olarak ekle
+        if let primarySignal = chimeraResult.signals.first {
+            let chimeraScore: Double
+            let chimeraAction: SignalAction
+            
+            switch primarySignal.type {
+            case .deepValueBuy, .perfectStorm, .momentumBreakout:
+                // Olumlu sinyal - AL yönünde
+                chimeraScore = 70.0 + (primarySignal.severity * 20.0) // 70-90
+                chimeraAction = .buy
+            case .bullTrap, .fallingKnife:
+                // Olumsuz sinyal - SAT yönünde veya bekle
+                chimeraScore = 30.0 - (primarySignal.severity * 20.0) // 10-30
+                chimeraAction = .sell
+            case .sentimentDivergence:
+                // Nötr sinyal
+                chimeraScore = 50.0
+                chimeraAction = .hold
+            }
+            
+            let chimeraOp = ModuleOpinion(
+                module: .athena, // Athena modülünü Chimera için kullan (AI-driven signals)
+                stance: .abstain,
+                preferredAction: chimeraAction,
+                strength: primarySignal.severity * 100.0,
+                score: chimeraScore,
+                confidence: primarySignal.severity,
+                evidence: ["Chimera: \(primarySignal.title) - \(primarySignal.description)"]
+            )
+            allOpinions.append(chimeraOp)
+            dataSources["Chimera"] = "ChimeraSynergyEngine (Fused Signal)"
+        }
         
         // --- PHASE 4: THE DEBATE ---
         var supportPower = 0.0

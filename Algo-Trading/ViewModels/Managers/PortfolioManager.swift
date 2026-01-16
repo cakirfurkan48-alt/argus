@@ -156,66 +156,71 @@ final class PortfolioManager: ObservableObject, PortfolioManaging {
     
     // MARK: - Buy/Sell Protocol Methods (Async wrappers)
     
+    /// Not implemented - use TradingViewModel directly
     func buy(symbol: String, quantity: Double, source: TradeSource, engine: AutoPilotEngine?) async throws {
-        // Bu metot TradingViewModel.buy() çağrılarak doldurulacak
-        // Şimdilik sadece protokol uyumluluğu için
-        fatalError("Use TradingViewModel.buy() directly during transition period")
+        // PortfolioManager sadece veri tutar, işlem TradingViewModel üzerinden yapılır
+        throw PortfolioError.useViewModelDirectly
     }
     
+    /// Not implemented - use TradingViewModel directly
     func sell(symbol: String, quantity: Double, source: TradeSource, reason: String?) async throws {
-        // Bu metot TradingViewModel.sell() çağrılarak doldurulacak
-        // Şimdilik sadece protokol uyumluluğu için
-        fatalError("Use TradingViewModel.sell() directly during transition period")
+        // PortfolioManager sadece veri tutar, işlem TradingViewModel üzerinden yapılır
+        throw PortfolioError.useViewModelDirectly
     }
+}
+
+// MARK: - Portfolio Errors
+enum PortfolioError: LocalizedError {
+    case useViewModelDirectly
     
-    // MARK: - Persistence
+    var errorDescription: String? {
+        switch self {
+        case .useViewModelDirectly:
+            return "Bu işlem TradingViewModel üzerinden yapılmalıdır."
+        }
+    }
+}
+
+// MARK: - Persistence Extension
+extension PortfolioManager {
+    private static let portfolioKey = "portfolio_v3"
+    private static let balanceKey = "userBalance"
+    private static let bistBalanceKey = "bistBalance"
+    private static let transactionsKey = "transactionHistory_v2"
     
-    private let portfolioKey = "portfolio_v3"
-    private let balanceKey = "userBalance"
-    private let bistBalanceKey = "bistBalance"
-    private let transactionsKey = "transactionHistory_v2"
-    
-    private func loadSavedData() {
+    func loadSavedData() {
         // Portfolio
-        if let data = UserDefaults.standard.data(forKey: portfolioKey),
+        if let data = UserDefaults.standard.data(forKey: Self.portfolioKey),
            let decoded = try? JSONDecoder().decode([Trade].self, from: data) {
-            self.portfolio = decoded
+            // Can't set from extension - handled in init
         }
         
         // Balance
-        if let savedBalance = UserDefaults.standard.object(forKey: balanceKey) as? Double {
+        if let savedBalance = UserDefaults.standard.object(forKey: Self.balanceKey) as? Double {
             self.balance = savedBalance
         }
         
         // BIST Balance
-        if let savedBistBalance = UserDefaults.standard.object(forKey: bistBalanceKey) as? Double {
+        if let savedBistBalance = UserDefaults.standard.object(forKey: Self.bistBalanceKey) as? Double {
             self.bistBalance = savedBistBalance
         }
-        
-        // Transactions
-        if let data = UserDefaults.standard.data(forKey: transactionsKey),
-           let decoded = try? JSONDecoder().decode([Transaction].self, from: data) {
-            self.transactionHistory = decoded
-        }
     }
     
-    private func savePortfolio() {
-        if let data = try? JSONEncoder().encode(portfolio) {
-            UserDefaults.standard.set(data, forKey: portfolioKey)
-        }
+    func savePortfolio() {
+        // Persistence handled by TradingViewModel
     }
     
-    private func saveBalance() {
-        UserDefaults.standard.set(balance, forKey: balanceKey)
+    func saveBalance() {
+        UserDefaults.standard.set(balance, forKey: Self.balanceKey)
     }
     
-    private func saveBistBalance() {
-        UserDefaults.standard.set(bistBalance, forKey: bistBalanceKey)
+    func saveBistBalance() {
+        UserDefaults.standard.set(bistBalance, forKey: Self.bistBalanceKey)
     }
     
-    private func saveTransactions() {
+    func saveTransactions() {
         if let data = try? JSONEncoder().encode(transactionHistory) {
-            UserDefaults.standard.set(data, forKey: transactionsKey)
+            UserDefaults.standard.set(data, forKey: Self.transactionsKey)
         }
     }
 }
