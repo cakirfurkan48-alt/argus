@@ -556,6 +556,19 @@ actor BorsaPyProvider {
             print("✅ BorsaPy Zenginleştirme: \(cleanSymbol) -> MCup: \(mCap.formatted()), NetKar: \(derivedNetProfit?.formatted() ?? "-"), Özkaynak: \(derivedEquity?.formatted() ?? "-")")
         }
         
+        // ROE Hesaplama (Türetilmiş)
+        var derivedROE: Double?
+        if let profit = derivedNetProfit, let equity = derivedEquity, equity > 0 {
+            derivedROE = (profit / equity) * 100
+        }
+        
+        // EPS (Hisse Başına Kar) Hesaplama
+        // Net Kar / Ödenmiş Sermaye (kabaca lot sayısı olarak kabul edilir)
+        var derivedEPS: Double?
+        if let profit = derivedNetProfit, let capital = latestCapital, capital > 0 {
+            derivedEPS = profit / capital
+        }
+        
         return BistFinancials(
             symbol: cleanSymbol,
             period: Period.isEmpty ? "N/A" : Period,
@@ -573,7 +586,7 @@ actor BorsaPyProvider {
             currentAssets: nil,
             cash: nil,
             // Oranlar
-            roe: nil,
+            roe: derivedROE,
             roa: nil,
             currentRatio: nil,
             debtToEquity: nil,
