@@ -46,6 +46,64 @@ enum ChimeraSignalType: String, Sendable {
     case fallingKnife = "Falling Knife"
     case sentimentDivergence = "Sentiment Div"
     case perfectStorm = "Perfect Storm"
+    
+    // MARK: - Türkçe Lokalizasyon (Athena UI)
+    
+    var turkishName: String {
+        switch self {
+        case .deepValueBuy: return "Gizli Deger"
+        case .bullTrap: return "Boga Tuzagi"
+        case .momentumBreakout: return "Kirilim"
+        case .fallingKnife: return "Dusen Bicak"
+        case .sentimentDivergence: return "Duygu Uyumsuzlugu"
+        case .perfectStorm: return "Mukemmel Firtina"
+        }
+    }
+    
+    var turkishDescription: String {
+        switch self {
+        case .deepValueBuy:
+            return "Teknik gostergeler zayif gorunse de sirketin temel verileri guclu. Uzun vadeli deger firsati."
+        case .bullTrap:
+            return "Fiyat yukselis gosteriyor ancak hacim ve momentum desteklemiyor. Sahte alim sinyali olabilir."
+        case .momentumBreakout:
+            return "Guclu momentum ve hacim destekli fiyat hareketi. Trend baslangicinun erken sinyali."
+        case .fallingKnife:
+            return "Sert dusus devam ediyor. Ucuz gorunse de daha da dusebilir. Sabir gerektirir."
+        case .sentimentDivergence:
+            return "Haberler olumlu ancak fiyat tepki vermiyor. Veya tersi. Piyasa beklentiyle uyumsuz."
+        case .perfectStorm:
+            return "Teknik, temel ve duygu verileri ayni yonu gosteriyor. Nadir gorulen guclu sinyal."
+        }
+    }
+    
+    var turkishAdvice: String {
+        switch self {
+        case .deepValueBuy:
+            return "Uzun vadeli dusunuyorsan degerlendirilebilir. Kisa vadede volatilite beklenebilir."
+        case .bullTrap:
+            return "Dikkatli ol. Teyit almadan pozisyon acma. Stop-loss kritik."
+        case .momentumBreakout:
+            return "Trend takibi icin uygun. Erken giris avantaj saglayabilir."
+        case .fallingKnife:
+            return "Dibi bekle. Teknik destek teyidi olmadan alim riskli."
+        case .sentimentDivergence:
+            return "Piyasanin nedeni arastir. Bilgi asimetrisi olabilir."
+        case .perfectStorm:
+            return "Guclu firsat. Portfoy dagilimiyla uyumlu ise degerlendirilebilir."
+        }
+    }
+    
+    var severityColor: String {
+        switch self {
+        case .deepValueBuy: return "#9B59B6"     // Mor
+        case .perfectStorm: return "#F39C12"     // Altin
+        case .momentumBreakout: return "#27AE60" // Yesil
+        case .bullTrap: return "#E67E22"         // Turuncu
+        case .fallingKnife: return "#E74C3C"     // Kirmizi
+        case .sentimentDivergence: return "#3498DB" // Mavi
+        }
+    }
 }
 
 // MARK: - Engine
