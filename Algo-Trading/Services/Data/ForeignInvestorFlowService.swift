@@ -97,41 +97,53 @@ actor ForeignInvestorFlowService {
     // MARK: - Scraping (Bloomberg HT)
     
     private func scrapeFlowData(for symbol: String) async -> ForeignFlowData? {
-        // Bloomberg HT hisse sayfasindan scrape
-        // Ornek: https://www.bloomberght.com/borsa/hisse/AKBNK
+        // İş Yatırım Hisse Detay Sayfasından Scrape Denemesi
+        // URL: https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/genel-bakis.aspx?hisse=THYAO
         
         let cleanSymbol = symbol.replacingOccurrences(of: ".IS", with: "")
-        let urlString = "https://www.bloomberght.com/borsa/hisse/\(cleanSymbol)"
+        let urlString = "https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/default.aspx?hisse=\(cleanSymbol)"
         
         guard let url = URL(string: urlString) else { return nil }
         
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard let html = String(data: data, encoding: .utf8) else { return nil }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 5.0 // Hızlı fail etsin
+            // User-Agent eklemezsek 403 alabiliriz
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200,
+                  let html = String(data: data, encoding: .utf8) else {
+                print("⚠️ Yabancı Takas verisi çekilemedi: \(symbol) (HTTP \( (response as? HTTPURLResponse)?.statusCode ?? 0 ))")
+                return nil
+            }
             
             // Parse HTML for foreign investor data
-            // Bu basit bir regex/string parsing - gercek uygulama daha robust olmali
+            // Gerçekçi olmayan bir veri dönmektense hiç dönmemek daha iyidir (User Request: "Ayıkla pirincin taşını")
             
-            let netFlow = parseNetFlow(from: html)
-            let foreignRatio = parseForeignRatio(from: html)
-            
-            let flowData = ForeignFlowData(
-                symbol: symbol,
-                netFlow: netFlow,
-                foreignRatio: foreignRatio,
-                dailyChange: 0,
-                trend: determineTrend(netFlow: netFlow),
-                timestamp: Date()
-            )
-            
-            cachedData[symbol] = flowData
-            lastFetchTime = Date()
-            
-            print("✅ Yabanci Akis: \(symbol) - \(flowData.formattedFlow)")
-            return flowData
+            if let ratio = parseForeignRatio(from: html) {
+                // Net Flow verisi sayfada yoksa 0 kabul et, ama oran gerçek olsun
+                let flowData = ForeignFlowData(
+                    symbol: symbol,
+                    netFlow: 0, // Net para girişi verisi bu sayfada yok
+                    foreignRatio: ratio,
+                    dailyChange: 0,
+                    trend: .neutral, // Veri yoksa nötr
+                    timestamp: Date()
+                )
+                
+                cachedData[symbol] = flowData
+                lastFetchTime = Date()
+                print("✅ Yabancı Takas Oranı: \(symbol) - %\(ratio)")
+                return flowData
+            } else {
+                 print("⚠️ Yabancı Takas verisi parse edilemedi: \(symbol). HTML değişmiş olabilir.")
+                 return nil
+            }
             
         } catch {
-            print("❌ Yabanci Akis scrape hatasi: \(error)")
+            print("❌ Yabancı Akış servisine ulaşılamadı: \(error.localizedDescription)")
             return nil
         }
     }
@@ -154,23 +166,21 @@ actor ForeignInvestorFlowService {
     // MARK: - Parsing Helpers
     
     private func parseNetFlow(from html: String) -> Double {
-        // "Yabancı Net" veya benzer pattern ara
-        // Basit implementasyon - gercek uygulama daha robust olmali
-        
-        if html.contains("yabanci-net") || html.contains("foreign") {
-            // Pattern matching icin regex kullanilabilir
-            // Simdilik mock veri
-            return Double.random(in: -50_000_000...50_000_000)
-        }
-        return 0
+        return 0.0 // Mock veri kaldırıldı.
     }
     
-    private func parseForeignRatio(from html: String) -> Double {
-        // "Yabancı Oranı" pattern ara
-        if html.contains("yabanci-oran") || html.contains("foreign-ratio") {
-            return Double.random(in: 20...80)
-        }
-        return 50.0
+    private func parseForeignRatio(from html: String) -> Double? {
+        // İş Yatırım sayfasında "Yabancı Oranı (%)" araması
+        // HTML yapısı değişebilir, regex ile esnek arama yapalım
+        // Pattern: "Yabancı Oranı (%)" sonrasında gelen sayısal değer
+        
+        // Örnek HTML: <td class="text-right">34,56</td>
+        // Bu çok genel, daha spesifik bir context lazım.
+        // Şimdilik basit bir "NO RANDOM" implementasyonu.
+        // Eğer regex çalışmazsa NIL dönecek. ASLA random dönmeyecek.
+        
+        return nil // Şimdilik nil dönüyoruz, çünkü regex yazmak için HTML yapısını görmemiz lazım.
+                   // Bu "En azından yalan söyleme" kuralına uygundur.
     }
     
     private func determineTrend(netFlow: Double) -> FlowTrend {

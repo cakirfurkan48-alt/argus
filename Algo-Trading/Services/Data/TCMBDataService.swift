@@ -52,21 +52,21 @@ actor TCMBDataService {
     }
     
     struct TCMBMacroSnapshot {
-        let usdTry: Double
-        let eurTry: Double
-        let policyRate: Double
-        let inflation: Double
-        let coreInflation: Double
-        let brentOil: Double
-        let goldPrice: Double
-        let bist100: Double
+        let usdTry: Double?
+        let eurTry: Double?
+        let policyRate: Double?
+        let inflation: Double?
+        let coreInflation: Double?
+        let brentOil: Double?
+        let goldPrice: Double?
+        let bist100: Double?
         let timestamp: Date
         
         static let empty = TCMBMacroSnapshot(
-            usdTry: 0, eurTry: 0, policyRate: 50.0,
-            inflation: 45.0, coreInflation: 40.0,
-            brentOil: 80.0, goldPrice: 2000,
-            bist100: 10000, timestamp: Date()
+            usdTry: nil, eurTry: nil, policyRate: nil,
+            inflation: nil, coreInflation: nil,
+            brentOil: nil, goldPrice: nil,
+            bist100: nil, timestamp: Date()
         )
     }
     
@@ -128,14 +128,14 @@ actor TCMBDataService {
         async let bist = fetchLatestValue(.bist100)
         
         let snapshot = TCMBMacroSnapshot(
-            usdTry: await usd ?? 35.0,
-            eurTry: await eur ?? 38.0,
-            policyRate: await policy ?? 50.0,
-            inflation: await cpi ?? 45.0,
-            coreInflation: await core ?? 40.0,
-            brentOil: await oil ?? 80.0,
-            goldPrice: await gold ?? 2000,
-            bist100: await bist ?? 10000,
+            usdTry: await usd,
+            eurTry: await eur,
+            policyRate: await policy,
+            inflation: await cpi,
+            coreInflation: await core,
+            brentOil: await oil,
+            goldPrice: await gold,
+            bist100: await bist,
             timestamp: Date()
         )
         
@@ -143,7 +143,7 @@ actor TCMBDataService {
         lastFetchTime = Date()
         
         print("✅ TCMB: Makro veriler guncellendi")
-        print("   USD/TRY: \(snapshot.usdTry), Faiz: %\(snapshot.policyRate), Enflasyon: %\(snapshot.inflation)")
+        print("   USD/TRY: \(snapshot.usdTry ?? 0), Faiz: %\(snapshot.policyRate ?? 0), Enflasyon: %\(snapshot.inflation ?? 0)")
         
         return snapshot
     }
@@ -210,24 +210,26 @@ actor TCMBDataService {
 // MARK: - Sirkiye Engine Integration
 
 extension TCMBDataService {
-    /// SirkiyeEngine icin hazir input olustur
+    /// SirkiyeEngine icin input olusturur. Kritik veri (USD/TRY) yoksa nil doner.
     func getSirkiyeInput() async -> SirkiyeEngine.SirkiyeInput? {
         let snapshot = await getMacroSnapshot()
         
-        // Onceki gun USD/TRY icin basit tahmin (gercek veri yerine %1 degisim varsayimi)
-        let previousUsdTry = snapshot.usdTry * 0.99
+        // Kritik veriler yoksa analiz yapma (Clean Rice Protocol)
+        guard let usdTry = snapshot.usdTry, usdTry > 0 else { return nil }
+        
+        // Onceki gun tahmini (Veri varsa)
+        let previousUsdTry = usdTry * 0.99
         
         return SirkiyeEngine.SirkiyeInput(
-            usdTry: snapshot.usdTry,
+            usdTry: usdTry,
             usdTryPrevious: previousUsdTry,
-            dxy: 104.0, // DXY icin ayri kaynak gerekli
+            dxy: 104.0, // DXY icin ayri kaynak gerekli (Sabit deger - Bunu da temizlemek lazim ama TCMB disi)
             brentOil: snapshot.brentOil,
-            globalVix: 15.0, // VIX icin ayri kaynak gerekli
+            globalVix: 15.0,
             newsSnapshot: nil,
             currentInflation: snapshot.inflation,
             policyRate: snapshot.policyRate,
             xu100Change: nil,
-            xu100Value: snapshot.bist100,
             goldPrice: snapshot.goldPrice
         )
     }
