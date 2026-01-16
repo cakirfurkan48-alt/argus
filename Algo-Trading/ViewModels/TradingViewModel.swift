@@ -99,6 +99,9 @@ class TradingViewModel: ObservableObject {
     @Published var dailyReport: String?
     @Published var weeklyReport: String?
     
+    @Published var activeBacktestResult: BacktestResult?
+    @Published var kapDisclosures: [String: [KAPDataService.KAPNews]] = [:] // Symbol -> KAP Haberleri
+    
     // BIST Reports
     @Published var bistDailyReport: String?
     @Published var bistWeeklyReport: String?
@@ -171,7 +174,7 @@ class TradingViewModel: ObservableObject {
     @Published var hermesMode: HermesMode = .full 
     
     // Generic Backtest State
-    @Published var activeBacktestResult: BacktestResult?
+
     @Published var isBacktesting: Bool = false 
     
     // Smart Data Fetching State

@@ -127,6 +127,16 @@ extension TradingViewModel {
             group.addTask {
                 await self.loadSarTsiLab(symbol: symbol)
             }
+            
+            // Task 5: KAP Disclosures (BIST Only)
+            group.addTask {
+                if symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(symbol) {
+                    let disclosures = await KAPDataService.shared.getDisclosures(for: symbol)
+                    await MainActor.run {
+                        self.kapDisclosures[symbol] = disclosures
+                    }
+                }
+            }
         }
         
         // 2. Gather Inputs (Now that data is likely fetched)

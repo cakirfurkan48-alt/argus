@@ -124,6 +124,21 @@ struct HermesSheetView: View {
                     .disabled(viewModel.isLoadingNews)
                     .padding(.horizontal)
                     
+                    // KAP Bildirimleri (Sadece BIST)
+                    if isBist, let disclosures = viewModel.kapDisclosures[symbol], !disclosures.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("KAP Bildirimleri", systemImage: "bell.badge.fill")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                                .padding(.horizontal)
+                            
+                            ForEach(disclosures) { news in
+                                KAPDisclosureRow(news: news)
+                            }
+                        }
+                        .padding(.bottom)
+                    }
+                    
                     let insights = viewModel.newsInsightsBySymbol[symbol] ?? []
                     if insights.isEmpty {
                         if viewModel.isLoadingNews {
@@ -139,6 +154,11 @@ struct HermesSheetView: View {
                                 .padding()
                         }
                     } else {
+                        Label("Haber Analizleri", systemImage: "brain.head.profile")
+                            .font(.headline)
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+
                         ForEach(insights) { insight in
                             NewsInsightRow(insight: insight)
                         }
@@ -183,5 +203,44 @@ struct NewsInsightRow: View {
         .background(Theme.secondaryBackground)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.1), radius: 2, y: 1)
+    }
+}
+
+struct KAPDisclosureRow: View {
+    let news: KAPDataService.KAPNews
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(news.type.rawValue)
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(hex: news.disclosureTypeColor).opacity(0.2))
+                    .foregroundColor(Color(hex: news.disclosureTypeColor))
+                    .cornerRadius(4)
+                
+                Spacer()
+                
+                Text(news.date.formatted(date: .numeric, time: .shortened))
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
+            
+            Text(news.title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(Theme.textPrimary)
+            
+            Text(news.summary)
+                .font(.caption)
+                .foregroundColor(Theme.textSecondary)
+                .lineLimit(3)
+        }
+        .padding()
+        .background(Theme.secondaryBackground)
+        .cornerRadius(12)
+        .padding(.horizontal)
     }
 }
