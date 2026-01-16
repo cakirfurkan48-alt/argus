@@ -206,6 +206,11 @@ final class DemeterEngine: ObservableObject {
         
         let advice = DemeterLabor.getAdvice(for: etf, score: total, shocks: shocks)
         
+        // Calculate confidence based on data quality
+        let dataPointsUsed = min(candles.count, 50) + min(spy.count, 200) + min(vix.count, 30)
+        let expectedDataPoints = 280.0 // 50 + 200 + 30
+        let calculatedConfidence = min(Double(dataPointsUsed) / expectedDataPoints, 1.0)
+        
         return DemeterScore(
             sector: etf,
             totalScore: total,
@@ -215,7 +220,7 @@ final class DemeterEngine: ObservableObject {
             breadthScore: breadthScore,
             activeShocks: shocks,
             driverContributions: contributions,
-            confidence: 1.0, // Mock confidence
+            confidence: calculatedConfidence, // Data-driven confidence
             advice: advice,
             generatedAt: Date()
         )
