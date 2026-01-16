@@ -1,39 +1,16 @@
 import SwiftUI
 
-// MARK: - THEME CONSTANTS
-struct SanctumTheme {
-    // Background: Deep Navy Slate (OLED Friendly)
-    static let bg = Color(hex: "0F172A") // Was Void Black
-    
-    // Core Palette (Bloomberg V2)
-    static let hologramBlue = Color(hex: "38BDF8") // Active/Focus
-    static let auroraGreen = Color(hex: "34D399") // Positive
-    static let titanGold = Color(hex: "FBBF24") // Mythic/Accent
-    static let ghostGrey = Color(hex: "94A3B8") // Passive Text
-    static let crimsonRed = Color(hex: "F43F5E") // Negative/Alert
-    
-    // Module Colors (Mapped to V2)
-    static let orionColor = hologramBlue     // Technical -> Hologram Blue
-    static let atlasColor = titanGold        // Fundamental -> Titan Gold
-    static let aetherColor = ghostGrey       // Macro -> Ghost Grey (Neutral base)
-    static let athenaColor = titanGold       // Smart Beta -> Titan Gold (Wisdom)
-    static let hermesColor = Color(hex: "FB923C") // News -> Orange (distinct from gold)
-    static let demeterColor = auroraGreen    // Sectors -> Aurora Green (Growth)
-    static let chironColor = Color.white     // System -> White (Ultimate contrast)
-    
-    // Glass Effect
-    static let glassMaterial = Material.thickMaterial
-}
-
 // MARK: - ARGUS SANCTUM VIEW
+/// Ana hisse detay ekrani - Argus Konseyi gorunum.
+/// Theme ve modul tipleri SanctumTypes.swift'te tanimli.
 struct ArgusSanctumView: View {
     let symbol: String
     @ObservedObject var viewModel: TradingViewModel
     @Environment(\.presentationMode) var presentationMode
     
     // State
-    @State private var selectedModule: ModuleType? = nil
-    @State private var selectedBistModule: BistModuleType? = nil
+    @State private var selectedModule: SanctumModuleType? = nil
+    @State private var selectedBistModule: SanctumBistModuleType? = nil
     @State private var pulseAnimation = false
     @State private var rotateOrbit = false
     @State private var showDecision = false
@@ -41,112 +18,10 @@ struct ArgusSanctumView: View {
     @State private var showChronosLabSheet = false
     @State private var showArgusLabSheet = false
     @State private var showObservatorySheet = false
-
-    // Modules enum for identification
-    enum ModuleType: String, CaseIterable {
-        case atlas = "ATLAS"
-        case orion = "ORION"
-        case aether = "AETHER"
-        case hermes = "HERMES"
-        case athena = "ATHENA"
-        case demeter = "DEMETER"
-        case chiron = "CHIRON"
-        case prometheus = "PROMETHEUS"
-        
-        var icon: String {
-            switch self {
-            case .atlas: return "building.columns.fill"
-            case .orion: return "chart.xyaxis.line"
-            case .aether: return "globe.europe.africa.fill"
-            case .hermes: return "newspaper.fill"
-            case .athena: return "brain.head.profile"
-            case .demeter: return "leaf.fill"
-            case .chiron: return "graduationcap.fill"
-            case .prometheus: return "crystal.ball"
-            }
-        }
-        
-        var color: Color {
-            switch self {
-            case .atlas: return SanctumTheme.atlasColor
-            case .orion: return SanctumTheme.orionColor
-            case .aether: return SanctumTheme.aetherColor
-            case .hermes: return SanctumTheme.hermesColor
-            case .athena: return SanctumTheme.athenaColor
-            case .demeter: return SanctumTheme.demeterColor
-            case .chiron: return SanctumTheme.chironColor
-            case .prometheus: return SanctumTheme.hologramBlue // Prometheus uses Technical color
-            }
-        }
-        
-        var description: String {
-            switch self {
-            case .atlas: return "Temel Analiz & Değerleme"
-            case .orion: return "Teknik İndikatörler"
-            case .aether: return "Makroekonomik Rejim"
-            case .hermes: return "Haber & Duygu Analizi"
-            case .athena: return "Akıllı Varyans (Smart Beta)"
-            case .demeter: return "Sektör & Endüstri Analizi"
-            case .chiron: return "Öğrenme & Risk Yönetimi"
-            case .prometheus: return "5 Günlük Fiyat Tahmini"
-            }
-        }
-    }
     
-    // BIST Özel Modüller
-    enum BistModuleType: String, CaseIterable {
-        case bilanço = "BİLANÇO"   // Atlas karşılığı - Temel Analiz
-        case grafik = "GRAFİK"     // Orion karşılığı - Teknik
-        case sirkiye = "SİRKİYE"   // Aether karşılığı - Makro/Politik
-        case kulis = "KULİS"       // Hermes karşılığı - Haberler
-        case faktor = "FAKTÖR"     // Athena karşılığı - Smart Beta
-        case vektor = "VEKTÖR"     // Prometheus karşılığı - Tahmin
-        case sektor = "SEKTÖR"     // Demeter karşılığı - Sektörel
-        case rejim = "REJİM"       // Chiron/Aether karşılığı - Piyasa Rejimi
-        case moneyflow = "PARA-AKIL" // Yeni: Para Girişi/Takas
-        
-        var icon: String {
-            switch self {
-            case .bilanço: return "building.columns.fill"
-            case .grafik: return "chart.xyaxis.line"
-            case .sirkiye: return "globe.europe.africa.fill"
-            case .kulis: return "newspaper.fill"
-            case .faktor: return "brain.head.profile"
-            case .vektor: return "crystal.ball"
-            case .sektor: return "leaf.fill" // Demeter
-            case .rejim: return "traffic.light" // Rejim
-            case .moneyflow: return "arrow.up.right.circle.fill"
-            }
-        }
-        
-        var color: Color {
-            switch self {
-            case .bilanço: return SanctumTheme.atlasColor
-            case .grafik: return SanctumTheme.orionColor
-            case .sirkiye: return SanctumTheme.aetherColor
-            case .kulis: return SanctumTheme.hermesColor
-            case .faktor: return SanctumTheme.athenaColor
-            case .vektor: return SanctumTheme.hologramBlue
-            case .sektor: return SanctumTheme.demeterColor
-            case .rejim: return SanctumTheme.crimsonRed
-            case .moneyflow: return Color.green
-            }
-        }
-        
-        var description: String {
-            switch self {
-            case .bilanço: return "Bilanço ve Temel Veriler"
-            case .grafik: return "Teknik Analiz ve İndikatörler"
-            case .sirkiye: return "Makroekonomik Göstergeler (Sirkiye)"
-            case .kulis: return "KAP Haberleri ve Duygu Analizi"
-            case .faktor: return "Faktör Yatırımı (Smart Beta)"
-            case .vektor: return "Yapay Zeka Fiyat Tahmini"
-            case .sektor: return "Sektörel Performans Analizi"
-            case .rejim: return "Piyasa Risk Rejimi"
-            case .moneyflow: return "Para Giriş/Çıkış ve Takas Analizi"
-            }
-        }
-    }
+    // Legacy type alias for internal references
+    typealias ModuleType = SanctumModuleType
+    typealias BistModuleType = SanctumBistModuleType
     
     // Orbit Animation Parameters
     // Only used for visualization, logic is in ViewModel
@@ -159,7 +34,7 @@ struct ArgusSanctumView: View {
     }
     
     var bistModules: [BistModuleType] = [
-        .grafik, .bilanço, .rejim, .sirkiye, .kulis, .moneyflow // Selected active modules
+        .grafik, .bilanco, .rejim, .sirkiye, .kulis, .moneyflow // Selected active modules
     ]
     var moduleCount: Double {
         Double(bistModules.count)
@@ -666,7 +541,7 @@ struct CenterCoreView: View {
         let isBist = symbol.uppercased().hasSuffix(".IS")
         
         // FILTERED MODULES (Strictly exclude Pantheon members)
-        let bistModules: [ArgusSanctumView.BistModuleType] = [.grafik, .bilanço, .rejim, .sirkiye, .kulis, .moneyflow]
+        let bistModules: [ArgusSanctumView.BistModuleType] = [.grafik, .bilanco, .rejim, .sirkiye, .kulis, .moneyflow]
         let globalModules: [ArgusSanctumView.ModuleType] = [.orion, .atlas, .aether, .hermes]
         
         let sectors = isBist ? bistModules.count : globalModules.count
@@ -681,7 +556,7 @@ struct CenterCoreView: View {
                 let module = bistModules[index]
                 switch module {
                 case .grafik: return "ORION"
-                case .bilanço: return "ATLAS"
+                case .bilanco: return "ATLAS"
                 case .sirkiye: return "AETHER"
                 case .kulis: return "HERMES"
                 case .moneyflow: return "POSEIDON"
@@ -2019,7 +1894,7 @@ struct BistHoloPanelView: View {
                 // Map BIST module to closest ArgusSystemEntity for help text
                 let entity: ArgusSystemEntity = {
                     switch module {
-                    case .bilanço: return .atlas
+                    case .bilanco: return .atlas
                     case .grafik: return .orion
                     case .sirkiye: return .aether
                     case .kulis: return .hermes
@@ -2148,7 +2023,7 @@ struct BistHoloPanelView: View {
                 )
             }
             
-        case .bilanço:
+        case .bilanco:
             // BIST Bilanco Egitim Gorunumu
             let bistSymbol = symbol.uppercased().hasSuffix(".IS") ? symbol : "\(symbol.uppercased()).IS"
             BISTBilancoDetailView(sembol: bistSymbol)
