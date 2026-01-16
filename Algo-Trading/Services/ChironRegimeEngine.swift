@@ -147,6 +147,18 @@ final class ChironRegimeEngine: ObservableObject, @unchecked Sendable {
     private func loadRegimeFromDisk() {
         if let data = UserDefaults.standard.data(forKey: regimePersistenceKey),
            let result = try? JSONDecoder().decode(ChironResult.self, from: data) {
+            
+            // VALIDATE: Ağırlık toplamı 0 ise bozuk veri - kullanma
+            let pulseSum = result.pulseWeights.orion + result.pulseWeights.atlas + result.pulseWeights.aether
+            let coreSum = result.coreWeights.orion + result.coreWeights.atlas + result.coreWeights.aether
+            
+            guard pulseSum > 0.01 && coreSum > 0.01 else {
+                print("⚠️ Chiron: Disk'ten gelen ağırlıklar bozuk (toplam=0), default kullanılıyor.")
+                // Bozuk veriyi siliyoruz
+                UserDefaults.standard.removeObject(forKey: regimePersistenceKey)
+                return
+            }
+            
             lock.lock()
             _lastGlobalResult = result
             lock.unlock()
