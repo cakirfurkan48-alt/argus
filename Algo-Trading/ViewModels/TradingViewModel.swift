@@ -295,6 +295,14 @@ class TradingViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        
+        // Transaction History senkronizasyonu (Raporlar için kritik!)
+        PortfolioEngine.shared.$transactions
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] transactions in
+                self?.transactionHistory = transactions
+            }
+            .store(in: &cancellables)
     }
     
     private func setupStreamingObservation() {
