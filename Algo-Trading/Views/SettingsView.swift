@@ -172,24 +172,85 @@ struct TerminalRow: View {
 // MARK: - MODULE: CORTEX (INTELLIGENCE)
 struct SettingsCortexView: View {
     @ObservedObject var settingsViewModel: SettingsViewModel
+    @AppStorage("tcmb_evds_api_key") private var tcmbApiKey: String = ""
+    @State private var isTestingConnection = false
+    @State private var connectionStatus: String = ""
     
     var body: some View {
         ZStack {
             Color.black.edgesIgnoringSafeArea(.all)
             ScrollView {
                 VStack(spacing: 24) {
-                    TerminalSection(title: "VERİ AKIŞLARI") {
+                    // TCMB EVDS API
+                    TerminalSection(title: "TCMB EVDS API") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("API KEY")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                Spacer()
+                                if tcmbApiKey.isEmpty {
+                                    Text("TANIMLANMADI")
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(.red)
+                                } else {
+                                    Text("TANIMLI")
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(.green)
+                                }
+                            }
+                            
+                            SecureField("TCMB API Key", text: $tcmbApiKey)
+                                .font(.system(size: 14, design: .monospaced))
+                                .textFieldStyle(.roundedBorder)
+                                .autocapitalization(.none)
+                            
+                            HStack {
+                                Button(action: testConnection) {
+                                    HStack {
+                                        if isTestingConnection {
+                                            ProgressView()
+                                                .scaleEffect(0.7)
+                                        } else {
+                                            Image(systemName: "network")
+                                        }
+                                        Text("BAGLANTI TEST")
+                                            .font(.system(size: 10, design: .monospaced))
+                                    }
+                                    .foregroundColor(.cyan)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.cyan.opacity(0.2))
+                                    .cornerRadius(6)
+                                }
+                                .disabled(tcmbApiKey.isEmpty || isTestingConnection)
+                                
+                                if !connectionStatus.isEmpty {
+                                    Text(connectionStatus)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(connectionStatus.contains("BASARILI") ? .green : .red)
+                                }
+                            }
+                            
+                            Text("evds2.tcmb.gov.tr adresinden ucretsiz alinir")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.gray.opacity(0.6))
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    
+                    TerminalSection(title: "VERI AKISLARI") {
                         NavigationLink(destination: ArgusDataHealthView()) {
-                            TerminalRow(label: "API GEÇİDİ", value: "AYARLAR", icon: "server.rack", color: .indigo)
+                            TerminalRow(label: "API GECIDI", value: "AYARLAR", icon: "server.rack", color: .indigo)
                         }
                     }
                     
-                    TerminalSection(title: "SİNİR AĞI") {
+                    TerminalSection(title: "SINIR AGI") {
                         NavigationLink(destination: ChironInsightsView(symbol: nil)) {
-                            TerminalRow(label: "CHIRON AĞIRLIKLARI", value: "İNCELE", icon: "network", color: .cyan)
+                            TerminalRow(label: "CHIRON AGIRLIKLARI", value: "INCELE", icon: "network", color: .cyan)
                         }
                         NavigationLink(destination: ArgusSimulatorView()) {
-                            TerminalRow(label: "SİMÜLASYON LAB", value: "BAŞLAT", icon: "flask.fill", color: .purple)
+                            TerminalRow(label: "SIMULASYON LAB", value: "BASLAT", icon: "flask.fill", color: .purple)
                         }
                     }
                 }
@@ -198,6 +259,19 @@ struct SettingsCortexView: View {
         }
         .navigationTitle("CORTEX")
         .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    private func testConnection() {
+        isTestingConnection = true
+        connectionStatus = ""
+        
+        Task {
+            let success = await TCMBDataService.shared.testConnection()
+            await MainActor.run {
+                isTestingConnection = false
+                connectionStatus = success ? "BASARILI" : "HATA"
+            }
+        }
     }
 }
 
