@@ -173,6 +173,7 @@ struct TerminalRow: View {
 struct SettingsCortexView: View {
     @ObservedObject var settingsViewModel: SettingsViewModel
     @AppStorage("tcmb_evds_api_key") private var tcmbApiKey: String = ""
+    @AppStorage("collectapi_key") private var collectApiKey: String = ""
     @State private var isTestingConnection = false
     @State private var connectionStatus: String = ""
     
@@ -233,6 +234,37 @@ struct SettingsCortexView: View {
                             }
                             
                             Text("evds2.tcmb.gov.tr adresinden ucretsiz alinir")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.gray.opacity(0.6))
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    
+                    // COLLECTAPI (BIST Verileri)
+                    TerminalSection(title: "COLLECTAPI // BIST") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("API KEY")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(.gray)
+                                Spacer()
+                                if collectApiKey.isEmpty {
+                                    Text("TANIMLANMADI")
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(.red)
+                                } else {
+                                    Text("TANIMLI")
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(.green)
+                                }
+                            }
+                            
+                            SecureField("CollectAPI Key", text: $collectApiKey)
+                                .font(.system(size: 14, design: .monospaced))
+                                .textFieldStyle(.roundedBorder)
+                                .autocapitalization(.none)
+                            
+                            Text("collectapi.com adresinden alinir (BIST hisse verileri)")
                                 .font(.system(size: 9, design: .monospaced))
                                 .foregroundColor(.gray.opacity(0.6))
                         }
