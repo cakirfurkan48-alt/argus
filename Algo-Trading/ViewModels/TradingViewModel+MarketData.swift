@@ -89,7 +89,7 @@ extension TradingViewModel {
             SignpostLogger.shared.end(log: SignpostLogger.shared.quotes, name: "BatchFetchQuotes", id: spanId)
             let duration = Date().timeIntervalSince(startTime)
             // Note: defer içinde async kullanılamıyor, DispatchQueue.main.async fire-and-forget için kabul edilebilir
-            DispatchQueue.main.async { self.lastBatchFetchDuration = duration }
+            DispatchQueue.main.async { DiagnosticsViewModel.shared.recordBatchFetchDuration(duration) }
         }
         let portfolioSymbols = portfolio.filter { $0.isOpen }.map { $0.symbol }
         let safeSymbols = SafeUniverseService.shared.universe.map { $0.symbol }
@@ -219,7 +219,7 @@ extension TradingViewModel {
                     await MainActor.run {
                         // Merge with existing patterns or replace? Replace simplifies things.
                         for (symbol, patterns) in detectedPatterns {
-                            self.patterns[symbol] = patterns
+                            SignalStateViewModel.shared.patterns[symbol] = patterns
                         }
                     }
                     print("📐 Orion V3: Detected patterns for \(detectedPatterns.count) symbols")

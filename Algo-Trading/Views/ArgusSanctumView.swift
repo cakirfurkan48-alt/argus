@@ -1465,7 +1465,7 @@ struct BistHoloPanelView: View {
         )
         
         await MainActor.run {
-            viewModel.grandDecisions[symbol] = decision
+            SignalStateViewModel.shared.grandDecisions[symbol] = decision
             print("✅ BistHoloPanel: \(symbol) için BIST kararı (Sirkülasyon) tazelendi.")
         }
     }

@@ -18,7 +18,9 @@ class TradingViewModel: ObservableObject {
     // Terminal Optimized Data Source
     @Published var terminalItems: [TerminalItem] = []
     
-    @Published var orionAnalysis: [String: MultiTimeframeAnalysis] = [:] // Orion 2.0 State
+    // MARK: - Signal Facade (Refactored Phase 4)
+    var orionAnalysis: [String: MultiTimeframeAnalysis] { SignalStateViewModel.shared.orionAnalysis }
+
 
     // Legacy Support (Mapped to Daily analysis)
     var orionScores: [String: OrionScoreResult] {
@@ -73,7 +75,8 @@ class TradingViewModel: ObservableObject {
     
     @Published var quotes: [String: Quote] = [:]
     @Published var candles: [String: [Candle]] = [:]
-    @Published var patterns: [String: [OrionChartPattern]] = [:] // Orion V3 Pattern Store
+    var patterns: [String: [OrionChartPattern]] { SignalStateViewModel.shared.patterns }
+
     @Published var portfolio: [Trade] = [] {
         didSet {
             savePortfolio()
@@ -122,11 +125,15 @@ class TradingViewModel: ObservableObject {
     @Published var bistAtmosphere: AetherDecision?
     @Published var bistAtmosphereLastUpdated: Date?
     
-    // Auto-Pilot State
-    @AppStorage("isAutoPilotEnabled") var isAutoPilotEnabled: Bool = false
-    var autoPilotTimer: Timer?
-    @Published var autoPilotLogs: [String] = [] 
-    @Published var lastAction: String = "" // For UI feedback
+    // MARK: - Execution Facade (Refactored Phase 4)
+    var isAutoPilotEnabled: Bool {
+        get { ExecutionStateViewModel.shared.isAutoPilotEnabled }
+        set { ExecutionStateViewModel.shared.isAutoPilotEnabled = newValue }
+    }
+    // autoPilotTimer REMOVED (Handled by ExecVM)
+    var autoPilotLogs: [String] { ExecutionStateViewModel.shared.autoPilotLogs }
+    @Published var lastAction: String = "" // Keep local for now? Or move? Keep for UI feedback.
+
     
     // Navigation State
     @Published var selectedSymbolForDetail: String? = nil
@@ -145,10 +152,12 @@ class TradingViewModel: ObservableObject {
     @Published var scoutLogs: [ScoutLog] = [] // Detailed logs of why trades were accepted/rejected
     
     // Trade Brain Plan Execution Alerts
-    @Published var planAlerts: [TradeBrainAlert] = [] // Plan triggered notifications
+    var planAlerts: [TradeBrainAlert] { ExecutionStateViewModel.shared.planAlerts }
+
     
     // AGORA (Execution Governor V2)
-    @Published var agoraSnapshots: [DecisionSnapshot] = [] // History of decisions (Approved & Rejected)
+    var agoraSnapshots: [DecisionSnapshot] { ExecutionStateViewModel.shared.agoraSnapshots }
+
 
 
     var lastTradeTimes: [String: Date] = [:] // Symbol -> Date
@@ -224,6 +233,7 @@ class TradingViewModel: ObservableObject {
 
     
     // Search State
+    internal var autoPilotTimer: Timer?
     
     // MARK: - Demeter Integration
     
@@ -253,20 +263,26 @@ class TradingViewModel: ObservableObject {
     }
     @Published var searchResults: [SearchResult] = []
     // @Published var topLosers: [(String, Quote)] = [] // Removed duplicate
-    @Published var athenaResults: [String: AthenaFactorResult] = [:] // Added Athena State
+    var athenaResults: [String: AthenaFactorResult] { SignalStateViewModel.shared.athenaResults }
     var searchTask: Task<Void, Never>?
     var isBootstrapped = false // Prevent double-work
     
-    @Published var dataHealthBySymbol: [String: DataHealth] = [:] // Pillar 1: Data Health
+    // MARK: - Diagnostics Facade (Refactored Phase 4)
+    var dataHealthBySymbol: [String: DataHealth] {
+        get { DiagnosticsViewModel.shared.dataHealthBySymbol }
+        set { DiagnosticsViewModel.shared.dataHealthBySymbol = newValue }
+    }
     var cancellables = Set<AnyCancellable>() // Combine Subscriptions
 
     // Performance Metrics (Freeze Detective)
-    @Published var bootstrapDuration: Double = 0.0
-    @Published var lastBatchFetchDuration: Double = 0.0
+    var bootstrapDuration: Double { DiagnosticsViewModel.shared.bootstrapDuration }
+    var lastBatchFetchDuration: Double { DiagnosticsViewModel.shared.lastBatchFetchDuration }
     
     init() {
         // Init is now lightweight.
         loadWatchlist() // Ensure watchlist is ready immediately (Real Data)
+        
+        setupViewModelLinking()
         
         // MIGRATION: PortfolioEngine'den veri çek (Artık tek kaynak PortfolioEngine)
         setupPortfolioEngineBridge()
@@ -283,6 +299,30 @@ class TradingViewModel: ObservableObject {
         
         setupTradeBrainObservers()
     }
+    
+    private func setupViewModelLinking() {
+        // MARK: - DiagnosticsViewModel Bridge
+        DiagnosticsViewModel.shared.$dataHealthBySymbol
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+            
+        DiagnosticsViewModel.shared.$bootstrapDuration
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+            
+        SignalStateViewModel.shared.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+            
+        // MARK: - ExecutionStateViewModel Bridge
+        ExecutionStateViewModel.shared.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+    }
+
+
     
     /// PortfolioEngine ile senkronizasyon - Tek Kaynak köprüsü
     private func setupPortfolioEngineBridge() {
@@ -348,14 +388,8 @@ class TradingViewModel: ObservableObject {
             }
             .store(in: &cancellables)
             
-        // ORION STORE BINDING (Phase 4 Refactor - MTF)
-        // Bind Multi-Timeframe Analysis from the store
-        OrionStore.shared.$analysis
-            .receive(on: RunLoop.main)
-            .sink { [weak self] analysis in
-                self?.orionAnalysis = analysis
-            }
-            .store(in: &cancellables)
+        // ORION STORE BINDING REMOVED (Handled by SignalStateViewModel Facade)
+
     }
     
     // MARK: - Trade Brain Execution Handlers
@@ -483,8 +517,7 @@ class TradingViewModel: ObservableObject {
 
     
     func stopAutoPilotTimer() {
-        autoPilotTimer?.invalidate()
-        autoPilotTimer = nil
+        // AutoPilot is now handled by ExecutionStateViewModel
     }
     
     // MARK: - Data Export (For AI Analysis)
@@ -540,10 +573,9 @@ class TradingViewModel: ObservableObject {
     }
 
     private func setupOrionBindings() {
-        OrionStore.shared.$analysis
-            .receive(on: RunLoop.main)
-            .assign(to: &$orionAnalysis)
+        // Handled by SignalStateViewModel Facade
     }
+
     
     // MARK: - Fundamental Score
     
@@ -614,7 +646,8 @@ class TradingViewModel: ObservableObject {
         )
     }
     @Published var argusDecisions: [String: ArgusDecisionResult] = [:]
-    @Published var grandDecisions: [String: ArgusGrandDecision] = [:] // NEW: Grand Council Decisions
+    var grandDecisions: [String: ArgusGrandDecision] { SignalStateViewModel.shared.grandDecisions }
+
     @Published var agoraTraces: [String: AgoraTrace] = [:] // AGORA V2 TRACE STORE
     @Published var argusExplanations: [String: ArgusExplanation] = [:]
     
@@ -914,7 +947,7 @@ class TradingViewModel: ObservableObject {
             if snapshot.locks.isLocked {
                 print("🛑 AGORA BLOCKED BUY: \(snapshot.reasonOneLiner)")
                 self.lastAction = "⚠️ İşlem Engellendi: \(snapshot.reasonOneLiner)"
-                self.agoraSnapshots.append(snapshot) // Log the rejection
+                ExecutionStateViewModel.shared.addAgoraSnapshot(snapshot) // Log the rejection
                 return // ABORT TRADE
             }
         }
@@ -1211,7 +1244,7 @@ class TradingViewModel: ObservableObject {
             if snapshot.locks.isLocked {
                  print("🛑 AGORA BLOCKED SELL: \(snapshot.reasonOneLiner)")
                  self.lastAction = "⚠️ İşlem Engellendi: \(snapshot.reasonOneLiner)"
-                 self.agoraSnapshots.append(snapshot)
+                 ExecutionStateViewModel.shared.addAgoraSnapshot(snapshot)
                  return
             }
         }

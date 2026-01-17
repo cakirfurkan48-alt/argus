@@ -40,6 +40,10 @@ final class ExecutionStateViewModel: ObservableObject {
     /// Active scan symbols
     @Published var activeScanSymbols: [String] = []
     
+    /// AutoPilot Execution Logs
+    @Published var autoPilotLogs: [String] = []
+
+    
     /// Trade Brain alerts
     @Published var planAlerts: [TradeBrainAlert] = []
     

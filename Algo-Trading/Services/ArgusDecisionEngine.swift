@@ -503,13 +503,7 @@ struct ArgusDecisionEngine {
                  // For V0, let's keep it simple or add if easy.
             }
 
-            await ChironJournalService.shared.logDecision(
-                trace: trace,
-                opinions: allOpinions,
-                marketPrice: marketData?.price ?? 0.0,
-                tier: finalTier,
-                quality: consensusQuality
-            )
+            // Legacy Chiron Journal Removed (Phase 4 Refactor)
         }
         
         return (trace, legacy)

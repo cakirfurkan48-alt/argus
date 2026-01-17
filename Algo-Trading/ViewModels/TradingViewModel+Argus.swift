@@ -330,7 +330,7 @@ extension TradingViewModel {
             atlasResult: fullAtlas,
             candles: symbolCandles
         )
-        self.athenaResults[symbol] = athenaResult
+        SignalStateViewModel.shared.athenaResults[symbol] = athenaResult
         
         let athenaScore = athenaResult.factorScore
         
@@ -490,7 +490,7 @@ extension TradingViewModel {
             lastTradeTime: lastTradeTimes[symbol],
             lastActionPrice: nil 
         )
-        self.agoraSnapshots.append(snapshot)
+        ExecutionStateViewModel.shared.addAgoraSnapshot(snapshot)
         
         // Log to Argus Lab for Performance Tracking
         if let quote = quotes[symbol] {
@@ -588,7 +588,7 @@ extension TradingViewModel {
              )
              
              await MainActor.run {
-                 self.grandDecisions[symbol] = grandDecision
+                 SignalStateViewModel.shared.grandDecisions[symbol] = grandDecision
              }
         }
     }
@@ -1104,7 +1104,7 @@ extension TradingViewModel {
         )
         
         await MainActor.run {
-            self.athenaResults[symbol] = athenaResult
+            SignalStateViewModel.shared.athenaResults[symbol] = athenaResult
         }
         
         print("🧠 Athena: \(symbol) analizi tamamlandı - Skor: \(athenaResult.factorScore)")

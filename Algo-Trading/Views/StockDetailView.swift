@@ -288,9 +288,9 @@ struct StockDetailContent: View {
             engine: .pulse
         )
         
-        // Update UI
+        // Update UI directly via SignalStateViewModel (Source of Truth)
         await MainActor.run {
-            viewModel.grandDecisions[symbol] = decision
+            SignalStateViewModel.shared.grandDecisions[symbol] = decision
         }
     }
     

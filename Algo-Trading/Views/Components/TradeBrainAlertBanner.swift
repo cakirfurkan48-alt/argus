@@ -114,7 +114,7 @@ struct TradeBrainAlertListView: View {
                                 TradeBrainAlertBanner(
                                     alert: alert,
                                     onDismiss: {
-                                        viewModel.planAlerts.removeAll { $0.id == alert.id }
+                                        ExecutionStateViewModel.shared.planAlerts.removeAll { $0.id == alert.id }
                                     }
                                 )
                             }
@@ -129,7 +129,7 @@ struct TradeBrainAlertListView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if !viewModel.planAlerts.isEmpty {
                         Button("Tümünü Temizle") {
-                            viewModel.planAlerts.removeAll()
+                            ExecutionStateViewModel.shared.planAlerts.removeAll()
                         }
                         .foregroundColor(.red)
                     }

@@ -34,34 +34,34 @@ struct SettingsView: View {
                         // MARK: - MODULE 1: CORTEX
                         TerminalSection(title: "CORTEX // ZEKA & ANALİZ") {
                             NavigationLink(destination: SettingsCortexView(settingsViewModel: settingsViewModel)) {
-                                TerminalRow(label: "VERİ AKIŞI & API", value: "BAĞLI", icon: "server.rack", color: .cyan)
+                                ArgusTerminalRow(label: "VERİ AKIŞI & API", value: "BAĞLI", icon: "server.rack", color: .cyan)
                             }
                             NavigationLink(destination: ChironInsightsView(symbol: nil)) {
-                                TerminalRow(label: "CHIRON ÖĞRENME", value: "AKTİF", icon: "brain", color: .cyan)
+                                ArgusTerminalRow(label: "CHIRON ÖĞRENME", value: "AKTİF", icon: "brain", color: .cyan)
                             }
                             NavigationLink(destination: ArgusSimulatorView()) {
-                                TerminalRow(label: "SİMÜLASYON LAB", value: "HAZIR", icon: "flask", color: .purple)
+                                ArgusTerminalRow(label: "SİMÜLASYON LAB", value: "HAZIR", icon: "flask", color: .purple)
                             }
                         }
                         
                         // MARK: - MODULE 2: KERNEL
                         TerminalSection(title: "KERNEL // MOTOR AYARLARI") {
                             NavigationLink(destination: ArgusKernelView()) {
-                                TerminalRow(label: "ÇEKİRDEK PARAMETRELERİ", value: "ÖZEL", icon: "cpu", color: .orange)
+                                ArgusTerminalRow(label: "ÇEKİRDEK PARAMETRELERİ", value: "ÖZEL", icon: "cpu", color: .orange)
                             }
                         }
                         
                         // MARK: - MODULE 3: COMMS
                         TerminalSection(title: "COMMS // İLETİŞİM") {
                             NavigationLink(destination: SettingsCommsView(settingsViewModel: settingsViewModel)) {
-                                TerminalRow(label: "BİLDİRİMLER", value: "AÇIK", icon: "antenna.radiowaves.left.and.right", color: .green)
+                                ArgusTerminalRow(label: "BİLDİRİMLER", value: "AÇIK", icon: "antenna.radiowaves.left.and.right", color: .green)
                             }
                         }
                         
                         // MARK: - MODULE 4: CODEX
                         TerminalSection(title: "CODEX // KAYITLAR") {
                             NavigationLink(destination: SettingsCodexView(settingsViewModel: settingsViewModel)) {
-                                TerminalRow(label: "SİSTEM LOGLARI", value: "GÖRÜNTÜLE", icon: "doc.text", color: .gray)
+                                ArgusTerminalRow(label: "SİSTEM LOGLARI", value: "GÖRÜNTÜLE", icon: "doc.text", color: .gray)
                             }
                         }
                         
@@ -128,11 +128,18 @@ struct TerminalSection<Content: View>: View {
 }
 
 // MARK: - UI COMPONENT: TERMINAL ROW
-struct TerminalRow: View {
+struct ArgusTerminalRow: View {
     let label: String
     let value: String?
     let icon: String
     let color: Color
+    
+    init(label: String, value: String?, icon: String, color: Color) {
+        self.label = label
+        self.value = value
+        self.icon = icon
+        self.color = color
+    }
     
     var body: some View {
         HStack(spacing: 12) {
@@ -273,16 +280,16 @@ struct SettingsCortexView: View {
                     
                     TerminalSection(title: "VERI AKISLARI") {
                         NavigationLink(destination: ArgusDataHealthView()) {
-                            TerminalRow(label: "API GECIDI", value: "AYARLAR", icon: "server.rack", color: .indigo)
+                            ArgusTerminalRow(label: "API GECIDI", value: "AYARLAR", icon: "server.rack", color: .indigo)
                         }
                     }
                     
                     TerminalSection(title: "SINIR AGI") {
                         NavigationLink(destination: ChironInsightsView(symbol: nil)) {
-                            TerminalRow(label: "CHIRON AGIRLIKLARI", value: "INCELE", icon: "network", color: .cyan)
+                            ArgusTerminalRow(label: "CHIRON AGIRLIKLARI", value: "INCELE", icon: "network", color: .cyan)
                         }
                         NavigationLink(destination: ArgusSimulatorView()) {
-                            TerminalRow(label: "SIMULASYON LAB", value: "BASLAT", icon: "flask.fill", color: .purple)
+                            ArgusTerminalRow(label: "SIMULASYON LAB", value: "BASLAT", icon: "flask.fill", color: .purple)
                         }
                     }
                 }
@@ -418,13 +425,13 @@ struct SettingsCommsView: View {
                     
                     TerminalSection(title: "WIDGET'LAR") {
                         NavigationLink(destination: WidgetListSettingsView()) {
-                            TerminalRow(label: "ANA EKRAN WIDGET", value: "DÜZENLE", icon: "square.grid.2x2", color: .blue)
+                            ArgusTerminalRow(label: "ANA EKRAN WIDGET", value: "DÜZENLE", icon: "square.grid.2x2", color: .blue)
                         }
                     }
                     
                     TerminalSection(title: "FİYAT ALARMLARI") {
                          NavigationLink(destination: PriceAlertSettingsView()) {
-                             TerminalRow(label: "İZLEME LİSTESİ ALARMLARI", value: "DÜZENLE", icon: "exclamationmark.bubble", color: .red)
+                             ArgusTerminalRow(label: "İZLEME LİSTESİ ALARMLARI", value: "DÜZENLE", icon: "exclamationmark.bubble", color: .red)
                          }
                     }
                 }
@@ -449,13 +456,13 @@ struct SettingsCodexView: View {
                 VStack(spacing: 24) {
                     TerminalSection(title: "YASAL BELGELER") {
                         NavigationLink(destination: LegalDocumentView(document: settingsViewModel.privacyPolicy)) {
-                            TerminalRow(label: "GİZLİLİK POLİTİKASI", value: nil, icon: "hand.raised", color: .gray)
+                            ArgusTerminalRow(label: "GİZLİLİK POLİTİKASI", value: nil, icon: "hand.raised", color: .gray)
                         }
                         NavigationLink(destination: LegalDocumentView(document: settingsViewModel.termsOfUse)) {
-                             TerminalRow(label: "KULLANIM KOŞULLARI", value: nil, icon: "doc.text", color: .gray)
+                             ArgusTerminalRow(label: "KULLANIM KOŞULLARI", value: nil, icon: "doc.text", color: .gray)
                         }
                         NavigationLink(destination: LegalDocumentView(document: settingsViewModel.riskDisclosure)) {
-                             TerminalRow(label: "RİSK BİLDİRİMİ", value: nil, icon: "exclamationmark.triangle", color: .orange)
+                             ArgusTerminalRow(label: "RİSK BİLDİRİMİ", value: nil, icon: "exclamationmark.triangle", color: .orange)
                          }
                     }
                     
@@ -475,7 +482,7 @@ struct SettingsCodexView: View {
                                 }
                             }
                         }) {
-                            TerminalRow(label: "SİSTEM DÖKÜMÜ İNDİR", value: "ÇALIŞTIR", icon: "arrow.up.doc", color: .blue)
+                            ArgusTerminalRow(label: "SİSTEM DÖKÜMÜ İNDİR", value: "ÇALIŞTIR", icon: "arrow.up.doc", color: .blue)
                         }
                         .sheet(isPresented: $showingExportSheet) {
                             if let url = exportURL {

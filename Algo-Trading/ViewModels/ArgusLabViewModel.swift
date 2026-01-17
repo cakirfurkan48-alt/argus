@@ -26,28 +26,6 @@ class ArgusLabViewModel: ObservableObject {
 
 // MARK: - Data Models
 
-struct TradeRecord: Identifiable, Codable {
-    let id: UUID
-    let symbol: String
-    let status: String // "OPEN" or "CLOSED"
-    let entryDate: Date
-    let entryPrice: Double
-    let entryReason: String?
-    let exitDate: Date?
-    let exitPrice: Double?
-    let pnlPercent: Double?
-    let dominantSignal: String?
-    let decisionId: String?
-    
-    // Computed
-    var isOpen: Bool { status == "OPEN" }
-}
+// MARK: - Data Models
+// Moved to ForwardTestModels.swift (Phase 4 Refactoring)
 
-struct LessonRecord: Identifiable, Codable {
-    let id: UUID
-    let tradeId: UUID
-    let createdAt: Date
-    let lessonText: String
-    let deviationPercent: Double?
-    let weightChanges: [String: Double]?
-}

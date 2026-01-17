@@ -218,7 +218,7 @@ struct PortfolioView: View {
                         TradeBrainAlertBanner(
                             alert: latestAlert,
                             onDismiss: {
-                                viewModel.planAlerts.removeFirst()
+                                ExecutionStateViewModel.shared.planAlerts.removeFirst()
                             }
                         )
                         .padding(.horizontal)

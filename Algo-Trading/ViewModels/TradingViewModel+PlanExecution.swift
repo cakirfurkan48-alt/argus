@@ -178,11 +178,11 @@ extension TradingViewModel {
             priority: .medium
         )
         
-        planAlerts.append(alert)
+        ExecutionStateViewModel.shared.planAlerts.append(alert)
         
         // 50'den fazla alert varsa eskileri sil
-        if planAlerts.count > 50 {
-            planAlerts = Array(planAlerts.suffix(50))
+        if ExecutionStateViewModel.shared.planAlerts.count > 50 {
+            ExecutionStateViewModel.shared.planAlerts = Array(ExecutionStateViewModel.shared.planAlerts.suffix(50))
         }
         
         print("🔔 Trade Brain Alert: \(symbol) - \(message)")

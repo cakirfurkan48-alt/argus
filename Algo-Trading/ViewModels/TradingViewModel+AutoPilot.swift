@@ -137,7 +137,7 @@ extension TradingViewModel {
                         )
                         
                         await MainActor.run {
-                            self.grandDecisions[signal.symbol] = decision
+                            SignalStateViewModel.shared.grandDecisions[signal.symbol] = decision
                         }
                         
                         print("🏛️ Scout: \(signal.symbol) için Grand Council kararı alındı: \(decision.action.rawValue)")
@@ -226,7 +226,7 @@ extension TradingViewModel {
             if snapshot.locks.isLocked {
                 print("🛑 AGORA BLOCKED SIGNAL: \(snapshot.reasonOneLiner)")
                 // Log rejection
-                self.agoraSnapshots.append(snapshot)
+                ExecutionStateViewModel.shared.addAgoraSnapshot(snapshot)
                 return 
             }
         } else {
@@ -590,6 +590,6 @@ extension TradingViewModel {
     @MainActor
     private func executeExit(trade: Trade, reason: String, price: Double) async {
         self.sell(tradeId: trade.id, currentPrice: price, reason: reason, source: .autoPilot)
-        self.autoPilotLogs.append("🤖 OTO ÇIKIŞ: \(trade.symbol) - \(reason)")
+        ExecutionStateViewModel.shared.autoPilotLogs.append("🤖 OTO ÇIKIŞ: \(trade.symbol) - \(reason)")
     }
 }

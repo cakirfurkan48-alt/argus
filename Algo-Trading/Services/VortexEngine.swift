@@ -106,7 +106,11 @@ class VortexEngine: ObservableObject {
             ], isActive: true)
             
         case .technicalSwing, .undefined:
-            let scenarios = SmartPlanGenerator.shared.generatePlan(entryPrice: trade.entryPrice, entrySnapshot: snapshot, style: .swingTrade, grandDecision: decision)
+            // Use Adaptive Planning based on Market Regime (Phase 4 Integration)
+            let result = SmartPlanGenerator.shared.generateAdaptivePlan(entryPrice: trade.entryPrice, entrySnapshot: snapshot, grandDecision: decision)
+            let scenarios = result.scenarios
+            print("🌪️ Adaptive Plan Styles: \(result.styleUsed.rawValue) - Reason: \(result.reason)")
+            
             bullish = extract(scenarios, type: .bullish)
             bearish = extract(scenarios, type: .bearish)
             neutral = extract(scenarios, type: .neutral)

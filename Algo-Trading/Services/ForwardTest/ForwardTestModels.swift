@@ -160,3 +160,60 @@ struct LearningEvent: Codable, Identifiable, Sendable {
     }
 }
 
+// MARK: - Extracted Models (Phase 4 Refactoring)
+
+struct TradeRecord: Identifiable, Codable, Sendable {
+    let id: UUID
+    let symbol: String
+    let status: String // "OPEN" or "CLOSED"
+    let entryDate: Date
+    let entryPrice: Double
+    let entryReason: String?
+    let exitDate: Date?
+    let exitPrice: Double?
+    let pnlPercent: Double?
+    let dominantSignal: String?
+    let decisionId: String?
+    
+    // Computed
+    var isOpen: Bool { status == "OPEN" }
+}
+
+struct LessonRecord: Identifiable, Codable, Sendable {
+    let id: UUID
+    let tradeId: UUID
+    let createdAt: Date
+    let lessonText: String
+    let deviationPercent: Double?
+    let weightChanges: [String: Double]?
+}
+
+struct DecisionCard: Identifiable, Sendable {
+    let id: UUID
+    let symbol: String
+    let market: String           // "US" or "BIST"
+    let timestamp: Date
+    let action: String           // "BUY", "SELL", "HOLD"
+    let confidence: Double       // 0.0 - 1.0
+    let topFactors: [Factor]
+    let horizon: DecisionHorizon
+    let outcome: DecisionOutcome
+    let actualPnl: Double?
+    
+    var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM HH:mm"
+        formatter.locale = Locale(identifier: "tr_TR")
+        return formatter.string(from: timestamp)
+    }
+    
+    // UI Logic moved to View Extensions
+
+    
+    // Sub-struct
+    struct Factor: Sendable {
+        let name: String
+        let emoji: String
+        let value: Double
+    }
+}

@@ -25,7 +25,7 @@ final class SignalStateViewModel: ObservableObject {
     @Published var phoenixResults: [String: PhoenixAdvice] = [:]
     
     /// Athena Factor Scores
-    @Published var athenaScores: [String: AthenaFactorResult] = [:]
+    @Published var athenaResults: [String: AthenaFactorResult] = [:]
     
     /// Demeter Sector Scores
     @Published var demeterScores: [DemeterScore] = []
