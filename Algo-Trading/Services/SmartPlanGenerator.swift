@@ -52,6 +52,52 @@ class SmartPlanGenerator {
         }
     }
     
+    // MARK: - Chiron Regime-Based Style Selection (NEW - Phase 3)
+    
+    /// Dynamically selects plan style based on Chiron market regime
+    /// Returns recommended style and reasoning
+    func recommendStyleForRegime() -> (style: PlanStyle, reason: String) {
+        let regime = ChironRegimeEngine.shared.globalResult.regime
+        
+        switch regime {
+        case .trend:
+            // Strong trend - use momentum trailing stop
+            return (.momentum, "Trend rejimi tespit edildi. Trailing stop ile trend takibi önerilir.")
+            
+        case .chop:
+            // Range-bound - be conservative, quick exits
+            return (.conservative, "Yatay piyasa. Erken kâr alımı ve dar stop önerilir.")
+            
+        case .riskOff:
+            // Defensive - be very conservative
+            return (.conservative, "Riskten kaçış modu. Minimum risk ile erken çıkış önerilir.")
+            
+        case .newsShock:
+            // High volatility event - aggressive with wider stops
+            return (.aggressive, "Haber şoku. Geniş ATR çarpanları kullanılıyor.")
+            
+        case .neutral:
+            // Default balanced
+            return (.balanced, "Nötr piyasa. Dengeli plan önerilir.")
+        }
+    }
+    
+    /// Generate plan with automatic regime-based style selection
+    func generateAdaptivePlan(
+        entryPrice: Double,
+        entrySnapshot: EntrySnapshot,
+        grandDecision: ArgusGrandDecision
+    ) -> (scenarios: [Scenario], styleUsed: PlanStyle, reason: String) {
+        let recommendation = recommendStyleForRegime()
+        let scenarios = generatePlan(
+            entryPrice: entryPrice,
+            entrySnapshot: entrySnapshot,
+            style: recommendation.style,
+            grandDecision: grandDecision
+        )
+        return (scenarios, recommendation.style, recommendation.reason)
+    }
+    
     // MARK: - Conservative Plan
     
     private func conservativePlan(entry: Double, atr: Double, snapshot: EntrySnapshot) -> [Scenario] {
