@@ -425,8 +425,16 @@ struct HoloPanelView: View {
             
         case .orion:
             VStack(spacing: 16) {
-                // 🆕 Eğitici Orion Detay Görünümü
-                if let orion = viewModel.orionScores[symbol] {
+                // ORION MOTHERBOARD (V2 - Multi-Timeframe)
+                if let analysis = viewModel.orionAnalysis[symbol] {
+                    // Motherboard View (Uses GeometryReader internally, so we must frame it)
+                    OrionMotherboardView(analysis: analysis, symbol: symbol)
+                        .frame(height: 600) // Fixed height to play nice with ScrollView
+                        .cornerRadius(12)
+                        .padding(.horizontal, 4) // Slight inset
+                }
+                // ORION LEGACY (V1/1.5 - Single Timeframe Fallback)
+                else if let orion = viewModel.orionScores[symbol] {
                     // NEW: Technical Consensus Dashboard
                     if let consensus = orion.signalBreakdown {
                         TechnicalConsensusView(breakdown: consensus)
@@ -449,8 +457,11 @@ struct HoloPanelView: View {
                     .frame(maxWidth: .infinity, minHeight: 200)
                 }
                 
-                // NEW: Prometheus - 5 Day Forecast
-                if let candles = viewModel.candles[symbol], candles.count >= 30 {
+                // NEW: Prometheus - 5 Day Forecast (Shared across versions)
+                if let candles = viewModel.candles[symbol], candles.count >= 30, viewModel.orionAnalysis[symbol] == nil {
+                    // Only show simpler components if not in Motherboard mode (Motherboard is immersive)
+                    // Or keep it as "Forward Look" below the board?
+                    // Let's keep it below for now.
                     ForecastCard(
                         symbol: symbol,
                         historicalPrices: candles.map { $0.close }
