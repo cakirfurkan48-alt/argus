@@ -1,23 +1,28 @@
 import SwiftUI
 
 // MARK: - ORION MOTHERBOARD VIEW (Full-Screen Circuit Board)
-// Professional Terminal Design - No Emojis, Educational, Interactive
+// Redesigned to match "Cyberpunk Dark" aesthetic with detailed module drill-down.
 
 struct OrionMotherboardView: View {
     let analysis: MultiTimeframeAnalysis
     let symbol: String
+    let candles: [Candle] // Data for charts
     
     @State private var selectedTimeframe: TimeframeMode = .daily
     @State private var selectedNode: CircuitNode? = nil
     @State private var flowPhase: CGFloat = 0
     
-    // Theme
-    private let boardColor = Color(red: 0.02, green: 0.02, blue: 0.06)
-    private let traceColor = Color(red: 0.1, green: 0.1, blue: 0.15)
+    // Theme matching the Dark Detail View
+    // Background: Deep Dark Blue/Black
+    private let boardColor = Color(red: 0.02, green: 0.02, blue: 0.04)
+    private let cardBg = Color(red: 0.05, green: 0.05, blue: 0.08)
+    private let traceColor = Color(red: 0.2, green: 0.2, blue: 0.3)
+    
+    // Accents
     private let activeGreen = Color(red: 0.0, green: 0.8, blue: 0.4)
     private let activeRed = Color(red: 0.9, green: 0.2, blue: 0.2)
-    private let neutralGray = Color(red: 0.3, green: 0.3, blue: 0.35)
-    private let accentCyan = Color(red: 0.0, green: 0.8, blue: 0.9)
+    private let cyan = Color(red: 0.0, green: 0.8, blue: 1.0)
+    private let orange = Color(red: 1.0, green: 0.6, blue: 0.0)
     
     var currentOrion: OrionScoreResult {
         selectedTimeframe == .daily ? analysis.daily : analysis.intraday
@@ -26,7 +31,7 @@ struct OrionMotherboardView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // LAYER 1: Circuit Board Background
+                // LAYER 1: Background & Grid
                 boardBackground
                 
                 // LAYER 2: Circuit Traces (Wires)
@@ -35,40 +40,49 @@ struct OrionMotherboardView: View {
                 // LAYER 3: Data Flow Animation
                 dataFlowParticles(in: geo.size)
                 
-                // LAYER 4: Nodes (Interactive Components)
+                // LAYER 4: Interactive Nodes
                 VStack(spacing: 0) {
-                    // Header: Symbol + Timeframe Selector
+                    // Header
                     headerBar
                     
                     Spacer()
                     
-                    // Main Circuit Layout
+                    // Main Board Layout
                     HStack(spacing: 0) {
-                        // LEFT: Input Stations
+                        // LEFT: Modules (Trend, Momentum, Volume)
                         inputStations(in: geo.size)
+                            .frame(width: 140) // Fixed width for left column
                         
                         Spacer()
                         
-                        // CENTER: CPU (Consensus Engine)
+                        // CENTER: Consensus CPU
                         cpuNode(in: geo.size)
                         
                         Spacer()
-                        
-                        // RIGHT: Output (Price Verdict)
-                        outputNode(in: geo.size)
                     }
                     .padding(.horizontal, 20)
                     
                     Spacer()
                     
-                    // Footer: Strategic Advice
+                    // Footer
                     strategicAdviceBar
                 }
                 
-                // LAYER 5: Detail Panel (Overlaid when node selected)
+                // LAYER 5: Detail Overlay (The "Yekpare" Drill-down)
                 if let node = selectedNode {
-                    nodeDetailPanel(for: node)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    OrionModuleDetailView(
+                        type: node,
+                        symbol: symbol,
+                        analysis: currentOrion,
+                        candles: candles,
+                        onClose: {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                selectedNode = nil
+                            }
+                        }
+                    )
+                    .transition(.move(edge: .trailing)) // Slide in from right like a drill-down
+                    .zIndex(10)
                 }
             }
         }
@@ -82,13 +96,13 @@ struct OrionMotherboardView: View {
     // MARK: - Header
     private var headerBar: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("ORION ANALYSIS")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("ANALIZ ÇEKİRDEĞİ")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(.gray)
                     .tracking(2)
                 Text(symbol)
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .font(.system(size: 24, weight: .black, design: .monospaced))
                     .foregroundColor(.white)
             }
             
@@ -100,11 +114,14 @@ struct OrionMotherboardView: View {
                 timeframeButton(.daily, label: "1D")
             }
             .background(Color.white.opacity(0.05))
-            .cornerRadius(6)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
         }
         .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 8)
+        .padding(.top, 24)
     }
     
     private func timeframeButton(_ mode: TimeframeMode, label: String) -> some View {
@@ -114,484 +131,296 @@ struct OrionMotherboardView: View {
             }
         }) {
             Text(label)
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
                 .foregroundColor(selectedTimeframe == mode ? .black : .gray)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(selectedTimeframe == mode ? accentCyan : Color.clear)
+                .frame(width: 44, height: 32)
+                .background(selectedTimeframe == mode ? cyan : Color.clear)
         }
     }
     
-    // MARK: - Board Background
-    private var boardBackground: some View {
-        ZStack {
-            boardColor.ignoresSafeArea()
+    // MARK: - Modules (Left Column)
+    private func inputStations(in size: CGSize) -> some View {
+        VStack(spacing: 20) {
+            // Trend Module
+            moduleCard(
+                node: .trend,
+                title: "TREND GÜCÜ",
+                value: String(format: "%.0f", currentOrion.components.trend),
+                max: 25,
+                color: activeRed // Based on image 1 (Red box)
+            )
             
-            // Grid Pattern (Subtle)
-            Canvas { context, size in
-                let gridSpacing: CGFloat = 20
-                for x in stride(from: 0, to: size.width, by: gridSpacing) {
-                    var path = Path()
-                    path.move(to: CGPoint(x: x, y: 0))
-                    path.addLine(to: CGPoint(x: x, y: size.height))
-                    context.stroke(path, with: .color(traceColor), lineWidth: 0.5)
+            // Momentum Module
+            moduleCard(
+                node: .momentum,
+                title: "MOMENTUM HIZI",
+                value: String(format: "%.0f", currentOrion.components.momentum),
+                max: 25,
+                color: cyan // Based on image 1 style
+            )
+            
+            // Volume Module
+            moduleCard(
+                node: .volume,
+                title: "İŞLEM HACMİ",
+                value: String(format: "%.0f", currentOrion.components.structure),
+                max: 35,
+                color: orange
+            )
+        }
+    }
+    
+    private func moduleCard(node: CircuitNode, title: String, value: String, max: Double, color: Color) -> some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                selectedNode = node
+            }
+        }) {
+            VStack(spacing: 12) {
+                // Icon Area (e.g. Trend Line)
+                Image(systemName: iconForNode(node))
+                    .font(.system(size: 20))
+                    .foregroundColor(color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                VStack(spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Text(value)
+                        .font(.system(size: 28, weight: .black, design: .monospaced))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                for y in stride(from: 0, to: size.height, by: gridSpacing) {
-                    var path = Path()
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: size.width, y: y))
-                    context.stroke(path, with: .color(traceColor), lineWidth: 0.5)
+                
+                // Progress Bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.1))
+                        Capsule().fill(color)
+                            .frame(width: geo.size.width * min((Double(value) ?? 0) / max, 1.0))
+                    }
+                }
+                .frame(height: 4)
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(cardBg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(color.opacity(0.3), lineWidth: 1)
+                    )
+            )
+            // Shadow
+            .shadow(color: Color.black.opacity(0.3), radius: 6, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func iconForNode(_ node: CircuitNode) -> String {
+        switch node {
+        case .trend: return "chart.xyaxis.line"
+        case .momentum: return "speedometer"
+        case .volume: return "chart.bar.fill"
+        default: return "circle"
+        }
+    }
+    
+    // MARK: - Consensus Node (Center)
+    private func cpuNode(in size: CGSize) -> some View {
+        Button(action: {
+             // Maybe show summary detail?
+        }) {
+            ZStack {
+                // Glow
+                Circle()
+                    .fill(cyan.opacity(0.1))
+                    .frame(width: 160, height: 160)
+                    .blur(radius: 20)
+                
+                // Outer Ring (Track)
+                Circle()
+                    .stroke(Color.white.opacity(0.1), lineWidth: 12)
+                    .frame(width: 140, height: 140)
+                
+                // Active Ring (Gauge)
+                Circle()
+                    .trim(from: 0.15, to: 0.15 + (currentOrion.score / 100) * 0.7) // Partial arc
+                    .stroke(
+                         AngularGradient(
+                            gradient: Gradient(colors: [activeRed, orange, activeGreen]),
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                    )
+                    .frame(width: 140, height: 140)
+                    .rotationEffect(.degrees(90)) // Rotate to start at bottom/side
+                
+                // Inner Content
+                VStack(spacing: 4) {
+                    Text("KONSENSUS")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.gray)
+                    
+                    Text(String(format: "%.0f", currentOrion.score))
+                        .font(.system(size: 42, weight: .black, design: .monospaced))
+                        .foregroundColor(.white)
+                    
+                    Text(getVerdictText().uppercased())
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(getVerdictColor())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(getVerdictColor().opacity(0.1))
+                        .cornerRadius(4)
                 }
             }
         }
+        .buttonStyle(.plain)
     }
     
-    // MARK: - Circuit Traces
+    // MARK: - Traces
     private func circuitTraces(in size: CGSize) -> some View {
         Canvas { context, canvasSize in
             let centerY = canvasSize.height / 2
-            let leftX: CGFloat = 100
-            let cpuX = canvasSize.width / 2
-            let rightX = canvasSize.width - 80
+            // Node connection points
+            // Assuming simplified relative coordinates based on the layout
             
-            // Trace: Trend -> CPU
-            drawTrace(context: context, from: CGPoint(x: leftX, y: centerY - 80), to: CGPoint(x: cpuX - 50, y: centerY), status: getTrendStatus())
+            let cpuCenter = CGPoint(x: canvasSize.width * 0.6, y: centerY) // Approx center of CPU
+            let leftColX: CGFloat = 160 // Right edge of module cards
             
-            // Trace: Momentum -> CPU
-            drawTrace(context: context, from: CGPoint(x: leftX, y: centerY), to: CGPoint(x: cpuX - 50, y: centerY), status: getMomentumStatus())
+            // Connect Trend (Top)
+            let trendY = centerY - 120
+            drawConnection(context, from: CGPoint(x: leftColX, y: trendY), to: cpuCenter, color: activeRed)
             
-            // Trace: Volume -> CPU
-            drawTrace(context: context, from: CGPoint(x: leftX, y: centerY + 80), to: CGPoint(x: cpuX - 50, y: centerY), status: getVolumeStatus())
+            // Connect Momentum (Mid)
+            let momY = centerY
+            drawConnection(context, from: CGPoint(x: leftColX, y: momY), to: cpuCenter, color: cyan)
             
-            // Trace: CPU -> Output
-            drawTrace(context: context, from: CGPoint(x: cpuX + 50, y: centerY), to: CGPoint(x: rightX, y: centerY), status: getOverallStatus())
+            // Connect Volume (Bottom)
+            let volY = centerY + 120
+            drawConnection(context, from: CGPoint(x: leftColX, y: volY), to: cpuCenter, color: orange)
         }
     }
     
-    private func drawTrace(context: GraphicsContext, from: CGPoint, to: CGPoint, status: SignalStatus) {
+    private func drawConnection(_ context: GraphicsContext, from: CGPoint, to: CGPoint, color: Color) {
         var path = Path()
         path.move(to: from)
         
-        // Create L-shaped trace (circuit style)
         let midX = (from.x + to.x) / 2
+        
+        // Circuit style: Horizontal -> Vertical -> Horizontal
         path.addLine(to: CGPoint(x: midX, y: from.y))
         path.addLine(to: CGPoint(x: midX, y: to.y))
         path.addLine(to: to)
         
-        let color: Color = {
-            switch status {
-            case .positive: return activeGreen
-            case .negative: return activeRed
-            case .neutral: return neutralGray
-            }
-        }()
+        // Trace line
+        context.stroke(path, with: .color(color.opacity(0.3)), style: StrokeStyle(lineWidth: 2))
         
-        context.stroke(path, with: .color(color.opacity(0.6)), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+        // Connecting dots
+        let dotSize: CGFloat = 6
+        context.fill(Circle().path(in: CGRect(x: from.x - dotSize/2, y: from.y - dotSize/2, width: dotSize, height: dotSize)), with: .color(color))
+        context.fill(Circle().path(in: CGRect(x: to.x - dotSize/2, y: to.y - dotSize/2, width: dotSize, height: dotSize)), with: .color(color))
     }
     
-    // MARK: - Data Flow Particles
+    // MARK: - Particles
     private func dataFlowParticles(in size: CGSize) -> some View {
+        // Simplified particle animation logic reusing the path math
+        // For brevity/performance, we can simulate just by showing moving dots along the known paths
         Canvas { context, canvasSize in
             let centerY = canvasSize.height / 2
-            let leftX: CGFloat = 100
-            let cpuX = canvasSize.width / 2
+            let cpuCenter = CGPoint(x: canvasSize.width * 0.6, y: centerY)
+            let leftColX: CGFloat = 160
             
-            // Animated particles along traces
-            let particlePositions: [(CGPoint, SignalStatus)] = [
-                (CGPoint(x: leftX + (cpuX - leftX) * flowPhase, y: centerY - 80 + 80 * flowPhase), getTrendStatus()),
-                (CGPoint(x: leftX + (cpuX - leftX) * ((flowPhase + 0.3).truncatingRemainder(dividingBy: 1)), y: centerY), getMomentumStatus()),
-                (CGPoint(x: leftX + (cpuX - leftX) * ((flowPhase + 0.6).truncatingRemainder(dividingBy: 1)), y: centerY + 80 - 80 * flowPhase), getVolumeStatus())
-            ]
+            // Calculate positions based on flowPhase (0.0 to 1.0)
+            let trendStart = CGPoint(x: leftColX, y: centerY - 120)
+            let momStart = CGPoint(x: leftColX, y: centerY)
+            let volStart = CGPoint(x: leftColX, y: centerY + 120)
             
-            for (pos, status) in particlePositions {
-                let color: Color = {
-                    switch status {
-                    case .positive: return activeGreen
-                    case .negative: return activeRed
-                    case .neutral: return neutralGray
-                    }
-                }()
-                
-                let rect = CGRect(x: pos.x - 4, y: pos.y - 4, width: 8, height: 8)
-                context.fill(Circle().path(in: rect), with: .color(color))
-                
-                // Glow
-                let glowRect = CGRect(x: pos.x - 8, y: pos.y - 8, width: 16, height: 16)
-                context.fill(Circle().path(in: glowRect), with: .color(color.opacity(0.3)))
-            }
+            // Draw particles
+            drawParticle(context, from: trendStart, to: cpuCenter, progress: flowPhase, color: activeRed)
+            drawParticle(context, from: momStart, to: cpuCenter, progress: (flowPhase + 0.3).truncatingRemainder(dividingBy: 1), color: cyan)
+            drawParticle(context, from: volStart, to: cpuCenter, progress: (flowPhase + 0.6).truncatingRemainder(dividingBy: 1), color: orange)
         }
     }
     
-    // MARK: - Input Stations
-    private func inputStations(in size: CGSize) -> some View {
-        VStack(spacing: 24) {
-            stationNode(
-                node: .trend,
-                title: "TREND",
-                value: String(format: "%.0f", currentOrion.components.trend),
-                maxValue: 25,
-                icon: "chart.line.uptrend.xyaxis",
-                status: getTrendStatus()
-            )
-            
-            stationNode(
-                node: .momentum,
-                title: "MOMENTUM",
-                value: String(format: "%.0f", currentOrion.components.momentum),
-                maxValue: 25,
-                icon: "speedometer",
-                status: getMomentumStatus()
-            )
-            
-            stationNode(
-                node: .volume,
-                title: "VOLUME",
-                value: String(format: "%.0f", currentOrion.components.structure),
-                maxValue: 35,
-                icon: "chart.bar.fill",
-                status: getVolumeStatus()
-            )
+    private func drawParticle(_ context: GraphicsContext, from: CGPoint, to: CGPoint, progress: CGFloat, color: Color) {
+        let midX = (from.x + to.x) / 2
+        
+        // Interpolate position along the L-shape path
+        // Segment 1: from -> (midX, from.y)
+        // Segment 2: (midX, from.y) -> (midX, to.y)
+        // Segment 3: (midX, to.y) -> to
+        
+        // Simplify: Just Linear interpolation (for now) to avoid complex path math in Canvas loop
+        // Or implement robust segmented interpolation
+        var current: CGPoint = .zero
+        
+        if progress < 0.33 {
+            // Horizontal 1
+            let localP = progress / 0.33
+            current = CGPoint(x: from.x + (midX - from.x) * localP, y: from.y)
+        } else if progress < 0.66 {
+            // Vertical 2
+            let localP = (progress - 0.33) / 0.33
+            current = CGPoint(x: midX, y: from.y + (to.y - from.y) * localP)
+        } else {
+            // Horizontal 3
+            let localP = (progress - 0.66) / 0.34
+            current = CGPoint(x: midX + (to.x - midX) * localP, y: to.y)
+        }
+        
+        // Draw glow ball
+        let size: CGFloat = 8
+        let rect = CGRect(x: current.x - size/2, y: current.y - size/2, width: size, height: size)
+        context.fill(Circle().path(in: rect), with: .color(color))
+        context.fill(Circle().path(in: rect.insetBy(dx: -4, dy: -4)), with: .color(color.opacity(0.4)))
+    }
+    
+    private var boardBackground: some View {
+        ZStack {
+            boardColor.ignoresSafeArea()
+            // Optional Circuit patterned background image or shader
         }
     }
     
-    private func stationNode(node: CircuitNode, title: String, value: String, maxValue: Double, icon: String, status: SignalStatus) -> some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.3)) {
-                selectedNode = selectedNode == node ? nil : node
-            }
-        }) {
-            VStack(spacing: 8) {
-                // Icon
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(statusColor(status))
-                
-                // Title
-                Text(title)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(.gray)
-                    .tracking(1)
-                
-                // Value
-                Text(value)
-                    .font(.system(size: 22, weight: .black, design: .monospaced))
-                    .foregroundColor(.white)
-                
-                // Mini Progress
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.1))
-                        Capsule().fill(statusColor(status))
-                            .frame(width: geo.size.width * min((Double(value) ?? 0) / maxValue, 1.0))
-                    }
-                }
-                .frame(width: 60, height: 4)
-            }
-            .frame(width: 80, height: 100)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white.opacity(0.03))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(statusColor(status).opacity(0.3), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
-    
-    // MARK: - CPU Node
-    private func cpuNode(in size: CGSize) -> some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.3)) {
-                selectedNode = selectedNode == .cpu ? nil : .cpu
-            }
-        }) {
-            VStack(spacing: 8) {
-                Text("KONSENSUS")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(.gray)
-                    .tracking(2)
-                
-                ZStack {
-                    // Outer Ring
-                    Circle()
-                        .stroke(accentCyan.opacity(0.3), lineWidth: 4)
-                        .frame(width: 100, height: 100)
-                    
-                    // Progress Ring
-                    Circle()
-                        .trim(from: 0, to: currentOrion.score / 100)
-                        .stroke(accentCyan, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .frame(width: 100, height: 100)
-                        .rotationEffect(.degrees(-90))
-                    
-                    // Inner Chip
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.white.opacity(0.05))
-                        .frame(width: 70, height: 70)
-                        .overlay(
-                            VStack(spacing: 2) {
-                                Text(String(format: "%.0f", currentOrion.score))
-                                    .font(.system(size: 28, weight: .black, design: .monospaced))
-                                    .foregroundColor(.white)
-                                Text(getVerdictText())
-                                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                    .foregroundColor(statusColor(getOverallStatus()))
-                            }
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(accentCyan.opacity(0.5), lineWidth: 1)
-                        )
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-    
-    // MARK: - Output Node
-    private func outputNode(in size: CGSize) -> some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.3)) {
-                selectedNode = selectedNode == .output ? nil : .output
-            }
-        }) {
-            VStack(spacing: 8) {
-                Text("VERDICT")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(.gray)
-                    .tracking(1)
-                
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(statusColor(getOverallStatus()).opacity(0.1))
-                        .frame(width: 70, height: 70)
-                    
-                    Image(systemName: getVerdictIcon())
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(statusColor(getOverallStatus()))
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(statusColor(getOverallStatus()).opacity(0.4), lineWidth: 1)
-                )
-                
-                Text(getVerdictText())
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(statusColor(getOverallStatus()))
-            }
-        }
-        .buttonStyle(.plain)
-    }
-    
-    // MARK: - Strategic Advice Bar
     private var strategicAdviceBar: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 12) {
+             Circle()
+                .fill(getVerdictColor())
+                .frame(width: 8, height: 8)
+            
             Text("STRATEGIC ASSESSMENT")
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(.gray)
-                .tracking(2)
             
-            Text(analysis.strategicAdvice)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-        }
-        .padding(.vertical, 16)
-        .frame(maxWidth: .infinity)
-        .background(Color.white.opacity(0.03))
-    }
-    
-    // MARK: - Node Detail Panel
-    private func nodeDetailPanel(for node: CircuitNode) -> some View {
-        VStack(spacing: 0) {
             Spacer()
-            
-            VStack(alignment: .leading, spacing: 16) {
-                // Header
-                HStack {
-                    Text(node.title)
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .tracking(2)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        withAnimation(.spring(response: 0.3)) {
-                            selectedNode = nil
-                        }
-                    }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.gray)
-                            .padding(8)
-                            .background(Circle().fill(Color.white.opacity(0.1)))
-                    }
-                }
-                
-                Divider().background(Color.white.opacity(0.1))
-                
-                // Educational Content
-                Text(node.educationalContent(for: currentOrion))
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineSpacing(4)
-                
-                // Technical Details
-                if let details = node.technicalDetails(for: currentOrion) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("TECHNICAL DATA")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(.gray)
-                            .tracking(1)
-                        
-                        ForEach(details, id: \.key) { detail in
-                            HStack {
-                                Text(detail.key)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundColor(.gray)
-                                Spacer()
-                                Text(detail.value)
-                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                    }
-                    .padding(12)
-                    .background(Color.white.opacity(0.03))
-                    .cornerRadius(8)
-                }
-            }
-            .padding(20)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(boardColor)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(accentCyan.opacity(0.2), lineWidth: 1)
-                    )
-            )
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
         }
-        .background(Color.black.opacity(0.5).ignoresSafeArea())
-        .onTapGesture {
-            withAnimation(.spring(response: 0.3)) {
-                selectedNode = nil
-            }
-        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 4)
+        .overlay(
+            Text(analysis.strategicAdvice)
+                .font(.system(size: 12))
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.top, 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+        )
     }
     
     // MARK: - Helpers
-    private func statusColor(_ status: SignalStatus) -> Color {
-        switch status {
-        case .positive: return activeGreen
-        case .negative: return activeRed
-        case .neutral: return neutralGray
-        }
-    }
-    
-    private func getTrendStatus() -> SignalStatus {
-        currentOrion.components.trend > 15 ? .positive : (currentOrion.components.trend < 8 ? .negative : .neutral)
-    }
-    
-    private func getMomentumStatus() -> SignalStatus {
-        currentOrion.components.momentum > 15 ? .positive : (currentOrion.components.momentum < 8 ? .negative : .neutral)
-    }
-    
-    private func getVolumeStatus() -> SignalStatus {
-        currentOrion.components.structure > 20 ? .positive : (currentOrion.components.structure < 12 ? .negative : .neutral)
-    }
-    
-    private func getOverallStatus() -> SignalStatus {
-        currentOrion.score > 60 ? .positive : (currentOrion.score < 40 ? .negative : .neutral)
-    }
-    
     private func getVerdictText() -> String {
-        if currentOrion.score >= 70 { return "STRONG BUY" }
-        if currentOrion.score >= 55 { return "BUY" }
-        if currentOrion.score >= 45 { return "HOLD" }
-        if currentOrion.score >= 30 { return "SELL" }
-        return "STRONG SELL"
+         if currentOrion.score >= 55 { return "AL (BUY)" }
+         if currentOrion.score >= 45 { return "TUT (HOLD)" }
+         return "SAT (SELL)"
     }
     
-    private func getVerdictIcon() -> String {
-        if currentOrion.score >= 55 { return "arrow.up.circle.fill" }
-        if currentOrion.score >= 45 { return "minus.circle.fill" }
-        return "arrow.down.circle.fill"
+    private func getVerdictColor() -> Color {
+        if currentOrion.score >= 55 { return activeGreen }
+        if currentOrion.score >= 45 { return orange }
+        return activeRed
     }
 }
-
-// MARK: - Supporting Types
-
-enum TimeframeMode {
-    case daily, intraday
-}
-
-enum SignalStatus {
-    case positive, negative, neutral
-}
-
-enum CircuitNode: Equatable {
-    case trend, momentum, volume, cpu, output
-    
-    var title: String {
-        switch self {
-        case .trend: return "TREND ANALYSIS"
-        case .momentum: return "MOMENTUM INDICATOR"
-        case .volume: return "VOLUME & STRUCTURE"
-        case .cpu: return "CONSENSUS ENGINE"
-        case .output: return "FINAL VERDICT"
-        }
-    }
-    
-    func educationalContent(for orion: OrionScoreResult) -> String {
-        switch self {
-        case .trend:
-            return "Trend analizi, fiyatın genel yonunu belirler. SMA 50 ve SMA 200 hareketli ortalamalari kullanilarak hesaplanir. Fiyat her iki ortalamanin uzerindeyse guclu yukselis trendi, altindaysa dusus trendi vardir."
-        case .momentum:
-            return "Momentum, fiyat hareketinin hizini ve gucunu olcer. RSI (Relative Strength Index) ve TSI kullanilir. RSI 70 uzerinde asiri alim, 30 altinda asiri satim sinyali verir."
-        case .volume:
-            return "Hacim ve yapi analizi, fiyat hareketlerinin arkasindaki gucun kalicilgini degerlendirir. Yuksek hacimli hareketler daha guvenilirdir. ADX gostergesi trend gucunu olcer."
-        case .cpu:
-            return "Konsensus motoru, tum gostergelerden gelen sinyalleri birlestirerek tek bir skor uretir. Her gosterge oylanir ve agirlikli ortalama alinir. Bu skor, genel piyasa durumunu yansitir."
-        case .output:
-            return "Nihai karar, konsensus skoruna gore belirlenir. 70 ustu guclu alim, 55-70 alim, 45-55 tut, 30-45 sat, 30 alti guclu sat olarak yorumlanir."
-        }
-    }
-    
-    func technicalDetails(for orion: OrionScoreResult) -> [(key: String, value: String)]? {
-        switch self {
-        case .trend:
-            return [
-                (key: "Score", value: String(format: "%.1f / 25", orion.components.trend)),
-                (key: "Weight", value: "25%"),
-                (key: "Status", value: orion.components.trend > 15 ? "Bullish" : "Bearish")
-            ]
-        case .momentum:
-            return [
-                (key: "Score", value: String(format: "%.1f / 25", orion.components.momentum)),
-                (key: "Weight", value: "25%"),
-                (key: "RSI Zone", value: orion.components.momentum > 18 ? "Overbought" : (orion.components.momentum < 7 ? "Oversold" : "Neutral"))
-            ]
-        case .volume:
-            return [
-                (key: "Structure", value: String(format: "%.1f / 35", orion.components.structure)),
-                (key: "Weight", value: "35%"),
-                (key: "Strength", value: orion.components.structure > 25 ? "Strong" : "Weak")
-            ]
-        case .cpu:
-            return [
-                (key: "Total Score", value: String(format: "%.0f / 100", orion.score)),
-                (key: "Pattern", value: orion.components.patternDesc.isEmpty ? "None" : orion.components.patternDesc)
-            ]
-        case .output:
-            return nil
-        }
-    }
-}
-
-// Preview disabled - uses live data

@@ -428,7 +428,11 @@ struct HoloPanelView: View {
                 // ORION MOTHERBOARD (V2 - Multi-Timeframe)
                 if let analysis = viewModel.orionAnalysis[symbol] {
                     // Motherboard View (Uses GeometryReader internally, so we must frame it)
-                    OrionMotherboardView(analysis: analysis, symbol: symbol)
+                    OrionMotherboardView(
+                        analysis: analysis,
+                        symbol: symbol,
+                        candles: viewModel.candles[symbol] ?? []
+                    )
                         .frame(height: 600) // Fixed height to play nice with ScrollView
                         .cornerRadius(12)
                         .padding(.horizontal, 4) // Slight inset

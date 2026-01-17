@@ -32,7 +32,11 @@ struct ArgusOrionSheet: View {
             Group {
                 // PRIORITY 1: Use OrionMotherboardView if MTF Analysis is available
                 if let vm = viewModel, let analysis = vm.orionAnalysis[symbol] {
-                    OrionMotherboardView(analysis: analysis, symbol: symbol)
+                    OrionMotherboardView(
+                        analysis: analysis,
+                        symbol: symbol,
+                        candles: viewModel?.candles[symbol] ?? candles ?? []
+                    )
                 }
                 // FALLBACK: Use legacy OrionDetailView if only single-timeframe data available
                 else if let orion = orion {
