@@ -44,11 +44,42 @@ struct OrionComponentScores: Codable, Sendable {
     }
 }
 
+// MARK: - Consensus Models (Signal Breakdown)
+struct VoteCount: Codable, Sendable {
+    var buy: Int
+    var sell: Int
+    var neutral: Int
+    
+    var total: Int { buy + sell + neutral }
+    
+    var dominant: String {
+        if buy > sell && buy > neutral { return "AL" }
+        if sell > buy && sell > neutral { return "SAT" }
+        return "NÖTR"
+    }
+}
+
+struct OrionSignalBreakdown: Codable, Sendable {
+    let oscillators: VoteCount
+    let movingAverages: VoteCount
+    let summary: VoteCount
+    
+    // Detailed list for UI (Name, Action, Value)
+    struct SignalItem: Codable, Sendable {
+        let name: String
+        let value: String
+        let action: String // "AL", "SAT", "NÖTR"
+    }
+    
+    let indicators: [SignalItem]
+}
+
 // MARK: - Orion 3.0 Result
 struct OrionScoreResult: Codable, Sendable {
     let symbol: String
     let score: Double // 0-100 (Weighted/Normalized)
     let components: OrionComponentScores
+    let signalBreakdown: OrionSignalBreakdown? // NEW: Consensus Details
     let verdict: String // "Strong Buy", "Wait", etc.
     let generatedAt: Date
 }

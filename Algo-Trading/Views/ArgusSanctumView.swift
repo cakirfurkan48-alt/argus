@@ -329,7 +329,8 @@ struct HoloPanelView: View {
                     }
                     
                     // NEW: Expand Chart Button (Only if candles exist)
-                    if viewModel.candles[symbol] != nil && (module == .orion || module == .atlas || module == .aether) {
+                    let candles = viewModel.candles[symbol] ?? viewModel.candles["\(symbol)_1G"]
+                    if candles != nil && (module == .orion || module == .atlas || module == .aether) {
                         Button(action: { showImmersiveChart = true }) {
                             Image(systemName: "arrow.up.left.and.arrow.down.right")
                                 .font(.system(size: 16))
@@ -426,10 +427,15 @@ struct HoloPanelView: View {
             VStack(spacing: 16) {
                 // 🆕 Eğitici Orion Detay Görünümü
                 if let orion = viewModel.orionScores[symbol] {
+                    // NEW: Technical Consensus Dashboard
+                    if let consensus = orion.signalBreakdown {
+                        TechnicalConsensusView(breakdown: consensus)
+                    }
+                    
                     OrionDetailView(
                         symbol: symbol,
                         orion: orion,
-                        candles: viewModel.candles[symbol],
+                        candles: viewModel.candles[symbol] ?? viewModel.candles["\(symbol)_1G"],
                         patterns: viewModel.patterns[symbol]
                     )
                 } else {

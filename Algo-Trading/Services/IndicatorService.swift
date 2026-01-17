@@ -70,543 +70,84 @@ struct IndicatorService {
     
     /// Williams %R'ın son değerini döndürür
     static func lastWilliamsR(candles: [Candle], period: Int = 14) -> Double? {
-        guard candles.count >= period else { return nil }
-        let slice = candles.suffix(period)
-        let highestHigh = slice.map { $0.high }.max() ?? 1
-        let lowestLow = slice.map { $0.low }.min() ?? 0
-        let close = slice.last?.close ?? 0
-        return ((highestHigh - close) / (highestHigh - lowestLow)) * -100
+        let values = TechnicalAnalysisEngine.williamsR(candles: candles, period: period)
+        return values.last ?? nil
     }
     
     // MARK: - Aroon Oscillator
     /// Returns Aroon Oscillator value (-100 to +100)
     static func lastAroon(candles: [Candle], period: Int = 25) -> Double? {
-        // Simple calculation for the last candle
-        guard candles.count >= period + 1 else { return nil }
-        
-        let slice = candles.suffix(period + 1) // Need lookback + 1 to properly scan
-        // Actually typically lookback period includes current bar?
-        // Standard definition: "number of periods since the highest high within the last n periods"
-        // Let's use the standard "last n" candles including current.
-        
-        let sub = Array(candles.suffix(period + 1))
-        // We calculate for the *last* closed bar.
-        // Days since high: index of high from end.
-        
-        // Let's implement full array or just last value? Just last for efficiency here.
-        let analysisSlice = Array(sub.dropLast()) // Previous 'period' candles?
-        // Usually applied to current candle.
-        
-        let relevantCandles = Array(candles.suffix(period + 1)) // period+1 ensures we index correctly?
-        // Let's stick to standard:
-        // Aroon Up = ((25 - Days Since 25-day High)/25) * 100
-        
-        // We look at the last 'period' candles (including current if closed, or previous if analyzing historical)
-        // Assuming 'candles' ends with the bar we want to analyze.
-        
-        let lookback = Array(candles.suffix(period + 1))
-        guard lookback.count >= period + 1 else { return nil }
-        
-        // Range: indices 0 to period.
-        // We want High of last 'period' bars.
-        // e.g. period=3. candles=[A, B, C, D]. suffix(4) -> [A, B, C, D].
-        // High of last 3 bars (B, C, D)? Or including A?
-        // Aroon typically measures over N periods.
-        
-        let window = Array(lookback.suffix(period + 1)) // Safety
-        
-        var highIndex = 0
-        var lowIndex = 0
-        var highVal = -Double.infinity
-        var lowVal = Double.infinity
-        
-        // Iterate backwards from the end (index period) down to 0?
-        // Let's rely on array index.
-        // window[0] is oldest, window[period] is newest.
-        
-        for i in 0...period {
-            let idx = window.count - 1 - i // 0 -> last element (newest)
-            if idx < 0 { break }
-            let c = window[idx]
-            
-            if c.high >= highVal { // Most recent high wins ties? Or oldest? Usually most recent.
-                 // Actually Formula: Days Since High. If High was today, days=0.
-                 highVal = c.high
-                 highIndex = i
-            }
-            
-            if c.low <= lowVal {
-                lowVal = c.low
-                lowIndex = i
-            }
-        }
-        
-        let aroonUp = ((Double(period) - Double(highIndex)) / Double(period)) * 100.0
-        let aroonDown = ((Double(period) - Double(lowIndex)) / Double(period)) * 100.0
-        
-        return aroonUp - aroonDown
+        let values = TechnicalAnalysisEngine.aroon(candles: candles, period: period)
+        return values.last ?? nil
     }
 
+    // MARK: - RSI
+    static func calculateRSI(values: [Double], period: Int = 14) -> [Double?] {
+        return TechnicalAnalysisEngine.rsi(values: values, period: period)
+    }
+    
+    // MARK: - MACD
+    static func calculateMACD(values: [Double], fastPeriod: Int = 12, slowPeriod: Int = 26, signalPeriod: Int = 9) -> (macd: [Double?], signal: [Double?], histogram: [Double?]) {
+        return TechnicalAnalysisEngine.macd(values: values, fastPeriod: fastPeriod, slowPeriod: slowPeriod, signalPeriod: signalPeriod)
+    }
+    
     // MARK: - SMA (Simple Moving Average)
     static func calculateSMA(values: [Double], period: Int) -> [Double?] {
-        var smaValues = [Double?](repeating: nil, count: values.count)
-        guard values.count >= period else { return smaValues }
-        
-        for i in (period - 1)..<values.count {
-            let slice = values[(i - period + 1)...i]
-            let sum = slice.reduce(0, +)
-            smaValues[i] = sum / Double(period)
-        }
-        return smaValues
+        return TechnicalAnalysisEngine.sma(values: values, period: period)
     }
-    
-    // MARK: - RSI (Relative Strength Index)
-    static func calculateRSI(values: [Double], period: Int = 14) -> [Double?] {
-        var rsiValues = [Double?](repeating: nil, count: values.count)
-        guard values.count > period else { return rsiValues }
-        
-        var gains: [Double] = []
-        var losses: [Double] = []
-        
-        // İlk değişimleri hesapla
-        for i in 1..<values.count {
-            let diff = values[i] - values[i-1]
-            gains.append(max(diff, 0))
-            losses.append(max(-diff, 0))
-        }
-        
-        // İlk ortalama gain/loss
-        var avgGain = gains.prefix(period).reduce(0, +) / Double(period)
-        var avgLoss = losses.prefix(period).reduce(0, +) / Double(period)
-        
-        // İlk RSI
-        if avgLoss == 0 {
-            rsiValues[period] = 100
-        } else {
-            let rs = avgGain / avgLoss
-            rsiValues[period] = 100 - (100 / (1 + rs))
-        }
-        
-        // Smoothed RSI
-        for i in (period + 1)..<values.count {
-            let currentGain = gains[i-1]
-            let currentLoss = losses[i-1]
-            
-            avgGain = ((avgGain * Double(period - 1)) + currentGain) / Double(period)
-            avgLoss = ((avgLoss * Double(period - 1)) + currentLoss) / Double(period)
-            
-            if avgLoss == 0 {
-                rsiValues[i] = 100
-            } else {
-                let rs = avgGain / avgLoss
-                rsiValues[i] = 100 - (100 / (1 + rs))
-            }
-        }
-        
-        return rsiValues
-    }
-    
-    // MARK: - MACD (Moving Average Convergence Divergence)
-    static func calculateMACD(values: [Double], fastPeriod: Int = 12, slowPeriod: Int = 26, signalPeriod: Int = 9) -> (macd: [Double?], signal: [Double?], histogram: [Double?]) {
-        let fastEMA = calculateEMA(values: values, period: fastPeriod)
-        let slowEMA = calculateEMA(values: values, period: slowPeriod)
-        
-        var macdLine = [Double?](repeating: nil, count: values.count)
-        
-        for i in 0..<values.count {
-            if let f = fastEMA[i], let s = slowEMA[i] {
-                macdLine[i] = f - s
-            }
-        }
-        
-        // Signal Line (MACD Line'ın EMA'sı)
-        // MACD line'daki nil değerleri atlayarak hesaplamak lazım ama basitlik için
-        // nil olmayan ilk değerden itibaren EMA başlatacağız.
-        
-        // MACD Line'ı non-optional diziye çevirip EMA hesaplayıp geri maplemek zor olabilir.
-        // Basit bir yaklaşım:
-        let validMACDIndices = macdLine.indices.filter { macdLine[$0] != nil }
-        guard !validMACDIndices.isEmpty else {
-            return ([Double?](repeating: nil, count: values.count), [Double?](repeating: nil, count: values.count), [Double?](repeating: nil, count: values.count))
-        }
-        
-        let firstValidIndex = validMACDIndices.first!
-        let validValues = macdLine[firstValidIndex...].compactMap { $0 }
-        
-        let signalLineValid = calculateEMA(values: validValues, period: signalPeriod)
-        
-        var signalLine = [Double?](repeating: nil, count: values.count)
-        var histogram = [Double?](repeating: nil, count: values.count)
-        
-        for (index, value) in signalLineValid.enumerated() {
-            let originalIndex = firstValidIndex + index
-            signalLine[originalIndex] = value
-            
-            if let m = macdLine[originalIndex], let s = value {
-                histogram[originalIndex] = m - s
-            }
-        }
-        
-        return (macdLine, signalLine, histogram)
-    }
-    
+
     // MARK: - EMA Helper
     static func calculateEMA(values: [Double], period: Int) -> [Double?] {
-        var emaValues = [Double?](repeating: nil, count: values.count)
-        guard values.count >= period else { return emaValues }
-        
-        let k = 2.0 / Double(period + 1)
-        
-        // İlk EMA = SMA
-        let initialSlice = values.prefix(period)
-        var ema = initialSlice.reduce(0, +) / Double(period)
-        emaValues[period - 1] = ema
-        
-        for i in period..<values.count {
-            ema = (values[i] * k) + (ema * (1 - k))
-            emaValues[i] = ema
-        }
-        
-        return emaValues
+        return TechnicalAnalysisEngine.ema(values: values, period: period)
     }
     
     // MARK: - Bollinger Bands
     static func calculateBollingerBands(values: [Double], period: Int = 20, stdDevMultiplier: Double = 2.0) -> (upper: [Double?], middle: [Double?], lower: [Double?]) {
-        let sma = calculateSMA(values: values, period: period)
-        var upper = [Double?](repeating: nil, count: values.count)
-        var lower = [Double?](repeating: nil, count: values.count)
-        
-        for i in (period - 1)..<values.count {
-            guard let middleVal = sma[i] else { continue }
-            
-            let slice = values[(i - period + 1)...i]
-            let variance = slice.map { pow($0 - middleVal, 2.0) }.reduce(0, +) / Double(period)
-            let stdDev = sqrt(variance)
-            
-            upper[i] = middleVal + (stdDev * stdDevMultiplier)
-            lower[i] = middleVal - (stdDev * stdDevMultiplier)
-        }
-        
-        return (upper, sma, lower)
+        return TechnicalAnalysisEngine.bollingerBands(values: values, period: period, multiplier: stdDevMultiplier)
     }
     // MARK: - ATR (Average True Range)
     static func calculateATR(candles: [Candle], period: Int = 14) -> [Double?] {
-        var atrValues = [Double?](repeating: nil, count: candles.count)
-        guard candles.count > period else { return atrValues }
-        
-        var trValues: [Double] = []
-        
-        for i in 0..<candles.count {
-            let high = candles[i].high
-            let low = candles[i].low
-            
-            if i == 0 {
-                trValues.append(high - low)
-            } else {
-                let prevClose = candles[i-1].close
-                let tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
-                trValues.append(tr)
-            }
-        }
-        
-        // İlk ATR (SMA)
-        let initialSlice = trValues.prefix(period)
-        var atr = initialSlice.reduce(0, +) / Double(period)
-        atrValues[period - 1] = atr
-        
-        // Sonraki ATR (Smoothed)
-        for i in period..<candles.count {
-            atr = ((atr * Double(period - 1)) + trValues[i]) / Double(period)
-            atrValues[i] = atr
-        }
-        
-        return atrValues
+        return TechnicalAnalysisEngine.atr(candles: candles, period: period)
     }
     
     // MARK: - ADX (Average Directional Index)
     static func calculateADX(candles: [Candle], period: Int = 14) -> [Double?] {
-        var tr = [Double](repeating: 0.0, count: candles.count)
-        var plusDM = [Double](repeating: 0.0, count: candles.count)
-        var minusDM = [Double](repeating: 0.0, count: candles.count)
-        
-        for i in 1..<candles.count {
-            let currentHigh = candles[i].high
-            let currentLow = candles[i].low
-            let prevClose = candles[i-1].close
-            let prevHigh = candles[i-1].high
-            let prevLow = candles[i-1].low
-            
-            tr[i] = max(currentHigh - currentLow, max(abs(currentHigh - prevClose), abs(currentLow - prevClose)))
-            
-            let upMove = currentHigh - prevHigh
-            let downMove = prevLow - currentLow
-            
-            if upMove > downMove && upMove > 0 {
-                plusDM[i] = upMove
-            }
-            if downMove > upMove && downMove > 0 {
-                minusDM[i] = downMove
-            }
-        }
-        
-        func wilderSmooth(values: [Double]) -> [Double] {
-            var smoothed = [Double](repeating: 0.0, count: values.count)
-            guard values.count > period else { return smoothed }
-            smoothed[period] = values[1...period].reduce(0, +)
-            for i in (period + 1)..<values.count {
-                smoothed[i] = smoothed[i-1] - (smoothed[i-1] / Double(period)) + values[i]
-            }
-            return smoothed
-        }
-        
-        let trSmooth = wilderSmooth(values: tr)
-        let plusDMSmooth = wilderSmooth(values: plusDM)
-        let minusDMSmooth = wilderSmooth(values: minusDM)
-        
-        var adxValues = [Double?](repeating: nil, count: candles.count)
-        var dxValues = [Double](repeating: 0.0, count: candles.count)
-        
-        for i in period..<candles.count {
-            if trSmooth[i] != 0 {
-                let plusDI = 100 * (plusDMSmooth[i] / trSmooth[i])
-                let minusDI = 100 * (minusDMSmooth[i] / trSmooth[i])
-                if (plusDI + minusDI) != 0 {
-                    dxValues[i] = 100 * abs(plusDI - minusDI) / (plusDI + minusDI)
-                }
-            }
-        }
-        
-        if candles.count > 2 * period {
-            let firstADXIndex = 2 * period
-            let slice = dxValues[(period + 1)...firstADXIndex]
-            adxValues[firstADXIndex] = slice.reduce(0, +) / Double(period)
-            
-            for i in (firstADXIndex + 1)..<candles.count {
-                if let prev = adxValues[i-1] {
-                     adxValues[i] = ((prev * Double(period - 1)) + dxValues[i]) / Double(period)
-                }
-            }
-        }
-        
-        return adxValues
+        return TechnicalAnalysisEngine.adx(candles: candles, period: period)
     }
 
     // MARK: - Parabolic SAR
     static func calculateSAR(candles: [Candle], acceleration: Double = 0.02, maximum: Double = 0.2) -> [Double?] {
-        var sarValues = [Double?](repeating: nil, count: candles.count)
-        guard candles.count > 2 else { return sarValues }
-        
-        var af = acceleration
-        var isLong = true
-        var sar = candles[0].low
-        var ep = candles[0].high
-        
-        sarValues[0] = sar
-        
-        for i in 1..<candles.count {
-            sarValues[i] = sar
-            
-            if isLong {
-                sar = sar + af * (ep - sar)
-                sar = min(sar, candles[i-1].low)
-                if i > 1 { sar = min(sar, candles[i-2].low) }
-                
-                if candles[i].low < sar {
-                    isLong = false
-                    sar = ep
-                    ep = candles[i].low
-                    af = acceleration
-                } else {
-                    if candles[i].high > ep {
-                        ep = candles[i].high
-                        af = min(af + acceleration, maximum)
-                    }
-                }
-            } else {
-                sar = sar + af * (ep - sar)
-                sar = max(sar, candles[i-1].high)
-                if i > 1 { sar = max(sar, candles[i-2].high) }
-                
-                if candles[i].high > sar {
-                    isLong = true
-                    sar = ep
-                    ep = candles[i].high
-                    af = acceleration
-                } else {
-                    if candles[i].low < ep {
-                        ep = candles[i].low
-                        af = min(af + acceleration, maximum)
-                    }
-                }
-            }
-        }
-        return sarValues
+        return TechnicalAnalysisEngine.sar(candles: candles, acceleration: acceleration, maximum: maximum)
     }
 
     // MARK: - Stochastic Oscillator
     static func calculateStochastic(candles: [Candle], kPeriod: Int = 14, dPeriod: Int = 3) -> (k: [Double?], d: [Double?]) {
-        var kValues = [Double?](repeating: nil, count: candles.count)
-        var dValues = [Double?](repeating: nil, count: candles.count)
-        guard candles.count >= kPeriod else { return (kValues, dValues) }
-        
-        // Calculate %K
-        for i in (kPeriod - 1)..<candles.count {
-            let slice = candles[(i - kPeriod + 1)...i]
-            let highestHigh = slice.map { $0.high }.max() ?? 0
-            let lowestLow = slice.map { $0.low }.min() ?? 0
-            let currentClose = candles[i].close
-            
-            if highestHigh - lowestLow != 0 {
-                let k = ((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100
-                kValues[i] = k
-            } else {
-                kValues[i] = 50 // Flat market fallback
-            }
-        }
-        
-        // Calculate %D (SMA of %K)
-        // %K dizisindeki nil değerleri atlayarak hesapla
-        let validKIndices = kValues.indices.filter { kValues[$0] != nil }
-        if !validKIndices.isEmpty {
-            let firstValidIndex = validKIndices.first!
-            let validKs = kValues[firstValidIndex...].compactMap { $0 }
-            let dSma = calculateSMA(values: validKs, period: dPeriod)
-            
-            for (index, value) in dSma.enumerated() {
-                dValues[firstValidIndex + index] = value
-            }
-        }
-        
-        return (kValues, dValues)
+        return TechnicalAnalysisEngine.stochastic(candles: candles, kPeriod: kPeriod, dPeriod: dPeriod)
     }
     
     // MARK: - CCI (Commodity Channel Index)
     static func calculateCCI(candles: [Candle], period: Int = 20) -> [Double?] {
-        var cciValues = [Double?](repeating: nil, count: candles.count)
-        guard candles.count >= period else { return cciValues }
-        
-        let tpValues = candles.map { ($0.high + $0.low + $0.close) / 3.0 }
-        let smaTP = calculateSMA(values: tpValues, period: period)
-        
-        for i in (period - 1)..<candles.count {
-            guard let sma = smaTP[i] else { continue }
-            
-            let slice = tpValues[(i - period + 1)...i]
-            let meanDeviation = slice.map { abs($0 - sma) }.reduce(0, +) / Double(period)
-            
-            if meanDeviation != 0 {
-                cciValues[i] = (tpValues[i] - sma) / (0.015 * meanDeviation)
-            } else {
-                cciValues[i] = 0
-            }
-        }
-        
-        return cciValues
+        return TechnicalAnalysisEngine.cci(candles: candles, period: period)
     }
     
     // MARK: - Ichimoku Cloud
-    struct IchimokuResult {
-        let tenkanSen: [Double?]
-        let kijunSen: [Double?]
-        let senkouSpanA: [Double?]
-        let senkouSpanB: [Double?]
-        let chikouSpan: [Double?]
-    }
+    typealias IchimokuResult = TechnicalAnalysisEngine.IchimokuResult
     
     static func calculateIchimoku(candles: [Candle]) -> IchimokuResult {
-        let tenkanPeriod = 9
-        let kijunPeriod = 26
-        let senkouBPeriod = 52
-        let displacement = 26
-        
-        let count = candles.count
-        var tenkan = [Double?](repeating: nil, count: count)
-        var kijun = [Double?](repeating: nil, count: count)
-        var spanA = [Double?](repeating: nil, count: count)
-        var spanB = [Double?](repeating: nil, count: count)
-        var chikou = [Double?](repeating: nil, count: count)
-        
-        // Helper to get mid price of range
-        func getMid(period: Int, index: Int) -> Double? {
-            guard index >= period - 1 else { return nil }
-            let slice = candles[(index - period + 1)...index]
-            let high = slice.map { $0.high }.max() ?? 0
-            let low = slice.map { $0.low }.min() ?? 0
-            return (high + low) / 2
-        }
-        
-        for i in 0..<count {
-            // Tenkan-sen
-            tenkan[i] = getMid(period: tenkanPeriod, index: i)
-            
-            // Kijun-sen
-            kijun[i] = getMid(period: kijunPeriod, index: i)
-            
-            // Senkou Span A (Shifted forward)
-            if i >= displacement, let t = tenkan[i - displacement], let k = kijun[i - displacement] {
-                spanA[i] = (t + k) / 2
-            }
-            
-            // Senkou Span B (Shifted forward)
-            if i >= displacement, let midB = getMid(period: senkouBPeriod, index: i - displacement) {
-                spanB[i] = midB
-            }
-            
-            // Chikou Span (Shifted backward)
-            if i + displacement < count {
-                chikou[i] = candles[i + displacement].close
-            }
-        }
-        
-        return IchimokuResult(tenkanSen: tenkan, kijunSen: kijun, senkouSpanA: spanA, senkouSpanB: spanB, chikouSpan: chikou)
+        return TechnicalAnalysisEngine.ichimoku(candles: candles)
     }
     
     // MARK: - TSI (True Strength Index)
     /// Calculates TSI values for the given close prices
     /// Returns an array of TSI values (-100 to +100 range)
     static func calculateTSI(values: [Double], longPeriod: Int = 9, shortPeriod: Int = 3) -> [Double?] {
-        var tsiValues = [Double?](repeating: nil, count: values.count)
-        guard values.count > longPeriod + shortPeriod else { return tsiValues }
-        
-        // 1. Calculate price changes
-        var pc: [Double] = []
-        for i in 1..<values.count {
-            pc.append(values[i] - values[i-1])
-        }
-        
-        // 2. Double smooth the price changes
-        let pcSmooth1 = emaRaw(data: pc, period: longPeriod)
-        let pcSmooth2 = emaRaw(data: pcSmooth1, period: shortPeriod)
-        
-        // 3. Double smooth the absolute price changes
-        let apc = pc.map { abs($0) }
-        let apcSmooth1 = emaRaw(data: apc, period: longPeriod)
-        let apcSmooth2 = emaRaw(data: apcSmooth1, period: shortPeriod)
-        
-        // 4. Calculate TSI
-        let offset = longPeriod + shortPeriod - 1
-        for i in 0..<pcSmooth2.count {
-            if apcSmooth2[i] != 0 {
-                let tsi = 100.0 * (pcSmooth2[i] / apcSmooth2[i])
-                // Map back to original index (accounting for the offset from price changes + double EMA)
-                let originalIndex = i + offset
-                if originalIndex < values.count {
-                    tsiValues[originalIndex] = tsi
-                }
-            }
-        }
-        
-        return tsiValues
+        // TechnicalAnalysisEngine defaults to 25, 13 but TSI standard is often 25, 13.
+        // The inline code here used parameters 9, 3 but mapped to logic.
+        // Let's pass parameters strictly.
+        return TechnicalAnalysisEngine.tsi(values: values, longPeriod: longPeriod, shortPeriod: shortPeriod)
     }
     
-    /// Raw EMA helper (returns non-optional array for chaining)
-    private static func emaRaw(data: [Double], period: Int) -> [Double] {
-        guard !data.isEmpty else { return [] }
-        let k = 2.0 / Double(period + 1)
-        var result: [Double] = [data[0]]
-        for i in 1..<data.count {
-            result.append((data[i] * k) + (result.last! * (1.0 - k)))
-        }
-        return result
-    }
+
 }
+
+

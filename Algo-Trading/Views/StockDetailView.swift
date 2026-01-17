@@ -128,7 +128,13 @@ struct StockDetailContent: View {
         .background(Theme.background.ignoresSafeArea())
         .navigationBarHidden(true)
         .task {
+            // 1. Standard Data Load
             await viewModel.loadArgusData(for: symbol)
+            
+            // 2. Orion 2.0 Multi-Timeframe Analysis (Parallel)
+            await viewModel.ensureOrionAnalysis(for: symbol)
+            
+            // 3. News & Insights
             viewModel.loadNewsAndInsights(for: symbol)
         }
         // MARK: - Sheets
@@ -141,8 +147,10 @@ struct StockDetailContent: View {
                 symbol: symbol,
                 orion: viewModel.orionScores[symbol],
                 candles: viewModel.candles[symbol],
-                patterns: viewModel.patterns[symbol]
+                patterns: viewModel.patterns[symbol],
+                viewModel: viewModel
             )
+            .presentationDetents([.large])
         }
         .sheet(isPresented: $showAetherSheet) {
             ArgusAetherSheet(macro: viewModel.macroRating)

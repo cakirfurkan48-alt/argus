@@ -18,6 +18,13 @@ class TradingViewModel: ObservableObject {
     // Terminal Optimized Data Source
     @Published var terminalItems: [TerminalItem] = []
     
+    @Published var orionAnalysis: [String: MultiTimeframeAnalysis] = [:] // Orion 2.0 State
+
+    // Legacy Support (Mapped to Daily analysis)
+    var orionScores: [String: OrionScoreResult] {
+        return orionAnalysis.mapValues { $0.daily }
+    }
+
     func refreshTerminal() {
         let regime = ChironRegimeEngine.shared.globalResult.regime
         
@@ -27,6 +34,7 @@ class TradingViewModel: ObservableObject {
             let decision = grandDecisions[symbol]
             
             // Chimera Signal Computation
+            // Use legacy accessor for now to keep logic simple
             let orion = orionScores[symbol]
             let hermesImpact = newsInsightsBySymbol[symbol]?.first?.impactScore
             let fundScore = getFundamentalScore(for: symbol)?.totalScore
@@ -47,7 +55,7 @@ class TradingViewModel: ObservableObject {
                 currency: isBist ? .TRY : .USD,
                 price: quote?.currentPrice ?? 0.0,
                 dayChangePercent: quote?.percentChange,
-                orionScore: orionScores[symbol]?.score,
+                orionScore: orion?.score,
                 atlasScore: getFundamentalScore(for: symbol)?.totalScore,
                 councilScore: decision?.confidence,
                 action: decision?.action ?? .neutral,
@@ -141,6 +149,7 @@ class TradingViewModel: ObservableObject {
     
     // AGORA (Execution Governor V2)
     @Published var agoraSnapshots: [DecisionSnapshot] = [] // History of decisions (Approved & Rejected)
+
 
     var lastTradeTimes: [String: Date] = [:] // Symbol -> Date
     
@@ -264,6 +273,9 @@ class TradingViewModel: ObservableObject {
         
         setupStreamingObservation()
         
+        // Orion 2.0 Multi-Timeframe Bindings
+        setupOrionBindings()
+        
         // Ekonomik takvim beklenti hatırlatması kontrolü
         Task { @MainActor in
             EconomicCalendarService.shared.checkAndNotifyMissingExpectations()
@@ -333,6 +345,15 @@ class TradingViewModel: ObservableObject {
                         self.checkTakeProfit(for: trade, currentPrice: quote.currentPrice)
                     }
                 }
+            }
+            .store(in: &cancellables)
+            
+        // ORION STORE BINDING (Phase 4 Refactor - MTF)
+        // Bind Multi-Timeframe Analysis from the store
+        OrionStore.shared.$analysis
+            .receive(on: RunLoop.main)
+            .sink { [weak self] analysis in
+                self?.orionAnalysis = analysis
             }
             .store(in: &cancellables)
     }
@@ -511,10 +532,18 @@ class TradingViewModel: ObservableObject {
     
     // MARK: - Orion Score Integration
     
-    @Published var orionScores: [String: OrionScoreResult] = [:]
-    @Published var prometheusForecastBySymbol: [String: PrometheusForecast] = [:] // Prometheus 5-day forecasts
-    
-    // Orion Logic moved to TradingViewModel+Argus.swift
+    // MARK: - Orion Score Integration (Orion 2.0 Multi-Timeframe)
+    @Published var prometheusForecastBySymbol: [String: PrometheusForecast] = [:]
+
+    func ensureOrionAnalysis(for symbol: String) async {
+        await OrionStore.shared.ensureAnalysis(for: symbol)
+    }
+
+    private func setupOrionBindings() {
+        OrionStore.shared.$analysis
+            .receive(on: RunLoop.main)
+            .assign(to: &$orionAnalysis)
+    }
     
     // MARK: - Fundamental Score
     

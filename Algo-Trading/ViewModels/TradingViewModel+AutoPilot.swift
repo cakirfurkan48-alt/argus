@@ -167,15 +167,9 @@ extension TradingViewModel {
                 // İşlem mantığı TradeBrainExecutor içine taşındı.
                 Task { @MainActor in
                     for signal in signals {
-                        // Sadece Orion Puanlarını Hesapla ve Kaydet
-                        let orionResult = await OrionAnalysisService.shared.calculateOrionScoreAsync(
-                            symbol: signal.symbol,
-                            candles: self.candles[signal.symbol] ?? [],
-                            spyCandles: self.candles["SPY"]
-                        )
-                        if let res = orionResult {
-                            self.orionScores[signal.symbol] = res
-                        }
+                        // Orion 2.0: Trigger backend analysis instead of manual calculation & assignment
+                        // This updates the OrionStore, which updates the TradingViewModel via binding.
+                        await self.ensureOrionAnalysis(for: signal.symbol)
                     }
                 }
             }

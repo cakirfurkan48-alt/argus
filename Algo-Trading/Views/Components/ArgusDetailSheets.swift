@@ -19,20 +19,35 @@ struct ArgusAtlasSheet: View {
     }
 }
 
-// MARK: - Orion Sheet
+// MARK: - Orion Sheet (Orion 2.0 Motherboard)
 struct ArgusOrionSheet: View {
     let symbol: String
     let orion: OrionScoreResult?
     let candles: [Candle]?
     let patterns: [OrionChartPattern]? // Orion V3
+    var viewModel: TradingViewModel? = nil // Optional for backward compatibility
     
     var body: some View {
         NavigationView {
-            if let orion = orion {
-                OrionDetailView(symbol: symbol, orion: orion, candles: candles, patterns: patterns)
-            } else {
-                Text("Veri Yok")
+            Group {
+                // PRIORITY 1: Use OrionMotherboardView if MTF Analysis is available
+                if let vm = viewModel, let analysis = vm.orionAnalysis[symbol] {
+                    OrionMotherboardView(analysis: analysis, symbol: symbol)
+                }
+                // FALLBACK: Use legacy OrionDetailView if only single-timeframe data available
+                else if let orion = orion {
+                    OrionDetailView(symbol: symbol, orion: orion, candles: candles, patterns: patterns)
+                }
+                else {
+                    VStack {
+                        ProgressView()
+                        Text("Orion analizi yukleniyor...")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
             }
+            .navigationBarHidden(true)
         }
     }
 }

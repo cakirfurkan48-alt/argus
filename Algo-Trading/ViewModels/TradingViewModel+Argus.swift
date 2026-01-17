@@ -137,6 +137,15 @@ extension TradingViewModel {
                     }
                 }
             }
+
+            
+            // Task 6: Ensure Macro Data (Moved from loadOrionScore)
+            group.addTask {
+                if self.macroRating == nil {
+                    let rating = await MacroRegimeService.shared.computeMacroEnvironment()
+                    await MainActor.run { self.macroRating = rating }
+                }
+            }
         }
         
         // 2. Gather Inputs (Now that data is likely fetched)
@@ -866,68 +875,14 @@ extension TradingViewModel {
     // MARK: - Orion Score Integration
     
     func loadOrionScore(for symbol: String, assetType: AssetType = .stock) async {
-        // 1. Ensure Fundamental Data
-        var fundResult = fundamentalScoreStore.getScore(for: symbol)
-        if fundResult == nil {
-            // Circuit Breaker: Don't retry if already failed this session
-            if !failedFundamentals.contains(symbol) {
-                await calculateFundamentalScore(for: symbol, assetType: assetType)
-                fundResult = fundamentalScoreStore.getScore(for: symbol)
-            }
+        // Phase 4: Delegate to OrionStore (Orion 2.0 MTF)
+        // Store handles Multi-Timeframe Analysis now.
+        await OrionStore.shared.ensureAnalysis(for: symbol)
+        
+        // Sync Widget (Legacy Side Effect)
+        await MainActor.run {
+             self.syncWidgetData()
         }
-        
-        // 3. Ensure Candles (Daily)
-        var dailyCandles = candles[symbol]
-        // Increase check to 400 to trigger fetch for Backtest deeper history
-        if dailyCandles == nil || dailyCandles!.isEmpty || dailyCandles!.count < 400 {
-            // Heimdall / SSoT Routing
-            // 200 (SMA) + 252 (1Y) = ~452 required.
-            let candleVal = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: "1day") 
-            if let fetched = candleVal.value {
-                await MainActor.run { self.candles[symbol] = fetched }
-                dailyCandles = fetched
-             } else {
-                  print("❌ Orion Fetch Failed for \(symbol). Attempting fallback...")
-                  if let entry = await DataCacheService.shared.getEntry(kind: .candles, symbol: symbol),
-                     let cached = try? JSONDecoder().decode([Candle].self, from: entry.data) {
-                      await MainActor.run { self.candles[symbol] = cached }
-                      dailyCandles = cached
-                  }
-             }
-         }
-        
-        // 3. Ensure Macro Data
-        if macroRating == nil {
-            // Try fetch
-            let rating = await MacroRegimeService.shared.computeMacroEnvironment()
-            await MainActor.run { self.macroRating = rating }
-        }
-        
-        // 4. Calculate Orion (With Benchmark Context)
-        
-        // Ensure we have Benchmark (SPY) Candles for Relative Strength
-        if self.candles["SPY"] == nil && symbol != "SPY" {
-            // Try fetch SPY if not self using SSoT
-            let spyVal = await MarketDataStore.shared.ensureCandles(symbol: "SPY", timeframe: "1day")
-            if let s = spyVal.value { await MainActor.run { self.candles["SPY"] = s } }
-        }
-        let benchmark = self.candles["SPY"]
-        
-        // Calculate Orion 3.0 (5-Legged)
-        let result = await OrionAnalysisService.shared.calculateOrionScoreAsync(
-            symbol: symbol,
-            candles: dailyCandles ?? [],
-            spyCandles: benchmark
-        )
-        
-        if let validResult = result {
-            await MainActor.run {
-                self.orionScores[symbol] = validResult
-                self.syncWidgetData()
-            }
-        }
-        
-
     }
     
     // MARK: - Experimental Lab

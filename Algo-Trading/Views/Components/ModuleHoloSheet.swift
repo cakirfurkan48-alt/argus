@@ -65,11 +65,8 @@ struct ModuleHoloSheet: View {
                 }
             } else if module == .orion {
                 if viewModel.orionScores[symbol] == nil {
-                    // Trigger Orion calc
-                   await viewModel.loadCandles(for: symbol, timeframe: "1day")
-                   if let result = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: viewModel.candles[symbol] ?? [], spyCandles: nil) {
-                       viewModel.orionScores[symbol] = result
-                   }
+                    // Trigger Orion 2.0 MTF Analysis
+                    await viewModel.ensureOrionAnalysis(for: symbol)
                 }
             }
         }

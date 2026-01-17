@@ -116,36 +116,39 @@ struct ArgusImmersiveChartView: View {
                             .foregroundColor(.gray)
                         Spacer()
                     } else {
-                        ArgusChartEngine(
-                            data: chartData,
-                            activeTool: $activeTool,
-                            drawings: $drawings
-                        )
-                        .overlay(
-                            // Drawing Mode Indicator
-                            Group {
-                                if let tool = activeTool {
-                                    VStack {
-                                        HStack {
-                                            Image(systemName: tool.icon)
-                                            Text("\(tool == .trendLine ? "Trend Çizgisi" : "Fibonacci") Çiziliyor")
+
+                        // NEW: Argus Pro Chart (Canvas Engine)
+                        if let candles = viewModel.candles["\(symbol)_\(selectedTimeframe)"] {
+                            ArgusProChart(candles: candles)
+                                .overlay(
+                                    // Drawing Mode Indicator
+                                    Group {
+                                        if let tool = activeTool {
+                                            VStack {
+                                                HStack {
+                                                    Image(systemName: tool.icon)
+                                                    Text("\(tool == .trendLine ? "Trend Çizgisi" : "Fibonacci") Çiziliyor")
+                                                }
+                                                .padding(8)
+                                                .background(Color.blue.opacity(0.8))
+                                                .cornerRadius(8)
+                                                .foregroundColor(.white)
+                                                .font(.caption)
+                                                .padding(.top, 10)
+                                                Spacer()
+                                            }
                                         }
-                                        .padding(8)
-                                        .background(Color.blue.opacity(0.8))
-                                        .cornerRadius(8)
-                                        .foregroundColor(.white)
-                                        .font(.caption)
-                                        .padding(.top, 10)
-                                        Spacer()
                                     }
-                                }
-                            }
-                        )
-                        
-                        // X-Axis Time Labels
-                        xAxisTimeLabels
-                            .frame(height: 30)
-                            .background(Color.black.opacity(0.3))
+                                )
+                                
+                            // X-Axis Time Labels
+                            xAxisTimeLabels
+                                .frame(height: 30)
+                                .background(Color.black.opacity(0.3))
+                        } else {
+                            Text("Mum verisi işlenemedi.")
+                                .foregroundColor(.gray)
+                        }
                     }
                 }
                 
@@ -303,3 +306,5 @@ struct ToolButton: View {
         symbol: "AAPL"
     )
 }
+
+
