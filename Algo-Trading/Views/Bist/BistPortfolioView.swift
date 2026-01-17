@@ -1,8 +1,20 @@
 import SwiftUI
 
+// MARK: - BIST Portfolio View (Refactored to use main PortfolioEngine)
+// Artık TradingViewModel ve PortfolioEngine kullanıyor
+
 struct BistPortfolioView: View {
-    @StateObject private var viewModel = BistTradingViewModel()
+    @EnvironmentObject var viewModel: TradingViewModel
     @State private var showSearch = false
+    
+    // BIST trades from PortfolioEngine
+    private var bistTrades: [Trade] {
+        PortfolioEngine.shared.bistOpenTrades
+    }
+    
+    private var bistBalance: Double {
+        PortfolioEngine.shared.bistBalance
+    }
     
     var body: some View {
         ScrollView {
@@ -19,7 +31,7 @@ struct BistPortfolioView: View {
                                 Text("₺")
                                     .font(.title2)
                                     .foregroundColor(.white.opacity(0.8))
-                                Text(String(format: "%.2f", viewModel.balanceTRY + portfolioValue))
+                                Text(String(format: "%.2f", bistBalance + portfolioValue))
                                     .font(.system(size: 32, weight: .bold))
                                     .foregroundColor(.white)
                             }
@@ -37,7 +49,7 @@ struct BistPortfolioView: View {
                             Text("Nakit")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.7))
-                            Text("₺\(String(format: "%.2f", viewModel.balanceTRY))")
+                            Text("₺\(String(format: "%.2f", bistBalance))")
                                 .font(.headline)
                                 .foregroundColor(.white)
                         }
@@ -56,7 +68,7 @@ struct BistPortfolioView: View {
                     
                     Divider().background(Color.white.opacity(0.2))
                     
-                    // Argus Auto-Pilot
+                    // Argus Auto-Pilot (BIST Mode)
                     HStack {
                         VStack(alignment: .leading) {
                             Text("Argus BIST Yöneticisi")
@@ -83,7 +95,7 @@ struct BistPortfolioView: View {
                 .padding(.horizontal)
                 
                 // MARK: - Portfolio List
-                if viewModel.portfolio.isEmpty {
+                if bistTrades.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "case.fill")
                             .font(.system(size: 48))
@@ -107,8 +119,8 @@ struct BistPortfolioView: View {
                     .padding(.top, 40)
                 } else {
                     LazyVStack(spacing: 12) {
-                        ForEach(viewModel.portfolio) { trade in
-                            BistPositionRow(trade: trade, quote: viewModel.quotes[trade.symbol])
+                        ForEach(bistTrades) { trade in
+                            BistPositionRowV2(trade: trade, quote: viewModel.quotes[trade.symbol])
                         }
                     }
                     .padding(.horizontal)
@@ -117,32 +129,30 @@ struct BistPortfolioView: View {
             .padding(.top)
         }
         .background(Theme.background.ignoresSafeArea())
-        .onAppear {
-            viewModel.loadData()
-        }
         .sheet(isPresented: $showSearch) {
-            BistMarketView(viewModel: viewModel)
+            BistMarketView()
+                .environmentObject(viewModel)
         }
     }
     
     // Computed
     var portfolioValue: Double {
-        viewModel.portfolio.reduce(0) { total, trade in
-            let price = viewModel.quotes[trade.symbol]?.price ?? trade.entryPrice
+        bistTrades.reduce(0) { total, trade in
+            let price = viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice
             return total + (trade.quantity * price)
         }
     }
 }
 
 // MARK: - Subviews
-struct BistPositionRow: View {
-    let trade: BistTrade
-    let quote: BistTicker?
+struct BistPositionRowV2: View {
+    let trade: Trade
+    let quote: Quote?
     
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
-                Text(trade.symbol)
+                Text(trade.symbol.replacingOccurrences(of: ".IS", with: ""))
                     .font(.headline)
                     .bold()
                 Text("\(Int(trade.quantity)) Adet")
@@ -152,28 +162,21 @@ struct BistPositionRow: View {
             
             Spacer()
             
-            // Grafik (Mini Sparkline - Placeholder)
-            // İleride buraya mini BIST grafiği gelecek
-            
             VStack(alignment: .trailing) {
-                if let price = quote?.price {
-                    Text("₺\(String(format: "%.2f", price))")
-                        .bold()
-                    
-                    let pnl = (price - trade.entryPrice) * trade.quantity
-                    let pnlPercent = ((price - trade.entryPrice) / trade.entryPrice) * 100
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: pnl >= 0 ? "arrow.up" : "arrow.down")
-                        Text("\(String(format: "%.1f", pnlPercent))%")
-                        Text("(₺\(Int(pnl)))")
-                    }
-                    .font(.caption)
-                    .foregroundColor(pnl >= 0 ? .green : .red)
-                    
-                } else {
-                    ProgressView()
+                let currentPrice = quote?.currentPrice ?? trade.entryPrice
+                Text("₺\(String(format: "%.2f", currentPrice))")
+                    .bold()
+                
+                let pnl = (currentPrice - trade.entryPrice) * trade.quantity
+                let pnlPercent = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100.0
+                
+                HStack(spacing: 4) {
+                    Image(systemName: pnl >= 0 ? "arrow.up" : "arrow.down")
+                    Text("\(String(format: "%.1f", pnlPercent))%")
+                    Text("(₺\(Int(pnl)))")
                 }
+                .font(.caption)
+                .foregroundColor(pnl >= 0 ? .green : .red)
             }
         }
         .padding()
@@ -181,4 +184,3 @@ struct BistPositionRow: View {
         .cornerRadius(12)
     }
 }
-
