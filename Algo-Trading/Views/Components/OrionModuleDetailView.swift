@@ -183,31 +183,37 @@ struct OrionModuleDetailView: View {
     private var rsiChart: some View {
         GeometryReader { geo in
             let prices = candles.suffix(50).map { $0.close }
-            let rsiData = OrionChartHelpers.calculateRSI(period: 14, prices: prices)
-            let normalized = OrionChartHelpers.normalize(rsiData)
-            
-            ZStack {
-                // Background Zones
-                VStack(spacing: 0) {
-                    Color.red.opacity(0.1).frame(height: geo.size.height * 0.3) // Overbought
-                    Color.clear.frame(height: geo.size.height * 0.4)
-                    Color.green.opacity(0.1).frame(height: geo.size.height * 0.3) // Oversold
-                }
+            if prices.isEmpty {
+                 Text("Veri Yok").font(.caption).foregroundColor(.gray)
+            } else {
+                let rsiData = OrionChartHelpers.calculateRSI(period: 14, prices: prices)
+                let normalized = OrionChartHelpers.normalize(rsiData)
                 
-                // Line
-                Path { path in
-                    let width = geo.size.width
-                    let height = geo.size.height
-                    let step = width / CGFloat(normalized.count - 1)
-                    
-                    for (index, value) in normalized.enumerated() {
-                        let x = CGFloat(index) * step
-                        let y = height - (CGFloat(value) * height)
-                        if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                        else { path.addLine(to: CGPoint(x: x, y: y)) }
+                ZStack {
+                    // Background Zones
+                    VStack(spacing: 0) {
+                        Color.red.opacity(0.1).frame(height: geo.size.height * 0.3) // Overbought
+                        Color.clear.frame(height: geo.size.height * 0.4)
+                        Color.green.opacity(0.1).frame(height: geo.size.height * 0.3) // Oversold
                     }
+                    
+                    // Line
+                    Path { path in
+                        let width = geo.size.width
+                        let height = geo.size.height
+                        guard normalized.count > 1 else { return }
+                        let step = width / CGFloat(normalized.count - 1)
+                        
+                        for (index, value) in normalized.enumerated() {
+                            if value.isNaN || value.isInfinite { continue }
+                            let x = CGFloat(index) * step
+                            let y = height - (CGFloat(value) * height)
+                            if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                            else { path.addLine(to: CGPoint(x: x, y: y)) }
+                        }
+                    }
+                    .stroke(cyan, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 }
-                .stroke(cyan, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             }
         }
     }
@@ -257,18 +263,30 @@ struct OrionModuleDetailView: View {
     // 3. Volume Chart
     private var volumeChart: some View {
         GeometryReader { geo in
-            let volumes = candles.suffix(50).map { Double($0.volume) }
-            let maxVol = volumes.max() ?? 1
-            let width = geo.size.width
-            let step = width / CGFloat(volumes.count)
-            let height = geo.size.height
+            let lastCandles = Array(candles.suffix(50))
+            let volumes = lastCandles.map { Double($0.volume) }
             
-            HStack(alignment: .bottom, spacing: 1) {
-                ForEach(0..<volumes.count, id: \.self) { i in
-                    let barH = CGFloat(volumes[i]) / CGFloat(maxVol) * height
-                    Rectangle()
-                        .fill(candles.suffix(50)[i].close > candles.suffix(50)[i].open ? green : red)
-                        .frame(width: step - 1, height: barH)
+            if volumes.isEmpty {
+                Text("Hacim Verisi Yok").font(.caption).foregroundColor(.gray)
+            } else {
+                // Safe Max Volume (Prevent Divide by Zero)
+                let maxVol = max(volumes.max() ?? 1.0, 1.0)
+                let width = geo.size.width
+                let count = CGFloat(volumes.count)
+                let step = width / count
+                let height = geo.size.height
+                
+                HStack(alignment: .bottom, spacing: 1) {
+                    ForEach(0..<lastCandles.count, id: \.self) { i in
+                        let vol = volumes[i]
+                        // Safe height calculation
+                        let barH = (vol / maxVol) * Double(height)
+                        let safeBarH = barH.isNaN ? 0 : CGFloat(max(barH, 1.0)) // Ensure at least 1px height
+                        
+                        Rectangle()
+                            .fill(lastCandles[i].close >= lastCandles[i].open ? green : red)
+                            .frame(width: max(step - 1, 1), height: safeBarH)
+                    }
                 }
             }
         }
