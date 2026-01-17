@@ -28,17 +28,71 @@ enum CircuitNode: Equatable {
     func educationalContent(for orion: OrionScoreResult) -> String {
         switch self {
         case .trend:
-            return "Trend analizi, fiyatın genel yonunu belirler. SMA 50 ve SMA 200 hareketli ortalamalari kullanilarak hesaplanir. Fiyat her iki ortalamanin uzerindeyse guclu yukselis trendi, altindaysa dusus trendi vardir."
+            return """
+            **METODOLOJİ: TREND TAKİBİ**
+            
+            Trend analizi, fiyatın "en az direnç gösteren yolunu" tespit eder. Argus, üç ana hareketli ortalamayı (SMA 20, 50, 200) ve bunların birbirine olan hizalanmasını (Alignment) inceler.
+            
+            **KULLANILAN GÖSTERGELER:**
+            • **SMA 200 (Ana Yön):** Fiyat bunun üzerindeyse uzun vadeli trend pozitiftir. Altındaysa ayı piyasası hakimdir.
+            • **Altın Kesişim (Golden Cross):** SMA 50'nin SMA 200'ü yukarı kesmesi, boğa piyasasının en güçlü sinyallerinden biridir.
+            • **ADX (Trend Gücü):** Yön ne olursa olsun, trendin gücünü ölçer. 25 üzeri ADX, güçlü bir trendi işaret eder.
+            
+            💡 **PRO TIP:** Trend dostunuzdur, ancak "düzeltme" (pullback) ile "dönüş" (reversal) arasındaki farkı anlamak kritiktir. ADX düşüyorsa trend zayıflıyor olabilir.
+            """
+            
         case .momentum:
-            return "Momentum, fiyat hareketinin hızını ölçer. RSI ve MACD kullanılır."
+            return """
+            **METODOLOJİ: MOMENTUM & HIZ**
+            
+            Momentum, bir aracın gaz pedalına benzer. Fiyat artıyor olabilir, ancak "ivme" azalıyor mu? Momentum analizi bu soruyu cevaplar.
+            
+            **TEMEL KAVRAMLAR:**
+            • **RSI (Göreceli Güç):** 70 üzeri "Aşırı Alım" (Fiyat pahalı), 30 altı "Aşırı Satım" (Fiyat ucuz) bölgesidir. Ancak güçlü trendlerde RSI uzun süre 70 üzerinde kalabilir; bu bir güç göstergesidir, hemen sat sinyali değildir.
+            • **Uyumsuzluk (Divergence):** Fiyat yeni zirve yaparken RSI yapamıyorsa (Negatif Uyumsuzluk), düşüş yakındır.
+            
+            💡 **PRO TIP:** RSI 50 seviyesi "Boğa/Ayı Kontrol Bölgesi"dir. 50'nin üzerinde kalıcılık, alıcıların iştahlı olduğunu gösterir.
+            """
+            
         case .structure:
-            return "Yapı analizi, destek/direnç seviyelerini ve işlem hacminin fiyata etkisini inceler."
+            return """
+            **METODOLOJİ: PİYASA YAPISI & HACİM**
+            
+            Fiyat hareketi (Price Action) ve Hacim (Volume) arasındaki ilişki, hareketin gerçekliğini test eder.
+            
+            **ANALİZ MANTIĞI:**
+            • **Hacim Onayı:** Fiyat artarken hacim de artıyorsa, yükseliş "sağlıklıdır" ve kurumsal katılımcılar tarafından destekleniyordur.
+            • **Destek/Direnç Kanalları:** Fiyatın tarihsel olarak tepki verdiği bölgelerdir.
+            • **Anomali:** Fiyat artarken hacim düşüyorsa, yükseliş "sahte" (Fakeout) olabilir.
+            
+            💡 **PRO TIP:** Hacimsiz yükselişler genellikle satış fırsatıdır. Büyük mumlar + Yüksek hacim = Kurumsal Ayak İzi.
+            """
+            
         case .pattern:
-            return "Formasyon analizi, grafikte oluşan geometrik desenleri (Çanak, Bayrak, OBO vb.) tespit eder."
+            return """
+            **METODOLOJİ: FORMASYON TESPİTİ**
+            
+            Piyasalar insan psikolojisiyle hareket eder ve bu psikoloji grafiklerde tekrar eden geometrik şekiller (Formasyonlar) oluşturur.
+            
+            **ARANAN YAPILAR:**
+            • **Dönüş Formasyonları:** İkili Dip, OBO (Omuz Baş Omuz), Ters OBO. Trendin değişeceğini haber verir.
+            • **Devam Formasyonları:** Bayrak (Flag), Flama (Pennant). Trendin kısa bir moladan sonra devam edeceğini gösterir.
+            
+            💡 **PRO TIP:** Formasyonlar "gerçekleşmeden" değil, "kırılım" (breakout) teyidi alındıktan sonra işlem yapılmalıdır. Erken girmek risklidir.
+            """
+            
         case .cpu:
-            return "Konsensus motoru, tum gostergelerden gelen sinyalleri birlestirerek tek bir skor uretir. Her gosterge oylanir ve agirlikli ortalama alinir. Bu skor, genel piyasa durumunu yansitir."
+            return """
+            **METODOLOJİ: KONSENSUS MOTORU**
+            
+            Konsensus, Argus'un beynidir. Tüm alt sistemlerden (Trend, Momentum, Yapı, Formasyon) gelen sinyalleri toplar, her birine güven skoruna göre ağırlık verir ve nihai bir "Piyasa Görüşü" oluşturur.
+            
+            **NASIL HESAPLANIR?**
+            Her modül 0-100 arası bir skor üretir. Konsensus, bu skorların ağırlıklı ortalamasını alır. 50 puan "Nötr" (Kararsız) bölgedir. 50'den uzaklaştıkça sinyalin gücü artar.
+            """
+            
         case .output:
-            return "Nihai karar, konsensus skoruna gore belirlenir. 70 ustu guclu alim, 55-70 alim, 45-55 tut, 30-45 sat, 30 alti guclu sat olarak yorumlanir."
+            return "Sonuç ekranı."
         }
     }
 }
