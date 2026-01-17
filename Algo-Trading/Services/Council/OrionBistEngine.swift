@@ -31,7 +31,7 @@ class OrionBistEngine {
     private let sarInc = 0.02
     private let sarMax = 0.2
     
-    // MARK: - Legacy API (Used by BistTradingViewModel)
+    // MARK: - Legacy API (Used by SirkiyeViewModel)
     func analyze(candles: [BistCandle]) -> OrionBistResult {
         // Convert BistCandle to Double arrays for calculation
         let closes = candles.map { $0.close }
