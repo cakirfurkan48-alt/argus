@@ -434,8 +434,6 @@ struct HoloPanelView: View {
                         candles: viewModel.candles[symbol] ?? []
                     )
                         .frame(height: 600) // Fixed height to play nice with ScrollView
-                        .cornerRadius(12)
-                        .padding(.horizontal, 4) // Slight inset
                 }
                 // ORION LEGACY (V1/1.5 - Single Timeframe Fallback)
                 else if let orion = viewModel.orionScores[symbol] {

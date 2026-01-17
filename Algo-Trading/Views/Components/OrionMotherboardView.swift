@@ -14,8 +14,10 @@ struct OrionMotherboardView: View {
     
     // Theme matching the Dark Detail View
     // Background: Deep Dark Blue/Black
-    private let boardColor = Color(red: 0.02, green: 0.02, blue: 0.04)
-    private let cardBg = Color(red: 0.05, green: 0.05, blue: 0.08)
+    // Theme - Harmonized with App Theme
+    // Using a deep navy that blends with ArgusSanctum
+    private let boardColor = Color(red: 0.05, green: 0.07, blue: 0.12) 
+    private let cardBg = Color(red: 0.08, green: 0.10, blue: 0.16)
     private let traceColor = Color(red: 0.2, green: 0.2, blue: 0.3)
     
     // Accents
@@ -51,16 +53,17 @@ struct OrionMotherboardView: View {
                     HStack(spacing: 0) {
                         // LEFT: Modules (Trend, Momentum, Volume)
                         inputStations(in: geo.size)
-                            .frame(width: 140) // Fixed width for left column
+                            .frame(width: 110) // Reduced width
                         
-                        Spacer()
+                        // Spacer (Dynamic Gap)
+                        Spacer(minLength: 40)
                         
                         // CENTER: Consensus CPU
                         cpuNode(in: geo.size)
                         
                         Spacer()
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 16) // Slightly reduced padding
                     
                     Spacer()
                     
@@ -203,9 +206,9 @@ struct OrionMotherboardView: View {
                             .frame(width: geo.size.width * min((Double(value) ?? 0) / max, 1.0))
                     }
                 }
-                .frame(height: 4)
+                .frame(height: 3) // Thinner progress bar
             }
-            .padding(16)
+            .padding(12) // Reduced padding inside card
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(cardBg)

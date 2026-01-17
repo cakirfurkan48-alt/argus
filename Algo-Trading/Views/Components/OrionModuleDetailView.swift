@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 // MARK: - Orion Module Detail View
 struct OrionModuleDetailView: View {
@@ -9,24 +8,24 @@ struct OrionModuleDetailView: View {
     let candles: [Candle]
     let onClose: () -> Void
     
-    // Theme Constants matching the User's Dark Mode Image
+    // Theme
     private let darkBg = Color(red: 0.02, green: 0.02, blue: 0.04)
     private let cardBg = Color(red: 0.05, green: 0.05, blue: 0.08)
     private let cyan = Color(red: 0.0, green: 0.8, blue: 1.0)
     private let orange = Color(red: 1.0, green: 0.6, blue: 0.0)
+    private let green = Color(red: 0.0, green: 0.8, blue: 0.4)
+    private let red = Color(red: 0.9, green: 0.2, blue: 0.2)
     
     var body: some View {
         ZStack {
-            // Background
             darkBg.ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Header
                 headerView
                 
                 ScrollView {
                     VStack(spacing: 24) {
-                        // 1. Live Analysis Text
+                        // 1. Live Analysis Text (Dynamic)
                         liveAnalysisCard
                         
                         // 2. Section Title
@@ -40,37 +39,18 @@ struct OrionModuleDetailView: View {
                         }
                         .padding(.horizontal)
                         
-                        // 3. Indicator Charts
-                        if type == .trend {
-                            technicalCard(title: "GÖRECELİ GÜÇ ENDEKSİ", subtitle: "RSI (14)", value: "68.4", delta: "+2.4% (24s)") {
-                                rsiChart
-                            }
-                            
-                            technicalCard(title: "PRICE ACTION", subtitle: "Hareketli Ortalamalar", value: String(format: "%.2f", candles.last?.close ?? 0), delta: "+5.1% (30g)") {
-                                maChart
-                            }
-                        } else if type == .momentum {
-                             technicalCard(title: "MACD", subtitle: "Momentum Convergence", value: "Bullish", delta: "Strong") {
-                                rsiChart // Reusing chart style for demo
-                            }
-                        } else {
-                            // Volume / Structure
-                            technicalCard(title: "VOLUME PROFILE", subtitle: "OBV & Flow", value: "High", delta: "+12%") {
-                                maChart // Reusing chart style for demo
-                            }
-                        }
+                        // 3. Indicator Charts & Stats (Dynamic per Type)
+                        indicatorsSection
                         
-                        // 4. Learning Section
+                        // 4. Learning Section (Static per Type)
                         learningSection
                         
-                        // Spacer for bottom bar
                         Color.clear.frame(height: 100)
                     }
                     .padding(.vertical)
                 }
             }
             
-            // Bottom Action Bar
             VStack {
                 Spacer()
                 bottomActionBar
@@ -78,31 +58,59 @@ struct OrionModuleDetailView: View {
         }
     }
     
-    // MARK: - Subviews
+    // MARK: - Dynamic Content Switching
     
-    private var headerView: some View {
-        HStack {
-            Button(action: onClose) {
-                Image(systemName: "chevron.left")
-                    .font(.title3)
-                    .foregroundColor(cyan)
+    @ViewBuilder
+    private var indicatorsSection: some View {
+        switch type {
+        case .trend:
+            // Trend: RSI (Force) + MA (Direction)
+            technicalCard(
+                title: "PRICE ACTION",
+                subtitle: "Hareketli Ortalamalar",
+                value: String(format: "%.2f", candles.last?.close ?? 0),
+                delta: getPriceChangeText()
+            ) {
+                maChart
             }
             
-            Spacer()
+            technicalCard(
+                title: "GÖRECELİ GÜÇ ENDEKSİ",
+                subtitle: "RSI (14)",
+                value: "Momentum",
+                delta: ""
+            ) {
+                rsiChart
+            }
             
-            Text("\(type.title) DETAY ANALİZİ")
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
-                .foregroundColor(.white)
-                .tracking(1)
+        case .momentum:
+            // Momentum: RSI Focus + MACD (Simulated via RSI 9 vs 14)
+             technicalCard(
+                title: "MOMENTUM",
+                subtitle: "RSI & Velocity",
+                value: String(format: "%.0f", analysis.components.momentum),
+                delta: "/ 25"
+            ) {
+                rsiChart
+            }
             
-            Spacer()
+        case .volume:
+            // Volume: Volume Bars
+             technicalCard(
+                title: "VOLUME PROFILE",
+                subtitle: "Activity",
+                value: String(format: "%.0f", analysis.components.structure),
+                delta: "/ 35"
+            ) {
+                volumeChart
+            }
             
-            Image(systemName: "antenna.radiowaves.left.and.right")
-                .foregroundColor(cyan)
+        default:
+            EmptyView()
         }
-        .padding()
-        .background(cardBg.opacity(0.8))
     }
+    
+    // MARK: - Helper Views
     
     private var liveAnalysisCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -115,20 +123,14 @@ struct OrionModuleDetailView: View {
                 Spacer()
             }
             
-            // Rich Text Construction
-            Group {
-                Text("Trend şu an güçlü bir ")
-                    .foregroundColor(.gray) +
-                Text("yükseliş eğiliminde (Bullish)")
-                    .foregroundColor(cyan)
-                    .bold() +
-                Text(". RSI ve Hareketli Ortalama verileri ")
-                    .foregroundColor(.gray) +
-                Text("pozitif ivmeyi")
-                    .foregroundColor(.white)
-                    .bold() +
-                Text(" destekliyor. Direnç seviyesi üzerinde kalıcılık bekleniyor.")
-                    .foregroundColor(.gray)
+            // Render Dynamic Text
+            let dynamicText = getDynamicText()
+            
+            // Build text view from segments
+            dynamicText.segments.reduce(Text("")) { (result, segment) in
+                result + Text(segment.text)
+                    .foregroundColor(segment.color)
+                    .fontWeight(segment.isBold ? .bold : .regular)
             }
             .font(.system(size: 15, design: .monospaced))
             .lineSpacing(4)
@@ -142,43 +144,29 @@ struct OrionModuleDetailView: View {
         .padding(.horizontal)
     }
     
+    private func getDynamicText() -> DynamicAnalysisText {
+        switch type {
+        case .trend: return OrionTextGenerator.generateTrendText(for: analysis)
+        case .momentum: return OrionTextGenerator.generateMomentumText(for: analysis)
+        case .volume: return OrionTextGenerator.generateVolumeText(for: analysis)
+        default: return DynamicAnalysisText(segments: [])
+        }
+    }
+    
     private func technicalCard<Content: View>(title: String, subtitle: String, value: String, delta: String, @ViewBuilder content: @escaping () -> Content) -> some View {
         VStack(spacing: 16) {
-            // Header
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(cyan)
-                    Text(subtitle)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
+                    Text(title).font(.system(size: 10, weight: .bold)).foregroundColor(cyan)
+                    Text(subtitle).font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                 }
-                
                 Spacer()
-                
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text(value)
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    Text(delta)
-                        .font(.caption)
-                        .foregroundColor(cyan)
+                    Text(value).font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundColor(.white)
+                    Text(delta).font(.caption).foregroundColor(cyan)
                 }
             }
-            
-            // Chart Content
-            content()
-                .frame(height: 120)
-            
-            // X-Axis Labels (Mock)
-            HStack {
-                Text("00:00").font(.caption2).foregroundColor(.gray)
-                Spacer()
-                Text("12:00").font(.caption2).foregroundColor(.gray)
-                Spacer()
-                Text("24:00").font(.caption2).foregroundColor(.gray)
-            }
+            content().frame(height: 120)
         }
         .padding()
         .background(
@@ -189,119 +177,153 @@ struct OrionModuleDetailView: View {
         .padding(.horizontal)
     }
     
-    // MARK: - Charts (Simplified using SwiftUI Path or Charts)
+    // MARK: - Dynamic Charts
     
+    // 1. RSI Chart (Calculated from Candles)
     private var rsiChart: some View {
         GeometryReader { geo in
-            Path { path in
-                let width = geo.size.width
-                let height = geo.size.height
-                
-                // Mock Sine Wave
-                path.move(to: CGPoint(x: 0, y: height * 0.8))
-                for x in stride(from: 0, to: width, by: 5) {
-                    let relativeX = x / width
-                    let y = height * 0.5 + sin(relativeX * 10) * (height * 0.3)
-                    path.addLine(to: CGPoint(x: x, y: y))
+            let prices = candles.suffix(50).map { $0.close }
+            let rsiData = OrionChartHelpers.calculateRSI(period: 14, prices: prices)
+            let normalized = OrionChartHelpers.normalize(rsiData)
+            
+            ZStack {
+                // Background Zones
+                VStack(spacing: 0) {
+                    Color.red.opacity(0.1).frame(height: geo.size.height * 0.3) // Overbought
+                    Color.clear.frame(height: geo.size.height * 0.4)
+                    Color.green.opacity(0.1).frame(height: geo.size.height * 0.3) // Oversold
                 }
+                
+                // Line
+                Path { path in
+                    let width = geo.size.width
+                    let height = geo.size.height
+                    let step = width / CGFloat(normalized.count - 1)
+                    
+                    for (index, value) in normalized.enumerated() {
+                        let x = CGFloat(index) * step
+                        let y = height - (CGFloat(value) * height)
+                        if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                        else { path.addLine(to: CGPoint(x: x, y: y)) }
+                    }
+                }
+                .stroke(cyan, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             }
-            .stroke(cyan, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
         }
     }
     
+    // 2. MA Chart (Price + SMA20)
     private var maChart: some View {
         GeometryReader { geo in
+            let prices = candles.suffix(50).map { $0.close }
+            let normPrices = OrionChartHelpers.normalize(prices)
+            let sma = OrionChartHelpers.calculateSMA(period: 10, prices: prices)
+            let normSMA = OrionChartHelpers.normalize(sma) // Simplified normalization (should align with price scale really)
+            
             ZStack {
-                // MA 1 (Cyan)
+                // Price Line
                 Path { path in
-                    let width = geo.size.width
-                    let height = geo.size.height
-                    path.move(to: CGPoint(x: 0, y: height * 0.7))
-                    for x in stride(from: 0, to: width, by: 5) {
-                        let relativeX = x / width
-                        let y = height * 0.6 + sin(relativeX * 8) * (height * 0.2)
-                        path.addLine(to: CGPoint(x: x, y: y))
-                    }
+                     let width = geo.size.width
+                     let height = geo.size.height
+                     let step = width / CGFloat(normPrices.count - 1)
+                     
+                     for (index, value) in normPrices.enumerated() {
+                         let x = CGFloat(index) * step
+                         let y = height - (CGFloat(value) * height)
+                         if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                         else { path.addLine(to: CGPoint(x: x, y: y)) }
+                     }
                 }
-                .stroke(cyan, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(Color.white, style: StrokeStyle(lineWidth: 2))
                 
-                // MA 2 (Orange)
+                // SMA Line
                 Path { path in
-                    let width = geo.size.width
-                    let height = geo.size.height
-                    path.move(to: CGPoint(x: 0, y: height * 0.8))
-                    for x in stride(from: 0, to: width, by: 5) {
-                        let relativeX = x / width
-                        let y = height * 0.7 + cos(relativeX * 6) * (height * 0.15)
-                        path.addLine(to: CGPoint(x: x, y: y))
-                    }
+                     let width = geo.size.width
+                     let height = geo.size.height
+                     let step = width / CGFloat(normSMA.count - 1)
+                     
+                     for (index, value) in normSMA.enumerated() {
+                         let x = CGFloat(index) * step
+                         let y = height - (CGFloat(value) * height)
+                         if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                         else { path.addLine(to: CGPoint(x: x, y: y)) }
+                     }
                 }
-                .stroke(orange, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .stroke(orange, style: StrokeStyle(lineWidth: 2))
             }
         }
     }
     
-    // MARK: - Learning Section
+    // 3. Volume Chart
+    private var volumeChart: some View {
+        GeometryReader { geo in
+            let volumes = candles.suffix(50).map { Double($0.volume) }
+            let maxVol = volumes.max() ?? 1
+            let width = geo.size.width
+            let step = width / CGFloat(volumes.count)
+            let height = geo.size.height
+            
+            HStack(alignment: .bottom, spacing: 1) {
+                ForEach(0..<volumes.count, id: \.self) { i in
+                    let barH = CGFloat(volumes[i]) / CGFloat(maxVol) * height
+                    Rectangle()
+                        .fill(candles.suffix(50)[i].close > candles.suffix(50)[i].open ? green : red)
+                        .frame(width: step - 1, height: barH)
+                }
+            }
+        }
+    }
+
+    
+    // MARK: - Header & Footer
+    private var headerView: some View {
+        HStack {
+            Button(action: onClose) {
+                Image(systemName: "chevron.left").font(.title3).foregroundColor(cyan)
+            }
+            Spacer()
+            Text("\(type.title) DETAY ANALİZİ").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+            Spacer()
+            Image(systemName: "antenna.radiowaves.left.and.right").foregroundColor(cyan)
+        }
+        .padding()
+        .background(cardBg.opacity(0.8))
+    }
+    
+    private var bottomActionBar: some View {
+        HStack(spacing: 12) {
+            Button(action: {}) {
+                HStack { Image(systemName: "bell.fill"); Text("ALARM KUR") }
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(cyan)
+                    .cornerRadius(12)
+            }
+            Button(action: {}) {
+                Image(systemName: "square.and.arrow.up")
+                    .foregroundColor(.white)
+                    .frame(width: 50, height: 50)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(12)
+            }
+        }
+        .padding()
+        .background(darkBg.opacity(0.95))
+    }
     
     private var learningSection: some View {
         VStack(spacing: 0) {
             DisclosureGroup(
                 content: {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .top) {
-                            Image(systemName: "chart.line.uptrend.xyaxis")
-                                .padding(8)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(6)
-                                .foregroundColor(.blue)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Yükseliş Trendi (Bull Market)")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(.white)
-                                Text("Fiyatların birbirini izleyen daha yüksek zirveler ve daha yüksek dipler oluşturması durumudur. Yatırımcı güveninin yüksek olduğunu gösterir.")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                                    .lineLimit(nil)
-                            }
-                        }
-                        .padding(.top, 8)
-                        
-                        HStack(alignment: .top) {
-                            Image(systemName: "info.circle.fill")
-                                .padding(8)
-                                .background(Color.orange.opacity(0.1))
-                                .cornerRadius(6)
-                                .foregroundColor(.orange)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Neden Önemlidir?")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(.white)
-                                Text("Trend yönünü belirlemek, dalgalara karşı değil, dalgalarla birlikte hareket etmenizi sağlar. 'Trend is your friend' (Trend dostunuzdur) temel bir finans prensibidir.")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                        
-                        Button(action: {}) {
-                            Text("TÜM MODÜLÜ İNCELE")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(cyan)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(cyan.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        .padding(.top, 8)
-                    }
-                    .padding()
+                    Text(type.educationalContent(for: analysis))
+                        .foregroundColor(.gray)
+                        .padding()
                 },
                 label: {
                     HStack {
-                        Image(systemName: "graduationcap.fill")
-                            .foregroundColor(orange)
-                        Text("Öğren: Trend Nedir?")
+                        Image(systemName: "graduationcap.fill").foregroundColor(orange)
+                        Text("Öğren: \(type.title) Nedir?")
                             .font(.headline)
                             .foregroundColor(.white)
                     }
@@ -315,31 +337,9 @@ struct OrionModuleDetailView: View {
         .padding(.horizontal)
     }
     
-    private var bottomActionBar: some View {
-        HStack(spacing: 12) {
-            Button(action: {}) {
-                HStack {
-                    Image(systemName: "bell.fill")
-                    Text("ALARM KUR")
-                }
-                .font(.headline)
-                .foregroundColor(.black)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(cyan)
-                .cornerRadius(12)
-            }
-            
-            Button(action: {}) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(width: 50, height: 50)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(12)
-            }
-        }
-        .padding()
-        .background(darkBg.opacity(0.95))
+    private func getPriceChangeText() -> String {
+        guard let last = candles.last, let prev = candles.dropLast().last else { return "0%" }
+        let diff = (last.close - prev.close) / prev.close * 100
+        return String(format: "%+.2f%%", diff)
     }
 }
