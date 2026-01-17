@@ -12,15 +12,16 @@ enum SignalStatus {
 }
 
 enum CircuitNode: Equatable {
-    case trend, momentum, volume, cpu, output
+    case trend, momentum, structure, pattern, cpu, output
     
     var title: String {
         switch self {
-        case .trend: return "TREND ANALYSIS"
-        case .momentum: return "MOMENTUM INDICATOR"
-        case .volume: return "VOLUME & STRUCTURE"
-        case .cpu: return "CONSENSUS ENGINE"
-        case .output: return "FINAL VERDICT"
+        case .trend: return "TREND"
+        case .momentum: return "MOMENTUM"
+        case .structure: return "YAPI"
+        case .pattern: return "FORMASYON"
+        case .cpu: return "KONSENSUS"
+        case .output: return "SONUÇ"
         }
     }
     
@@ -29,9 +30,11 @@ enum CircuitNode: Equatable {
         case .trend:
             return "Trend analizi, fiyatın genel yonunu belirler. SMA 50 ve SMA 200 hareketli ortalamalari kullanilarak hesaplanir. Fiyat her iki ortalamanin uzerindeyse guclu yukselis trendi, altindaysa dusus trendi vardir."
         case .momentum:
-            return "Momentum, fiyat hareketinin hizini ve gucunu olcer. RSI (Relative Strength Index) ve TSI kullanilir. RSI 70 uzerinde asiri alim, 30 altinda asiri satim sinyali verir."
-        case .volume:
-            return "Hacim ve yapi analizi, fiyat hareketlerinin arkasindaki gucun kalicilgini degerlendirir. Yuksek hacimli hareketler daha guvenilirdir. ADX gostergesi trend gucunu olcer."
+            return "Momentum, fiyat hareketinin hızını ölçer. RSI ve MACD kullanılır."
+        case .structure:
+            return "Yapı analizi, destek/direnç seviyelerini ve işlem hacminin fiyata etkisini inceler."
+        case .pattern:
+            return "Formasyon analizi, grafikte oluşan geometrik desenleri (Çanak, Bayrak, OBO vb.) tespit eder."
         case .cpu:
             return "Konsensus motoru, tum gostergelerden gelen sinyalleri birlestirerek tek bir skor uretir. Her gosterge oylanir ve agirlikli ortalama alinir. Bu skor, genel piyasa durumunu yansitir."
         case .output:

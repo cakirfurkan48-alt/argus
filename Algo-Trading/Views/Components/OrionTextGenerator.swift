@@ -54,8 +54,8 @@ struct OrionTextGenerator {
         return DynamicAnalysisText(segments: segments)
     }
     
-    // MARK: - Volume Analysis Text
-    static func generateVolumeText(for analysis: OrionScoreResult) -> DynamicAnalysisText {
+    // MARK: - Structure Analysis Text (Was Volume)
+    static func generateStructureText(for analysis: OrionScoreResult) -> DynamicAnalysisText {
         let volScore = analysis.components.structure
         var segments: [TextSegment] = []
         
@@ -72,6 +72,24 @@ struct OrionTextGenerator {
              segments.append(TextSegment(text: ". Belirgin bir para girişi veya çıkışı yok.", color: .gray))
         }
         
+        return DynamicAnalysisText(segments: segments)
+    }
+
+    // MARK: - Pattern Analysis Text
+    static func generatePatternText(for analysis: OrionScoreResult) -> DynamicAnalysisText {
+        let patternDesc = analysis.components.patternDesc
+        let isEmpty = patternDesc.isEmpty || patternDesc.contains("Yok")
+        var segments: [TextSegment] = []
+        
+        segments.append(TextSegment(text: "Grafik üzerinde ", color: .gray))
+        
+        if isEmpty {
+             segments.append(TextSegment(text: "belirgin bir formasyon", color: .white, isBold: true))
+             segments.append(TextSegment(text: " tespit edilemedi. Fiyat hareketi standart sapma aralığında.", color: .gray))
+        } else {
+             segments.append(TextSegment(text: patternDesc, color: .green, isBold: true))
+             segments.append(TextSegment(text: " formasyonu tespit edildi. İşleme girmek için teyit beklenebilir.", color: .gray))
+        }
         return DynamicAnalysisText(segments: segments)
     }
 }
