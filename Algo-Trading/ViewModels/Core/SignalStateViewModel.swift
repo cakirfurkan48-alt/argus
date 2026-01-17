@@ -14,6 +14,7 @@ final class SignalStateViewModel: ObservableObject {
     
     /// Orion Multi-Timeframe Analysis (Orion 2.0)
     @Published var orionAnalysis: [String: MultiTimeframeAnalysis] = [:]
+    @Published var isOrionLoading: Bool = false
     
     /// Grand Council Decisions
     @Published var grandDecisions: [String: ArgusGrandDecision] = [:]
@@ -55,6 +56,10 @@ final class SignalStateViewModel: ObservableObject {
                 self?.orionAnalysis = analysis
             }
             .store(in: &cancellables)
+            
+        OrionStore.shared.$isLoading
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$isOrionLoading)
     }
     
     // MARK: - Orion Analysis

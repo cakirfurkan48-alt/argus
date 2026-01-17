@@ -447,14 +447,18 @@ struct HoloPanelView: View {
                         patterns: viewModel.patterns[symbol]
                     )
                 } else {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .tint(SanctumTheme.orionColor)
-                        Text("Orion analizi yükleniyor...")
-                            .font(.caption)
-                            .foregroundColor(.gray)
+                    if viewModel.isOrionLoading {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .tint(SanctumTheme.orionColor)
+                            Text("Orion analizi yükleniyor...")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                    } else {
+                        OrionMotherboardErrorView(symbol: symbol)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 200)
                 }
                 
                 // NEW: Prometheus - 5 Day Forecast (Shared across versions)
@@ -1629,5 +1633,34 @@ struct HermesInfoRow: View {
                 .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.6))
         }
+    }
+}
+// MARK: - Error View
+struct OrionMotherboardErrorView: View {
+    let symbol: String
+    
+    var body: some View {
+        VStack(spacing: 16) {
+             Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 48))
+                .foregroundColor(.orange)
+             
+             Text("Analiz Başarısız")
+                .font(.headline)
+                .foregroundColor(.white)
+             
+             Text("Heimdall protokolü \(symbol) için teknik verileri derleyemedi. Lütfen internet bağlantısını kontrol edin veya daha sonra tekrar deneyin.")
+                .font(.caption)
+                .foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+        .frame(maxWidth: .infinity, minHeight: 300)
+        .background(Theme.cardBackground)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+        )
     }
 }

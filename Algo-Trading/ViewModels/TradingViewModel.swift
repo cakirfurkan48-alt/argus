@@ -20,6 +20,7 @@ class TradingViewModel: ObservableObject {
     
     // MARK: - Signal Facade (Refactored Phase 4)
     var orionAnalysis: [String: MultiTimeframeAnalysis] { SignalStateViewModel.shared.orionAnalysis }
+    var isOrionLoading: Bool { SignalStateViewModel.shared.isOrionLoading }
 
 
     // Legacy Support (Mapped to Daily analysis)
