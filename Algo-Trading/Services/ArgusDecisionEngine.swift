@@ -504,6 +504,21 @@ struct ArgusDecisionEngine {
             }
 
             // Legacy Chiron Journal Removed (Phase 4 Refactor)
+            
+            // --- ALKINDUS OBSERVATION (Shadow Mode) ---
+            await AlkindusCalibrationEngine.shared.observe(
+                symbol: symbol,
+                action: finalAction.rawValue,
+                moduleScores: [
+                    "orion": orion ?? 0,
+                    "atlas": atlas ?? 0,
+                    "aether": aether ?? 0,
+                    "hermes": hermes ?? 0,
+                    "phoenix": phoenixOp.score
+                ],
+                regime: chironResult.regime.rawValue,
+                currentPrice: marketData?.price ?? 0
+            )
         }
         
         return (trace, legacy)
