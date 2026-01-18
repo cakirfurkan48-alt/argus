@@ -92,6 +92,74 @@ actor AlkindusMemoryStore {
         guard let stats = data.modules[module]?.brackets[scoreBracket] else { return nil }
         return stats.hitRate
     }
+    
+    // MARK: - Bootstrap Import
+    /// Imports bootstrap calibration data from bundled JSON file.
+    /// Should be called once on first launch or when resetting Alkindus.
+    func importBootstrapCalibration() async -> Bool {
+        // Check if calibration already exists
+        let existing = await loadCalibration()
+        if !existing.modules.isEmpty {
+            print("👁️ Alkindus: Calibration already exists, skipping bootstrap")
+            return false
+        }
+        
+        // Find bootstrap file
+        guard let bundlePath = Bundle.main.path(forResource: "alkindus_bootstrap_calibration", ofType: "json"),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: bundlePath)) else {
+            print("👁️ Alkindus: Bootstrap file not found in bundle")
+            return false
+        }
+        
+        // Parse bootstrap data
+        guard let bootstrap = try? JSONDecoder().decode(BootstrapCalibration.self, from: data) else {
+            print("👁️ Alkindus: Failed to decode bootstrap data")
+            return false
+        }
+        
+        // Convert to CalibrationData
+        var calibration = CalibrationData.empty
+        calibration.version = bootstrap.version
+        
+        for (moduleName, moduleData) in bootstrap.modules {
+            var moduleCalibration = ModuleCalibration(brackets: [:])
+            for (bracket, stats) in moduleData.brackets {
+                moduleCalibration.brackets[bracket] = BracketStats(
+                    attempts: stats.attempts,
+                    correct: stats.correct
+                )
+            }
+            calibration.modules[moduleName] = moduleCalibration
+        }
+        
+        await saveCalibration(calibration)
+        print("👁️ Alkindus: Bootstrap calibration imported successfully!")
+        return true
+    }
+    
+    /// Checks if bootstrap needs to be run (empty calibration)
+    func needsBootstrap() async -> Bool {
+        let existing = await loadCalibration()
+        return existing.modules.isEmpty
+    }
+}
+
+// MARK: - Bootstrap Data Model
+private struct BootstrapCalibration: Codable {
+    let version: String
+    let bootstrapDate: String
+    let source: String
+    let modules: [String: BootstrapModule]
+}
+
+private struct BootstrapModule: Codable {
+    let brackets: [String: BootstrapBracket]
+}
+
+private struct BootstrapBracket: Codable {
+    let attempts: Int
+    let correct: Int
+    let hitRate: Double
 }
 
 // MARK: - Data Models

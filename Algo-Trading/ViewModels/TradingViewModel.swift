@@ -299,6 +299,33 @@ class TradingViewModel: ObservableObject {
         }
         
         setupTradeBrainObservers()
+        
+        // Alkindus: Bekleyen gözlemleri kontrol et (T+7/T+15)
+        Task {
+            await runAlkindusMaturation()
+        }
+    }
+    
+    // MARK: - Alkindus Maturation Job
+    private func runAlkindusMaturation() async {
+        // Gather current prices
+        var currentPrices: [String: Double] = [:]
+        for (symbol, quote) in quotes {
+            currentPrices[symbol] = quote.currentPrice
+        }
+        
+        // Also check portfolio symbols
+        for trade in portfolio {
+            if let quote = quotes[trade.symbol] {
+                currentPrices[trade.symbol] = quote.currentPrice
+            }
+        }
+        
+        // Process matured decisions
+        let evaluated = await AlkindusCalibrationEngine.shared.processMaturedDecisions(currentPrices: currentPrices)
+        if evaluated > 0 {
+            print("👁️ Alkindus: \(evaluated) bekleyen karar değerlendirildi")
+        }
     }
     
     private func setupViewModelLinking() {

@@ -39,6 +39,9 @@ struct SettingsView: View {
                             NavigationLink(destination: ChironInsightsView(symbol: nil)) {
                                 ArgusTerminalRow(label: "CHIRON ÖĞRENME", value: "AKTİF", icon: "brain", color: .cyan)
                             }
+                            NavigationLink(destination: AlkindusDashboardView()) {
+                                ArgusTerminalRow(label: "ALKINDUS KALİBRASYON", value: "SHADOW", icon: "eye.circle", color: .purple)
+                            }
                             NavigationLink(destination: ArgusSimulatorView()) {
                                 ArgusTerminalRow(label: "SİMÜLASYON LAB", value: "HAZIR", icon: "flask", color: .purple)
                             }

@@ -8,6 +8,13 @@ struct AlkindusDashboardView: View {
     @State private var stats: AlkindusStats?
     @State private var isLoading = true
     
+    // Processing State
+    @State private var isProcessing = false
+    @State private var processedCount = 0
+    @State private var totalToProcess = 0
+    @State private var processingResult: ProcessingResult?
+    @State private var dbSizeMB: Double = 0
+    
     // Theme
     private let bgColor = Color(red: 0.02, green: 0.02, blue: 0.04)
     private let cardBg = Color(red: 0.06, green: 0.08, blue: 0.12)
@@ -29,6 +36,15 @@ struct AlkindusDashboardView: View {
                         VStack(spacing: 24) {
                             // Header Card
                             headerCard(stats: stats)
+                            
+                            // 🧠 Today's Insights (Phase 2)
+                            insightsSection
+                            
+                            // Data Tools (Processing & Cleanup)
+                            dataToolsSection
+                            
+                            // 🔗 Correlations (Phase 2)
+                            correlationsSection
                             
                             // Module Calibration Table
                             moduleCalibrationSection(stats: stats)
@@ -255,6 +271,221 @@ struct AlkindusDashboardView: View {
         }
     }
     
+    // MARK: - Insights Section (Phase 2)
+    @State private var insights: [AlkindusInsightGenerator.Insight] = []
+    
+    private var insightsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("🧠 BUGÜN ÖĞRENDİKLERİM")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(.gray)
+                    .tracking(1)
+                Spacer()
+                Button(action: refreshInsights) {
+                    Image(systemName: "sparkles")
+                        .foregroundColor(gold)
+                        .font(.caption)
+                }
+            }
+            
+            if insights.isEmpty {
+                Text("Henüz günlük insight yok. 'Eventlerden Öğren' butonuna bas.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .padding()
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(insights.prefix(5)) { insight in
+                        insightCard(insight: insight)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func insightCard(insight: AlkindusInsightGenerator.Insight) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: iconForCategory(insight.category))
+                .foregroundColor(colorForImportance(insight.importance))
+                .font(.title3)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(insight.title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Text(insight.detail)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
+            Spacer()
+        }
+        .padding()
+        .background(cardBg)
+        .cornerRadius(10)
+    }
+    
+    private func iconForCategory(_ category: AlkindusInsightGenerator.InsightCategory) -> String {
+        switch category {
+        case .correlation: return "link"
+        case .anomaly: return "exclamationmark.triangle"
+        case .trend: return "chart.line.uptrend.xyaxis"
+        case .performance: return "chart.bar"
+        case .regime: return "waveform"
+        case .warning: return "exclamationmark.circle"
+        case .discovery: return "sparkle"
+        }
+    }
+    
+    private func colorForImportance(_ importance: AlkindusInsightGenerator.InsightImportance) -> Color {
+        switch importance {
+        case .critical: return red
+        case .high: return .orange
+        case .medium: return cyan
+        case .low: return .gray
+        }
+    }
+    
+    // MARK: - Correlations Section (Phase 2)
+    @State private var topCorrelations: [(key: String, hitRate: Double, attempts: Int)] = []
+    
+    private var correlationsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("🔗 EN BAŞARILI KOMBİNASYONLAR")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(.gray)
+                .tracking(1)
+            
+            if topCorrelations.isEmpty {
+                Text("Henüz korelasyon verisi yok.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .padding()
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(topCorrelations, id: \.key) { corr in
+                        HStack {
+                            Text(formatCorrelationKey(corr.key))
+                                .font(.caption)
+                                .foregroundColor(.white)
+                            Spacer()
+                            Text("\(Int(corr.hitRate * 100))%")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(colorForHitRate(corr.hitRate))
+                            Text("(\(corr.attempts))")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                        .background(cardBg)
+                        .cornerRadius(8)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func formatCorrelationKey(_ key: String) -> String {
+        key.replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "80+", with: "↑")
+            .replacingOccurrences(of: "60+", with: "→")
+            .capitalized
+    }
+    
+    // MARK: - Data Tools Section
+    private var dataToolsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("VERİ ARAÇLARI")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(.gray)
+                .tracking(1)
+            
+            VStack(spacing: 12) {
+                // Database Size
+                HStack {
+                    Image(systemName: "internaldrive")
+                        .foregroundColor(.gray)
+                    Text("Veritabanı Boyutu:")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Spacer()
+                    Text(String(format: "%.1f MB", dbSizeMB))
+                        .font(.caption)
+                        .foregroundColor(dbSizeMB > 100 ? red : .white)
+                }
+                
+                // Processing Progress
+                if isProcessing {
+                    VStack(spacing: 8) {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .tint(cyan)
+                            Text("İşleniyor: \(processedCount)/\(totalToProcess)")
+                                .font(.caption)
+                                .foregroundColor(cyan)
+                        }
+                        ProgressView(value: totalToProcess > 0 ? Double(processedCount) / Double(totalToProcess) : 0)
+                            .tint(cyan)
+                    }
+                }
+                
+                // Processing Result
+                if let result = processingResult {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(green)
+                        Text("\(result.eventsProcessed) event işlendi, \(result.patternsExtracted) pattern çıkarıldı")
+                            .font(.caption)
+                            .foregroundColor(green)
+                    }
+                    Text("Öğrenilen: \(result.modulesLearned.joined(separator: ", "))")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+                
+                Divider().background(Color.white.opacity(0.1))
+                
+                // Buttons
+                HStack(spacing: 12) {
+                    Button(action: processEvents) {
+                        HStack {
+                            Image(systemName: "brain.head.profile")
+                            Text("Eventlerden Öğren")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(cyan.opacity(0.3))
+                        .cornerRadius(8)
+                    }
+                    .disabled(isProcessing)
+                    
+                    Button(action: cleanupBlobs) {
+                        HStack {
+                            Image(systemName: "trash")
+                            Text("Blob Temizle")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(red.opacity(0.3))
+                        .cornerRadius(8)
+                    }
+                    .disabled(isProcessing)
+                }
+            }
+            .padding()
+            .background(cardBg)
+            .cornerRadius(12)
+        }
+    }
+    
     // MARK: - Empty State
     private var emptyState: some View {
         VStack(spacing: 16) {
@@ -274,6 +505,8 @@ struct AlkindusDashboardView: View {
     private func loadStats() async {
         isLoading = true
         stats = await AlkindusCalibrationEngine.shared.getCurrentStats()
+        updateDbSize()
+        loadPhase2Data()
         isLoading = false
     }
     
@@ -281,6 +514,63 @@ struct AlkindusDashboardView: View {
         Task {
             await loadStats()
         }
+    }
+    
+    private func updateDbSize() {
+        dbSizeMB = AlkindusEventProcessor.shared.getDatabaseSizeMB()
+    }
+    
+    private func processEvents() {
+        isProcessing = true
+        processedCount = 0
+        processingResult = nil
+        
+        Task {
+            let result = await AlkindusEventProcessor.shared.processHistoricalEvents { processed, total in
+                DispatchQueue.main.async {
+                    self.processedCount = processed
+                    self.totalToProcess = total
+                }
+            }
+            
+            DispatchQueue.main.async {
+                self.processingResult = result
+                self.isProcessing = false
+                self.refresh()
+            }
+        }
+    }
+    
+    private func cleanupBlobs() {
+        Task {
+            AlkindusEventProcessor.shared.deleteProcessedBlobs()
+            DispatchQueue.main.async {
+                self.updateDbSize()
+            }
+        }
+    }
+    
+    private func refreshInsights() {
+        Task {
+            let newInsights = await AlkindusInsightGenerator.shared.generateDailyInsights()
+            DispatchQueue.main.async {
+                self.insights = newInsights
+            }
+        }
+    }
+    
+    private func refreshCorrelations() {
+        Task {
+            let correlations = await AlkindusCorrelationTracker.shared.getTopCorrelations(count: 5)
+            DispatchQueue.main.async {
+                self.topCorrelations = correlations
+            }
+        }
+    }
+    
+    private func loadPhase2Data() {
+        refreshInsights()
+        refreshCorrelations()
     }
 }
 

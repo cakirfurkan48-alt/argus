@@ -75,7 +75,20 @@ actor AlkindusCalibrationEngine {
                         wasCorrect: wasCorrect,
                         regime: observation.regime
                     )
+                    
+                    // Phase 2: Track anomaly detection data
+                    await AlkindusAnomalyDetector.shared.recordModulePerformance(
+                        module: module,
+                        score: score,
+                        wasCorrect: wasCorrect
+                    )
                 }
+                
+                // Phase 2: Track correlation data
+                await AlkindusCorrelationTracker.shared.recordCorrelation(
+                    modules: observation.moduleScores,
+                    wasCorrect: wasCorrect
+                )
                 
                 // Mark this horizon as evaluated
                 observation.evaluatedHorizons.append(horizon)
