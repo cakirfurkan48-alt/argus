@@ -493,6 +493,29 @@ struct SettingsCodexView: View {
                         }
                     }
                     
+                    // MARK: - VERİ İNDİRME
+                    TerminalSection(title: "VERİ İNDİRME") {
+                        // Trade History Export
+                        Button(action: { exportTradeHistory() }) {
+                            ArgusTerminalRow(label: "İŞLEM GEÇMİŞİ", value: "JSON", icon: "arrow.up.doc", color: .green)
+                        }
+                        
+                        // Forward Test Export
+                        Button(action: { exportForwardTests() }) {
+                            ArgusTerminalRow(label: "FORWARD TEST SONUÇLARI", value: "JSON", icon: "lab.flask", color: .purple)
+                        }
+                        
+                        // Decision Events Export
+                        Button(action: { exportDecisionEvents() }) {
+                            ArgusTerminalRow(label: "KARAR GEÇMİŞİ", value: "JSON", icon: "brain", color: .cyan)
+                        }
+                        
+                        // Alkindus Calibration Export
+                        Button(action: { exportAlkindusCalibration() }) {
+                            ArgusTerminalRow(label: "ALKINDUS ÖĞRENMELERİ", value: "JSON", icon: "brain.head.profile", color: .yellow)
+                        }
+                    }
+                    
                     // Footer
                     VStack(spacing: 4) {
                         Image(systemName: "eye.fill")
@@ -509,6 +532,65 @@ struct SettingsCodexView: View {
         }
         .navigationTitle("CODEX")
         .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    // MARK: - Export Functions
+    
+    private func exportTradeHistory() {
+        Task {
+            let trades = await ChironDataLakeService.shared.loadAllTradeHistory()
+            guard let data = try? JSONEncoder().encode(trades) else { return }
+            let fileName = "Argus_TradeHistory_\(Date().timeIntervalSince1970).json"
+            saveAndShare(data: data, fileName: fileName)
+        }
+    }
+    
+    private func exportForwardTests() {
+        // Load from ArgusLedger
+        let docsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let eventsPath = docsPath.appendingPathComponent("argus_ledger/events.jsonl")
+        
+        if let content = try? String(contentsOf: eventsPath) {
+            let fileName = "Argus_ForwardTests_\(Date().timeIntervalSince1970).jsonl"
+            saveAndShare(data: Data(content.utf8), fileName: fileName)
+        }
+    }
+    
+    private func exportDecisionEvents() {
+        // Load DecisionEvents from ArgusLedger
+        let docsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let eventsPath = docsPath.appendingPathComponent("argus_ledger/events.jsonl")
+        
+        if let content = try? String(contentsOf: eventsPath) {
+            // Filter only DecisionEvent lines
+            let decisions = content.split(separator: "\n").filter { $0.contains("DecisionEvent") }
+            let filtered = decisions.joined(separator: "\n")
+            let fileName = "Argus_Decisions_\(Date().timeIntervalSince1970).jsonl"
+            saveAndShare(data: Data(filtered.utf8), fileName: fileName)
+        }
+    }
+    
+    private func exportAlkindusCalibration() {
+        Task {
+            let stats = await AlkindusCalibrationEngine.shared.getCurrentStats()
+            guard let data = try? JSONEncoder().encode(stats.calibration) else { return }
+            let fileName = "Alkindus_Calibration_\(Date().timeIntervalSince1970).json"
+            await MainActor.run {
+                saveAndShare(data: data, fileName: fileName)
+            }
+        }
+    }
+    
+    private func saveAndShare(data: Data, fileName: String) {
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent(fileName)
+        do {
+            try data.write(to: fileURL)
+            self.exportURL = fileURL
+            self.showingExportSheet = true
+        } catch {
+            print("Export failed: \(error)")
+        }
     }
 }
 
