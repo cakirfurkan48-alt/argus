@@ -532,47 +532,85 @@ struct SettingsCodexView: View {
         }
         .navigationTitle("CODEX")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Bilgi", isPresented: $showingAlert) {
+            Button("Tamam", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
+        }
     }
     
     // MARK: - Export Functions
     
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    
     private func exportTradeHistory() {
         Task {
             let trades = await ChironDataLakeService.shared.loadAllTradeHistory()
+            if trades.isEmpty {
+                await MainActor.run {
+                    alertMessage = "İşlem geçmişi boş. Henüz tamamlanmış işlem yok."
+                    showingAlert = true
+                }
+                return
+            }
             guard let data = try? JSONEncoder().encode(trades) else { return }
             let fileName = "Argus_TradeHistory_\(Date().timeIntervalSince1970).json"
-            saveAndShare(data: data, fileName: fileName)
+            await MainActor.run {
+                saveAndShare(data: data, fileName: fileName)
+            }
         }
     }
     
     private func exportForwardTests() {
-        // Load from ArgusLedger
+        // Export the ArgusLedger SQLite database directly
         let docsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let eventsPath = docsPath.appendingPathComponent("argus_ledger/events.jsonl")
+        let dbPath = docsPath.appendingPathComponent("ArgusScience_V1.sqlite")
         
-        if let content = try? String(contentsOf: eventsPath) {
-            let fileName = "Argus_ForwardTests_\(Date().timeIntervalSince1970).jsonl"
-            saveAndShare(data: Data(content.utf8), fileName: fileName)
+        if FileManager.default.fileExists(atPath: dbPath.path) {
+            let fileName = "ArgusScience_\(Date().timeIntervalSince1970).sqlite"
+            let tempDir = FileManager.default.temporaryDirectory
+            let destPath = tempDir.appendingPathComponent(fileName)
+            do {
+                try FileManager.default.copyItem(at: dbPath, to: destPath)
+                exportURL = destPath
+                showingExportSheet = true
+            } catch {
+                alertMessage = "Database export hatası: \(error.localizedDescription)"
+                showingAlert = true
+            }
+        } else {
+            alertMessage = "Veritabanı dosyası bulunamadı."
+            showingAlert = true
         }
     }
     
     private func exportDecisionEvents() {
-        // Load DecisionEvents from ArgusLedger
+        // Export ChironDataLake folder
         let docsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let eventsPath = docsPath.appendingPathComponent("argus_ledger/events.jsonl")
+        let dataLakePath = docsPath.appendingPathComponent("chiron_datalake")
         
-        if let content = try? String(contentsOf: eventsPath) {
-            // Filter only DecisionEvent lines
-            let decisions = content.split(separator: "\n").filter { $0.contains("DecisionEvent") }
-            let filtered = decisions.joined(separator: "\n")
-            let fileName = "Argus_Decisions_\(Date().timeIntervalSince1970).jsonl"
-            saveAndShare(data: Data(filtered.utf8), fileName: fileName)
+        if FileManager.default.fileExists(atPath: dataLakePath.path) {
+            // Create a zip or just share the folder path info
+            let content = "ChironDataLake Path: \(dataLakePath.path)\n\nBu klasördeki dosyaları Files uygulamasından bulabilirsiniz."
+            let fileName = "ChironDataLake_Info.txt"
+            saveAndShare(data: Data(content.utf8), fileName: fileName)
+        } else {
+            alertMessage = "ChironDataLake klasörü bulunamadı."
+            showingAlert = true
         }
     }
     
     private func exportAlkindusCalibration() {
         Task {
             let stats = await AlkindusCalibrationEngine.shared.getCurrentStats()
+            if stats.calibration.modules.isEmpty {
+                await MainActor.run {
+                    alertMessage = "Alkindus henüz veri toplamadı. Kararlar verildikçe burada istatistikler oluşacak."
+                    showingAlert = true
+                }
+                return
+            }
             guard let data = try? JSONEncoder().encode(stats.calibration) else { return }
             let fileName = "Alkindus_Calibration_\(Date().timeIntervalSince1970).json"
             await MainActor.run {
@@ -589,7 +627,8 @@ struct SettingsCodexView: View {
             self.exportURL = fileURL
             self.showingExportSheet = true
         } catch {
-            print("Export failed: \(error)")
+            alertMessage = "Export hatası: \(error.localizedDescription)"
+            showingAlert = true
         }
     }
 }
