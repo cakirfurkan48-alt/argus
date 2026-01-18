@@ -35,3 +35,6 @@ Algo-Trading/Services/Secrets.swift
 Algo-Trading/Services/ChironLLMAdapter.swift
 Algo-Trading/Services/GeminiNewsService.swift
 Algo-Trading/Services/GroqClient.swift
+*.sqlite
+*.sqlite.zip
+*TradeHistory*.json
