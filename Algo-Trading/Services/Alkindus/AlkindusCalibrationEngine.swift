@@ -90,6 +90,24 @@ actor AlkindusCalibrationEngine {
                     wasCorrect: wasCorrect
                 )
                 
+                // Phase 3: Track symbol-specific performance
+                let isBist = observation.symbol.uppercased().hasSuffix(".IS")
+                for (module, _) in observation.moduleScores {
+                    await AlkindusSymbolLearner.shared.recordOutcome(
+                        symbol: observation.symbol,
+                        module: module,
+                        wasCorrect: wasCorrect,
+                        isBist: isBist
+                    )
+                    
+                    // Phase 3: Track temporal patterns
+                    await AlkindusTemporalAnalyzer.shared.recordOutcome(
+                        module: module,
+                        wasCorrect: wasCorrect,
+                        timestamp: observation.decisionDate
+                    )
+                }
+                
                 // Mark this horizon as evaluated
                 observation.evaluatedHorizons.append(horizon)
                 evaluatedCount += 1

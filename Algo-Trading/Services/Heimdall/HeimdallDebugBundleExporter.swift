@@ -73,6 +73,7 @@ actor HeimdallDebugBundleExporter {
             case .gemini: argusProvider = .gemini
             case .fred: argusProvider = .fred
             case .simfin: argusProvider = .simfin
+            case .pinecone: argusProvider = .simfin // Map to simfin for now (Pinecone isn't in ArgusProvider)
             }
             
             return APIKeyMetadata(

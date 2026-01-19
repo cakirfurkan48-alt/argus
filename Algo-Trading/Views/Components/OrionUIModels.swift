@@ -3,8 +3,26 @@ import SwiftUI
 
 // MARK: - Shared UI Models for Orion
 
-enum TimeframeMode {
-    case daily, intraday
+enum TimeframeMode: String, CaseIterable {
+    case m5 = "5M"
+    case m15 = "15M"
+    case h1 = "1H"
+    case h4 = "4H"
+    case daily = "1D"
+    case weekly = "1W"
+    
+    var displayLabel: String { rawValue }
+    
+    var apiParam: String {
+        switch self {
+        case .m5: return "5m"
+        case .m15: return "15m"
+        case .h1: return "1h"
+        case .h4: return "4h"
+        case .daily: return "1d"
+        case .weekly: return "1w"
+        }
+    }
 }
 
 enum SignalStatus {

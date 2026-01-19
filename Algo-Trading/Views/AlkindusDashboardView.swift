@@ -52,6 +52,12 @@ struct AlkindusDashboardView: View {
                             // Regime Insights
                             regimeInsightsSection(stats: stats)
                             
+                            // ⏰ Temporal Insights (Phase 3)
+                            AlkindusTimeCard()
+                            
+                            // 📊 Market Comparison (Phase 3)  
+                            marketComparisonSection
+                            
                             // Pending Observations
                             pendingSection(stats: stats)
                             
@@ -393,6 +399,59 @@ struct AlkindusDashboardView: View {
             .replacingOccurrences(of: "80+", with: "↑")
             .replacingOccurrences(of: "60+", with: "→")
             .capitalized
+    }
+    
+    // MARK: - Market Comparison Section (Phase 3)
+    @State private var marketComparison: (bist: Double, global: Double)?
+    
+    private var marketComparisonSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("📊 MARKET KARŞILAŞTIRMASI")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(.gray)
+                .tracking(1)
+            
+            if let comparison = marketComparison {
+                HStack(spacing: 20) {
+                    VStack(spacing: 4) {
+                        Text("BIST")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Text("\(Int(comparison.bist * 100))%")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(colorForHitRate(comparison.bist))
+                    }
+                    .frame(maxWidth: .infinity)
+                    
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 1, height: 40)
+                    
+                    VStack(spacing: 4) {
+                        Text("GLOBAL")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Text("\(Int(comparison.global * 100))%")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(colorForHitRate(comparison.global))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding()
+                .background(cardBg)
+                .cornerRadius(12)
+            } else {
+                Text("Henüz BIST/Global karşılaştırma verisi yok")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .padding()
+            }
+        }
+        .task {
+            marketComparison = await AlkindusSymbolLearner.shared.getMarketComparison()
+        }
     }
     
     // MARK: - Data Tools Section

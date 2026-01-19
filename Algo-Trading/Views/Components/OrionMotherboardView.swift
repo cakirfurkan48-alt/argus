@@ -23,7 +23,13 @@ struct OrionMotherboardView: View {
     private let purple = Color(red: 0.7, green: 0.3, blue: 1.0)
     
     var currentOrion: OrionScoreResult {
-        selectedTimeframe == .daily ? analysis.daily : analysis.intraday
+        // Use daily analysis for 1D/1W, intraday for shorter timeframes
+        switch selectedTimeframe {
+        case .daily, .weekly:
+            return analysis.daily
+        case .m5, .m15, .h1, .h4:
+            return analysis.intraday
+        }
     }
     
     var body: some View {
@@ -90,20 +96,25 @@ struct OrionMotherboardView: View {
     
     // MARK: - Header
     private var headerBar: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("ANALIZ ÇEKİRDEĞİ")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(.gray)
-                    .tracking(2)
-                Text(symbol)
-                    .font(.system(size: 24, weight: .black, design: .monospaced))
-                    .foregroundColor(.white)
+        VStack(spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ANALIZ ÇEKİRDEĞİ")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.gray)
+                        .tracking(2)
+                    Text(symbol)
+                        .font(.system(size: 24, weight: .black, design: .monospaced))
+                        .foregroundColor(.white)
+                }
+                Spacer()
             }
-            Spacer()
+            
+            // 6 Timeframe Buttons
             HStack(spacing: 0) {
-                timeframeButton(.intraday, label: "4H")
-                timeframeButton(.daily, label: "1D")
+                ForEach(TimeframeMode.allCases, id: \.rawValue) { mode in
+                    timeframeButton(mode)
+                }
             }
             .background(Color.white.opacity(0.05))
             .cornerRadius(8)
@@ -113,12 +124,13 @@ struct OrionMotherboardView: View {
         .padding(.top, 24)
     }
     
-    private func timeframeButton(_ mode: TimeframeMode, label: String) -> some View {
+    private func timeframeButton(_ mode: TimeframeMode) -> some View {
         Button(action: { withAnimation { selectedTimeframe = mode } }) {
-            Text(label)
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
+            Text(mode.displayLabel)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundColor(selectedTimeframe == mode ? .black : .gray)
-                .frame(width: 44, height: 32)
+                .frame(maxWidth: .infinity)
+                .frame(height: 32)
                 .background(selectedTimeframe == mode ? cyan : Color.clear)
         }
     }

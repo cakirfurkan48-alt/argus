@@ -1292,4 +1292,92 @@ extension ArgusLedger {
             sqlite3_finalize(stmt)
         }
     }
+    
+    // MARK: - Aggressive Cleanup (Storage Optimization)
+    
+    /// Agresif temizlik - Eski verileri siler, depolama alanını küçültür
+    /// - Parameters:
+    ///   - maxBlobAgeDays: Blob'ları bu günden eski ise sil (varsayılan: 3)
+    ///   - maxEventAgeDays: Event'leri bu günden eski ise sil (varsayılan: 7)
+    ///   - maxTradeAgeDays: Trade'leri bu günden eski ise sil (varsayılan: 30)
+    func aggressiveCleanup(maxBlobAgeDays: Int = 3, maxEventAgeDays: Int = 7, maxTradeAgeDays: Int = 30) async -> CleanupResult {
+        return await withCheckedContinuation { (continuation: CheckedContinuation<CleanupResult, Never>) in
+            queue.async {
+                self.ensureConnection()
+                
+                var deletedBlobs = 0
+                var deletedEvents = 0
+                var deletedTrades = 0
+                var freedBytes: Int64 = 0
+                
+                // 1. Eski blob'ları sil
+                let blobCutoff = Date().addingTimeInterval(-Double(maxBlobAgeDays) * 24 * 60 * 60).iso8601
+                let deleteBlobsSql = "DELETE FROM blobs WHERE created_at_utc < '\(blobCutoff)';"
+                
+                // Önce boyutu hesapla
+                let sizeSql = "SELECT SUM(size_bytes) FROM blobs WHERE created_at_utc < '\(blobCutoff)';"
+                var stmt: OpaquePointer?
+                if sqlite3_prepare_v2(self.db, sizeSql, -1, &stmt, nil) == SQLITE_OK {
+                    if sqlite3_step(stmt) == SQLITE_ROW {
+                        freedBytes += sqlite3_column_int64(stmt, 0)
+                    }
+                }
+                sqlite3_finalize(stmt)
+                
+                // Blob'ları sil
+                if sqlite3_prepare_v2(self.db, deleteBlobsSql, -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_step(stmt)
+                    deletedBlobs = Int(sqlite3_changes(self.db))
+                }
+                sqlite3_finalize(stmt)
+                
+                // 2. Eski event'leri sil
+                let eventCutoff = Date().addingTimeInterval(-Double(maxEventAgeDays) * 24 * 60 * 60).iso8601
+                let deleteEventsSql = "DELETE FROM events WHERE event_time_utc < '\(eventCutoff)';"
+                
+                if sqlite3_prepare_v2(self.db, deleteEventsSql, -1, &stmt, nil) == SQLITE_OK {
+                    sqlite3_step(stmt)
+                    deletedEvents = Int(sqlite3_changes(self.db))
+                }
+                sqlite3_finalize(stmt)
+                
+                // 3. VACUUM to reclaim space
+                self.execute(sql: "VACUUM;")
+                
+                print("🧹 ArgusLedger Cleanup: \(deletedBlobs) blobs, \(deletedEvents) events deleted. ~\(freedBytes / 1024 / 1024)MB freed.")
+                
+                continuation.resume(returning: CleanupResult(
+                    deletedBlobs: deletedBlobs,
+                    deletedEvents: deletedEvents,
+                    deletedTrades: deletedTrades,
+                    freedBytes: freedBytes
+                ))
+            }
+        }
+    }
+    
+    struct CleanupResult {
+        let deletedBlobs: Int
+        let deletedEvents: Int
+        let deletedTrades: Int
+        let freedBytes: Int64
+        
+        var summary: String {
+            let mb = freedBytes / 1024 / 1024
+            return "🧹 \(deletedBlobs) blob, \(deletedEvents) event silindi. ~\(mb)MB kazanıldı."
+        }
+    }
+    
+    /// Uygulama başlangıcında otomatik çağrılmalı
+    func autoCleanupIfNeeded() async {
+        // Son temizlikten 24 saat geçtiyse çalıştır
+        let lastCleanupKey = "ArgusLedger_lastCleanup"
+        let lastCleanup = UserDefaults.standard.object(forKey: lastCleanupKey) as? Date ?? .distantPast
+        
+        if Date().timeIntervalSince(lastCleanup) > 24 * 60 * 60 {
+            let result = await aggressiveCleanup()
+            print(result.summary)
+            UserDefaults.standard.set(Date(), forKey: lastCleanupKey)
+        }
+    }
 }

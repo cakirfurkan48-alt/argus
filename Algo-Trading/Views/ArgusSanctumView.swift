@@ -18,6 +18,7 @@ struct ArgusSanctumView: View {
     @State private var showChronosLabSheet = false
     @State private var showArgusLabSheet = false
     @State private var showObservatorySheet = false
+    @State private var showAlkindusSheet = false
     
     // Legacy type alias for internal references
     typealias ModuleType = SanctumModuleType
@@ -113,6 +114,9 @@ struct ArgusSanctumView: View {
         .sheet(isPresented: $showObservatorySheet) {
               observatorySheetContent
         }
+        .sheet(isPresented: $showAlkindusSheet) {
+              alkindusSheetContent
+        }
         .onAppear {
             if symbol.uppercased().hasSuffix(".IS") {
                 // Pre-load BIST logic if needed
@@ -138,6 +142,16 @@ struct ArgusSanctumView: View {
                     .cornerRadius(8)
                 }
                 Spacer()
+                
+                // Alkindus Button (Brain)
+                Button(action: { showAlkindusSheet = true }) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 18))
+                        .foregroundColor(Color(red: 0.6, green: 0.4, blue: 1.0))
+                        .padding(10)
+                        .background(Color.black.opacity(0.3))
+                        .cornerRadius(8)
+                }
                 
                 // Observatory Button
                 Button(action: { showObservatorySheet = true }) {
@@ -217,6 +231,14 @@ struct ArgusSanctumView: View {
         .frame(height: 300) // Constrain height to keep layout tight
     }
     
+    // ALKINDUS SHEET CONTENT
+    private var alkindusSheetContent: some View {
+        NavigationView {
+            AlkindusDashboardView()
+                .navigationBarItems(trailing: Button("Kapat") { showAlkindusSheet = false })
+        }
+    }
+    
     // 4. FOOTER (Pantheon)
     private var footerHelper: some View {
          PantheonDeckView(
@@ -290,6 +312,7 @@ struct HoloPanelView: View {
     @State private var showBacktestSheet = false
     @State private var showInfoCard = false
     @State private var showImmersiveChart = false // NEW: Full Screen Charts
+    @State private var showStrategySheet = false // NEW: Multi-Timeframe Strategy Dashboard
     
     var body: some View {
         ZStack { // Wrap in ZStack for Info Card Overlay
@@ -472,6 +495,35 @@ struct HoloPanelView: View {
                         symbol: symbol,
                         historicalPrices: candles.map { $0.close }
                     )
+                }
+                
+                // NEW: Multi-Timeframe Strategy Button
+                Button(action: { showStrategySheet = true }) {
+                    HStack {
+                        Image(systemName: "slider.horizontal.3")
+                        Text("STRATEJİ MERKEZİ")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        Spacer()
+                        Text("Scalp • Swing • Position")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Image(systemName: "chevron.right")
+                    }
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color(red: 0.1, green: 0.12, blue: 0.18))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(red: 0.0, green: 0.8, blue: 1.0).opacity(0.3), lineWidth: 1)
+                    )
+                }
+                .padding(.horizontal)
+            }
+            .sheet(isPresented: $showStrategySheet) {
+                NavigationView {
+                    StrategyDashboardView(viewModel: viewModel)
+                        .navigationBarItems(trailing: Button("Kapat") { showStrategySheet = false })
                 }
             }
             

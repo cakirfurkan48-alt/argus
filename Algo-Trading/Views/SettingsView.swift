@@ -42,6 +42,9 @@ struct SettingsView: View {
                             NavigationLink(destination: AlkindusDashboardView()) {
                                 ArgusTerminalRow(label: "ALKINDUS KALİBRASYON", value: "SHADOW", icon: "eye.circle", color: .purple)
                             }
+                            NavigationLink(destination: StrategyDashboardView(viewModel: TradingViewModel())) {
+                                ArgusTerminalRow(label: "STRATEJİ MERKEZİ", value: "YENİ", icon: "chart.bar.xaxis", color: .orange)
+                            }
                             NavigationLink(destination: ArgusSimulatorView()) {
                                 ArgusTerminalRow(label: "SİMÜLASYON LAB", value: "HAZIR", icon: "flask", color: .purple)
                             }

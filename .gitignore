@@ -38,3 +38,13 @@ Algo-Trading/Services/GroqClient.swift
 *.sqlite
 *.sqlite.zip
 *TradeHistory*.json
+
+# SQLite databases
+*.sqlite
+*.sqlite2
+*.sqlite3
+ArgusScience*
+
+# Large data files  
+Argus_*.json
+

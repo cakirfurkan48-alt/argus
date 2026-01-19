@@ -39,6 +39,10 @@ struct Algo_TradingApp: App {
                     UserDefaults.standard.set(true, forKey: resetKey)
                     print("✅ ONE-TIME RESET: Tamamlandı. USD: $100K, TRY: ₺1M")
                 }
+                
+                // AUTO CLEANUP: Storage temizliği (günde 1 kez)
+                await ArgusLedger.shared.autoCleanupIfNeeded()
+                DiskCacheService.shared.cleanup()
             }
         } catch {
             print("🚨 CRITICAL: Failed to create ModelContainer: \(error)")

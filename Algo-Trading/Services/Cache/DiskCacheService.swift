@@ -144,4 +144,48 @@ final class DiskCacheService: Sendable {
         let safe = key.components(separatedBy: CharacterSet.alphanumerics.inverted).joined(separator: "_")
         return safe
     }
+    
+    // MARK: - Cleanup
+    
+    /// Eski cache ve harvest dosyalarını siler
+    func cleanup(maxAgeDays: Int = 3) {
+        queue.async {
+            let cutoff = Date().addingTimeInterval(-Double(maxAgeDays) * 24 * 60 * 60)
+            var deletedCount = 0
+            var freedBytes: Int64 = 0
+            
+            // Cache temizliği
+            if let urls = try? self.fileManager.contentsOfDirectory(at: self.cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey]) {
+                for url in urls {
+                    if let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                       modDate < cutoff {
+                        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                            freedBytes += Int64(size ?? 0)
+                        }
+                        try? self.fileManager.removeItem(at: url)
+                        deletedCount += 1
+                    }
+                }
+            }
+            
+            // Harvest temizliği (daha agresif - 1 gün)
+            let harvestCutoff = Date().addingTimeInterval(-1 * 24 * 60 * 60)
+            if let urls = try? self.fileManager.contentsOfDirectory(at: self.harvestDirectory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey]) {
+                for url in urls {
+                    if let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                       modDate < harvestCutoff {
+                        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                            freedBytes += Int64(size ?? 0)
+                        }
+                        try? self.fileManager.removeItem(at: url)
+                        deletedCount += 1
+                    }
+                }
+            }
+            
+            if deletedCount > 0 {
+                print("🧹 DiskCache Cleanup: \(deletedCount) files, ~\(freedBytes / 1024 / 1024)MB freed.")
+            }
+        }
+    }
 }
