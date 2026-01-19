@@ -43,6 +43,9 @@ struct Algo_TradingApp: App {
                 // AUTO CLEANUP: Storage temizliği (günde 1 kez)
                 await ArgusLedger.shared.autoCleanupIfNeeded()
                 DiskCacheService.shared.cleanup()
+                
+                // CHIRON CLEANUP: RAG sync edilmiş 7 günden eski kayıtları sil
+                let _ = await ChironDataLakeService.shared.cleanupSyncedRecords(olderThanDays: 7)
             }
         } catch {
             print("🚨 CRITICAL: Failed to create ModelContainer: \(error)")

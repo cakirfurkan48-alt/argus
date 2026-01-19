@@ -65,11 +65,76 @@ actor ChironDataLakeService {
                         atlasScore: record.atlasScoreAtEntry,
                         regime: record.regime?.rawValue
                     )
+                    
+                    // Mark as synced after successful RAG push
+                    await ChironDataLakeService.shared.markAsSynced(tradeId: record.id, symbol: record.symbol)
                 }
             }
         } catch {
             print("❌ ChironDataLake: Failed to save trade - \(error)")
         }
+    }
+    
+    /// Mark a trade as RAG synced
+    func markAsSynced(tradeId: UUID, symbol: String) async {
+        var history = await loadTradeHistory(symbol: symbol)
+        
+        if let index = history.firstIndex(where: { $0.id == tradeId }) {
+            var updated = history[index]
+            updated.ragSynced = true
+            updated.ragSyncedAt = Date()
+            history[index] = updated
+            
+            let path = basePath.appendingPathComponent("trades/\(symbol)_history.json")
+            do {
+                let data = try JSONEncoder().encode(history)
+                try data.write(to: path)
+                print("✅ Chiron: Trade \(tradeId) marked as RAG synced")
+            } catch {
+                print("❌ Chiron: Failed to mark trade as synced - \(error)")
+            }
+        }
+    }
+    
+    /// Cleanup synced records older than specified days
+    func cleanupSyncedRecords(olderThanDays: Int = 7) async -> Int {
+        var deletedCount = 0
+        let cutoff = Date().addingTimeInterval(-Double(olderThanDays) * 24 * 60 * 60)
+        
+        let fm = FileManager.default
+        let tradesPath = basePath.appendingPathComponent("trades")
+        
+        guard let files = try? fm.contentsOfDirectory(atPath: tradesPath.path) else { return 0 }
+        
+        for file in files where file.hasSuffix("_history.json") {
+            let symbol = file.replacingOccurrences(of: "_history.json", with: "")
+            var history = await loadTradeHistory(symbol: symbol)
+            let originalCount = history.count
+            
+            // Keep: not synced OR synced but newer than cutoff
+            history = history.filter { record in
+                !record.ragSynced || (record.ragSyncedAt ?? Date()) > cutoff
+            }
+            
+            let removed = originalCount - history.count
+            deletedCount += removed
+            
+            if removed > 0 {
+                let path = basePath.appendingPathComponent("trades/\(symbol)_history.json")
+                do {
+                    let data = try JSONEncoder().encode(history)
+                    try data.write(to: path)
+                } catch {
+                    print("❌ Chiron Cleanup: Failed for \(symbol) - \(error)")
+                }
+            }
+        }
+        
+        if deletedCount > 0 {
+            print("🧹 Chiron Cleanup: \(deletedCount) synced records deleted (>\(olderThanDays) days old)")
+        }
+        
+        return deletedCount
     }
     
     func loadTradeHistory(symbol: String) async -> [TradeOutcomeRecord] {
@@ -276,6 +341,53 @@ struct TradeOutcomeRecord: Codable, Sendable {
     let systemDecision: String?              // AL/SAT/BEKLE
     let ignoredWarnings: [String]?           // Hangi modüller uyarı verdi ama dinlenmedi
     let regime: MarketRegime?                // Giriş anındaki rejim
+    
+    // RAG Sync Tracking
+    var ragSynced: Bool
+    var ragSyncedAt: Date?
+    
+    // Default initializer with ragSynced = false
+    init(
+        id: UUID = UUID(),
+        symbol: String,
+        engine: AutoPilotEngine,
+        entryDate: Date,
+        exitDate: Date,
+        entryPrice: Double,
+        exitPrice: Double,
+        pnlPercent: Double,
+        exitReason: String,
+        orionScoreAtEntry: Double? = nil,
+        atlasScoreAtEntry: Double? = nil,
+        aetherScoreAtEntry: Double? = nil,
+        phoenixScoreAtEntry: Double? = nil,
+        allModuleScores: [String: Double]? = nil,
+        systemDecision: String? = nil,
+        ignoredWarnings: [String]? = nil,
+        regime: MarketRegime? = nil,
+        ragSynced: Bool = false,
+        ragSyncedAt: Date? = nil
+    ) {
+        self.id = id
+        self.symbol = symbol
+        self.engine = engine
+        self.entryDate = entryDate
+        self.exitDate = exitDate
+        self.entryPrice = entryPrice
+        self.exitPrice = exitPrice
+        self.pnlPercent = pnlPercent
+        self.exitReason = exitReason
+        self.orionScoreAtEntry = orionScoreAtEntry
+        self.atlasScoreAtEntry = atlasScoreAtEntry
+        self.aetherScoreAtEntry = aetherScoreAtEntry
+        self.phoenixScoreAtEntry = phoenixScoreAtEntry
+        self.allModuleScores = allModuleScores
+        self.systemDecision = systemDecision
+        self.ignoredWarnings = ignoredWarnings
+        self.regime = regime
+        self.ragSynced = ragSynced
+        self.ragSyncedAt = ragSyncedAt
+    }
 }
 
 struct ModulePredictionRecord: Codable, Sendable {
