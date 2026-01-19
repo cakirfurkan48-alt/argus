@@ -4,11 +4,7 @@ import SwiftUI
 
 class TradingViewModel: ObservableObject {
     // MARK: - Published Properties
-    @Published var watchlist: [String] = [] {
-        didSet {
-            saveWatchlist()
-        }
-    }
+    @Published var watchlist: [String] = [] 
     
     // Discovery Lists
     @Published var topGainers: [Quote] = []
@@ -140,9 +136,7 @@ class TradingViewModel: ObservableObject {
     @Published var selectedSymbolForDetail: String? = nil
     
     func addToWatchlist(symbol: String) {
-        if !watchlist.contains(symbol) {
-            watchlist.append(symbol)
-        }
+        WatchlistStore.shared.add(symbol)
     }
     @Published var transactionHistory: [Transaction] = [] {
         didSet {
@@ -347,6 +341,14 @@ class TradingViewModel: ObservableObject {
         // MARK: - ExecutionStateViewModel Bridge
         ExecutionStateViewModel.shared.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+            
+        // MARK: - WatchlistStore Bridge
+        WatchlistStore.shared.$items
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] items in
+                self?.watchlist = items
+            }
             .store(in: &cancellables)
     }
 
@@ -823,8 +825,7 @@ class TradingViewModel: ObservableObject {
     
     func addSymbol(_ symbol: String) {
         let upper = symbol.uppercased()
-        if !watchlist.contains(upper) {
-            watchlist.append(upper)
+        if WatchlistStore.shared.add(upper) { // Returns true if added, false if already exists
             // Tüm veriyi yeniden çekmek yerine sadece yeni sembolü çekelim
             Task {
                 await fetchSingleSymbolData(symbol: upper)
@@ -860,8 +861,8 @@ class TradingViewModel: ObservableObject {
         await MainActor.run { self.isLoading = false }
     }
     
-    func removeSymbol(at offsets: IndexSet) {
-        watchlist.remove(atOffsets: offsets)
+    func deleteFromWatchlist(at offsets: IndexSet) {
+        WatchlistStore.shared.remove(at: offsets)
     }
     
 

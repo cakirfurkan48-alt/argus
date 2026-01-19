@@ -38,9 +38,7 @@ extension TradingViewModel {
             if let decision = argusDecisions[symbol] {
                 // If Strong Buy, maybe add to watchlist or notify?
                 if decision.finalActionCore == .buy {
-                    if !watchlist.contains(symbol) {
-                        watchlist.append(symbol)
-                    }
+                    WatchlistStore.shared.add(symbol)
                 }
             }
         }
