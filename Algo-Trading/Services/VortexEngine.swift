@@ -8,24 +8,18 @@ class VortexEngine: ObservableObject {
     static let shared = VortexEngine()
     
     // Dependencies
-    private let nexus = Nexus.shared
     private let planStore = PositionPlanStore.shared
+    
+    // Regime monitoring
+    @Published var currentRegime: MarketRegime = .neutral
     
     private init() {
         print("🌪️ Vortex Engine Online")
-        setupObservations()
     }
     
     private var cancellables = Set<AnyCancellable>()
     
-    private func setupObservations() {
-        // Listen for Market Regime changes from Nexus (Demeter -> Nexus -> Vortex)
-        nexus.observe(topic: .marketRegimeChanged)
-            .sink { [weak self] event in
-                self?.handleRegimeChange(event)
-            }
-            .store(in: &cancellables)
-    }
+    // MARK: - Regime Check (On-demand)
     
     // MARK: - Intent Analysis
     
@@ -176,16 +170,13 @@ class VortexEngine: ObservableObject {
         // Save
         planStore.updatePlan(plan)
         
-        // Notify Nexus
-        nexus.publish(topic: .manualOverride, payload: ["tradeId": tradeId, "newTarget": newTarget], message: "Plan Manually Updated for \(plan.originalSnapshot.symbol)")
+        // Log the manual override
+        print("🌪️ Vortex: Plan updated for \(plan.originalSnapshot.symbol) - New target: \(newTarget)")
     }
     
-    // MARK: - Event Handlers
+    // MARK: - Regime Handlers
     
-    private func handleRegimeChange(_ event: NexusEvent) {
-        // If Market Regime crashes (e.g. Crash Detected), tighten all stops.
-        guard let regime = event.payload?["regime"] as? String, regime == "CRASH" else { return }
-        
+    private func handleCrashRegime() {
         print("🌪️ Vortex: CRASH REGIME DETECTED. Tightening all stops.")
         // Logic to iterate all active plans and tighten stops would go here.
     }

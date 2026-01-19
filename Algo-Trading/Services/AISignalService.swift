@@ -39,26 +39,24 @@ class AISignalService: AISignalProvider {
             // Yeterli veri yoksa atla
             guard symbolCandles.count > 50 else { continue }
             
-            // Backtest motorunu çalıştır (Gerçek hesaplama)
-            let results = await BacktestEngine.shared.runAllStrategies(candles: symbolCandles)
+            // Backtest motorunu çalıştır
+            let config = BacktestConfig(strategy: .orionV2)
+            let result = await ArgusBacktestEngine.shared.runBacktest(
+                symbol: symbol,
+                config: config,
+                candles: symbolCandles,
+                financials: nil
+            )
             
-            // En iyi stratejileri filtrele
-            // Kriter: Skoru yüksek (>70) VE şu anki aksiyonu BUY veya SELL olanlar
-            let actionableStrategies = results.filter { result in
-                result.score >= 70 && (result.currentAction == .buy || result.currentAction == .sell)
-            }
-            
-            // En yüksek skorlu stratejiyi seç (Sinyal kirliliğini önlemek için sembol başına 1 sinyal)
-            if let bestStrategy = actionableStrategies.max(by: { $0.score < $1.score }) {
-                
-                let reason = generateReason(strategy: bestStrategy)
-                
+            // Sonuç yeterince iyiyse sinyal oluştur
+            if result.totalReturn > 10 && result.winRate > 50 {
+                let action: SignalAction = result.totalReturn > 0 ? .buy : .sell
                 let signal = AISignal(
                     symbol: symbol,
-                    action: bestStrategy.currentAction,
-                    confidenceScore: bestStrategy.score,
-                    strategyName: bestStrategy.strategyName,
-                    reason: reason,
+                    action: action,
+                    confidenceScore: result.winRate,
+                    strategyName: "Argus Orion V2",
+                    reason: "Backtest: %\(String(format: "%.1f", result.totalReturn)) getiri, %\(String(format: "%.1f", result.winRate)) kazanma oranı",
                     timestamp: Date()
                 )
                 signals.append(signal)
@@ -69,8 +67,4 @@ class AISignalService: AISignalProvider {
         return signals.sorted { $0.confidenceScore > $1.confidenceScore }
     }
     
-    private func generateReason(strategy: StrategyResult) -> String {
-        let actionText = strategy.currentAction == .buy ? "AL" : "SAT"
-        return "\(strategy.strategyName) stratejisi, %\(String(format: "%.1f", strategy.winRate)) kazanma oranı ve %\(String(format: "%.1f", strategy.totalReturn)) geçmiş getiri ile \(actionText) sinyali üretti."
-    }
 }

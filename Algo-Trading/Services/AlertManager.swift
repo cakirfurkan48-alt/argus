@@ -30,39 +30,26 @@ class AlertManager: ObservableObject {
         for symbol in symbols {
             do {
                 // 1. Veri Çek (Backtest için historical)
-                // BacktestEngine 3.5 yıllık veri istiyor ama sinyal için son 1 yıl veya daha azı da yetebilir.
-                // Ancak tutarlılık için aynısını kullanalım.
-                let candles = try await HeimdallOrchestrator.shared.requestCandles(symbol: symbol, timeframe: "1D", limit: 1200)
+                let candles = try await HeimdallOrchestrator.shared.requestCandles(symbol: symbol, timeframe: "1D", limit: 365)
                 
-                // 2. Analiz Et
-                let results = await BacktestEngine.shared.runAllStrategies(candles: candles)
+                // 2. Analiz Et - ArgusBacktestEngine kullan
+                let config = BacktestConfig(strategy: .orionV2)
+                let result = await ArgusBacktestEngine.shared.runBacktest(
+                    symbol: symbol,
+                    config: config,
+                    candles: candles,
+                    financials: nil
+                )
                 
                 // 3. Sinyal Kontrolü
-                // Ortak Sinyal Mantığı
-                var totalScore = 0.0
-                var buyWeight = 0.0
-                var sellWeight = 0.0
+                let score = result.winRate
                 
-                for result in results {
-                    totalScore += result.score
-                    if result.currentAction == SignalAction.buy {
-                        buyWeight += result.score
-                    } else if result.currentAction == SignalAction.sell {
-                        sellWeight += result.score
-                    }
-                }
-                
-                if totalScore > 0 {
-                    let buyStrength = (buyWeight / totalScore) * 100
-                    let sellStrength = (sellWeight / totalScore) * 100
-                    
-                    if buyStrength > sellStrength && buyStrength > 60 { // %60 üzeri güven
-                        let alert = AlertItem(symbol: symbol, date: Date(), message: "Güçlü AL Sinyali (Güven: %\(Int(buyStrength)))", type: .buy, score: buyStrength)
-                        await MainActor.run { self.alerts.append(alert) }
-                    } else if sellStrength > buyStrength && sellStrength > 60 {
-                        let alert = AlertItem(symbol: symbol, date: Date(), message: "Güçlü SAT Sinyali (Güven: %\(Int(sellStrength)))", type: .sell, score: sellStrength)
-                        await MainActor.run { self.alerts.append(alert) }
-                    }
+                if result.totalReturn > 10 && score > 60 {
+                    let alert = AlertItem(symbol: symbol, date: Date(), message: "Güçlü AL Sinyali (Güven: %\(Int(score)))", type: .buy, score: score)
+                    await MainActor.run { self.alerts.append(alert) }
+                } else if result.totalReturn < -10 && score < 40 {
+                    let alert = AlertItem(symbol: symbol, date: Date(), message: "Güçlü SAT Sinyali (Getiri: %\(Int(result.totalReturn)))", type: .sell, score: 100 - score)
+                    await MainActor.run { self.alerts.append(alert) }
                 }
                 
             } catch {
