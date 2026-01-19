@@ -35,7 +35,7 @@ struct Algo_TradingApp: App {
                 let resetKey = "portfolio_v5_reset_done"
                 if !UserDefaults.standard.bool(forKey: resetKey) {
                     print("🔄 ONE-TIME RESET: Portföy sıfırlanıyor (v5 migration)...")
-                    PortfolioEngine.shared.resetPortfolio()
+                    PortfolioStore.shared.resetPortfolio()
                     UserDefaults.standard.set(true, forKey: resetKey)
                     print("✅ ONE-TIME RESET: Tamamlandı. USD: $100K, TRY: ₺1M")
                 }
@@ -60,9 +60,14 @@ struct Algo_TradingApp: App {
                 // Instead of crashing, log and use empty schema
                 print("🚨 FATAL FALLBACK FAILED: \(fallbackError)")
                 print("🛡️ Using minimal empty container - some features may be unavailable")
-                
+
                 // Minimal fallback - sadece app açılsın
-                self.container = try! ModelContainer(for: Schema([]))
+                do {
+                    self.container = try ModelContainer(for: Schema([]))
+                } catch {
+                    // Son çare: fatalError (bu noktaya hiç gelmemeli)
+                    fatalError("🛑 ModelContainer oluşturulamadı: \(error)")
+                }
             }
         }
     }
@@ -81,7 +86,7 @@ struct Algo_TradingApp: App {
                         .task {
                             // One-time startup logic
                             tradingViewModel.bootstrap()
-                            
+
                             // 🧠 Chiron: Start background learning analysis
                             Task.detached(priority: .background) {
                                 // Delay to let app settle
@@ -89,6 +94,9 @@ struct Algo_TradingApp: App {
                                 await ChironLearningJob.shared.runFullAnalysis()
                                 print("🧠 Chiron: Startup learning cycle completed")
                             }
+
+                            // 👁️ Alkindus: Start periodic maturation checks
+                            startAlkindusPeriodicCheck()
                         }
                 } else {
                     DisclaimerView()
@@ -96,5 +104,24 @@ struct Algo_TradingApp: App {
             }
         }
         .modelContainer(container)
+    }
+
+    // MARK: - Alkindus Periodic Check
+
+    private func startAlkindusPeriodicCheck() {
+        // Başlangıçta bir kez çalıştır (delay ile app settle olsun)
+        Task.detached(priority: .background) {
+            // Delay to let app and market data settle
+            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+            await AlkindusCalibrationEngine.shared.periodicMatureCheck()
+            print("👁️ Alkindus: Startup maturation check completed")
+        }
+
+        // Her saat başı tekrarla
+        Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
+            Task {
+                await AlkindusCalibrationEngine.shared.periodicMatureCheck()
+            }
+        }
     }
 }

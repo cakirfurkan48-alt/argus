@@ -40,7 +40,43 @@ actor AlkindusCalibrationEngine {
         
         print("👁️ Alkindus: Yeni gözlem kaydedildi - \(symbol) \(action)")
     }
-    
+
+    // MARK: - Periodic Maturation Check
+
+    /// Periyodik maturation kontrolü - App başlangıcında ve saatlik tetiklenir
+    func periodicMatureCheck() async {
+        // Load pending observations
+        let pending = await memoryStore.loadPendingObservations()
+
+        guard !pending.isEmpty else {
+            print("⚠️ Alkindus: Bekleyen gözlem yok, maturation atlanıyor")
+            return
+        }
+
+        // Güncel fiyatları al (MainActor context'inde)
+        let currentPrices: [String: Double] = await MainActor.run {
+            let store = MarketDataStore.shared
+            var prices: [String: Double] = [:]
+
+            for observation in pending {
+                if let quote = store.quotes[observation.symbol]?.value {
+                    prices[observation.symbol] = quote.currentPrice
+                }
+            }
+
+            return prices
+        }
+
+        guard !currentPrices.isEmpty else {
+            print("⚠️ Alkindus: Fiyat verisi yok, maturation atlanıyor")
+            return
+        }
+
+        let evaluatedCount = await processMaturedDecisions(currentPrices: currentPrices)
+        let remainingCount = await memoryStore.loadPendingObservations().count
+        print("✅ Alkindus: Maturation check tamamlandı - \(evaluatedCount) değerlendirildi, \(remainingCount) pending")
+    }
+
     // MARK: - Process Matured Decisions (Called periodically)
     
     /// Checks all pending observations and evaluates those that have matured.
