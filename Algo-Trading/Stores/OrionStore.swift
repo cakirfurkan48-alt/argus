@@ -6,17 +6,24 @@ import SwiftUI
 
 /// Holds analysis results for multiple timeframes to enable strategic decision making.
 struct MultiTimeframeAnalysis {
+    let m5: OrionScoreResult
+    let m15: OrionScoreResult
+    let h1: OrionScoreResult
+    let h4: OrionScoreResult
     let daily: OrionScoreResult
-    let intraday: OrionScoreResult // 4 Hour or 1 Hour
+    let weekly: OrionScoreResult
     let generatedAt: Date
+    
+    // Legacy support
+    var intraday: OrionScoreResult { h4 }
     
     // Strategic Synthesis (The "Brain" Advice)
     var strategicAdvice: String {
-        if daily.score > 60 && intraday.score > 60 {
+        if daily.score > 60 && h4.score > 60 {
             return "Tam Gaz İleri: Hem ana trend hem kısa vade momentumu seni destekliyor."
-        } else if daily.score > 60 && intraday.score < 40 {
+        } else if daily.score > 60 && h4.score < 40 {
             return "Fırsat Kollama: Ana trend yukarı ama kısa vade düzeltmede. Dönüş bekle ve AL."
-        } else if daily.score < 40 && intraday.score > 60 {
+        } else if daily.score < 40 && h4.score > 60 {
             return "Tuzak Uyarısı: Ölü kedi sıçraması olabilir. Ana trend hala düşüşte."
         } else {
             return "Uzak Dur: Piyasa her vadede negatif."
@@ -51,64 +58,67 @@ final class OrionStore: ObservableObject {
         defer { self.isLoading = false }
         
         // 2. Parallel Data Fetching & Analysis
-        // We use a TaskGroup to fetch and analyze Daily and Intraday (4h/1h) concurrently.
-        print("🧠 OrionStore: Starting MTF Analysis for \(symbol)...")
+        print("🧠 OrionStore: Starting MTF Analysis for \(symbol) (6 Timeframes)...")
         
-        let result = await withTaskGroup(of: (String, OrionScoreResult?).self) { group -> MultiTimeframeAnalysis? in
+        // Timeframes to fetch
+        let timeframes: [(String, String)] = [
+            ("m5", "5m"),
+            ("m15", "15m"),
+            ("h1", "1h"),
+            ("h4", "4h"),
+            ("daily", "1day"),
+            ("weekly", "1week")
+        ]
+        
+        let results = await withTaskGroup(of: (String, OrionScoreResult?).self) { group -> [String: OrionScoreResult] in
             
-            // Task A: Daily Analysis
-            group.addTask {
-                let candles = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: "1day").value
-                if let data = candles, !data.isEmpty {
-                    // SPY Benchmark for Relative Strength
-                    let spy = await MarketDataStore.shared.ensureCandles(symbol: "SPY", timeframe: "1day").value
-                    let score = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: data, spyCandles: spy)
-                    return ("daily", score)
+            for (key, tfParam) in timeframes {
+                group.addTask {
+                    // Fetch candles
+                    let candles = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: tfParam).value
+                    if let data = candles, !data.isEmpty {
+                        // SPY Benchmark only for Daily/Weekly
+                        let spyTimeframe = (key == "daily" || key == "weekly") ? "1day" : nil
+                        var spyCandles: [Candle]? = nil
+                        
+                        if let spyTf = spyTimeframe {
+                            spyCandles = await MarketDataStore.shared.ensureCandles(symbol: "SPY", timeframe: spyTf).value
+                        }
+                        
+                        let score = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: data, spyCandles: spyCandles)
+                        return (key, score)
+                    }
+                    return (key, nil)
                 }
-                return ("daily", nil)
             }
             
-            // Task B: Intraday Analysis (4 Hour)
-            // Note: If 4h is not available in free tier, we fallback to 1h
-            group.addTask {
-                let candles = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: "4h").value
-                if let data = candles, !data.isEmpty {
-                    // No need for SPY benchmark on intraday usually, or allow nil
-                    let score = await OrionAnalysisService.shared.calculateOrionScoreAsync(symbol: symbol, candles: data)
-                    return ("intraday", score)
+            var collected: [String: OrionScoreResult] = [:]
+            for await (key, res) in group {
+                if let r = res {
+                    collected[key] = r
                 }
-                return ("intraday", nil)
             }
-            
-            // Collect Results
-            var dailyRes: OrionScoreResult?
-            var intraRes: OrionScoreResult?
-            
-            for await (type, res) in group {
-                if type == "daily" { dailyRes = res }
-                else if type == "intraday" { intraRes = res }
-            }
-            
-            // 3. Synthesis
-            if let d = dailyRes, let i = intraRes {
-                return MultiTimeframeAnalysis(daily: d, intraday: i, generatedAt: Date())
-            }
-            
-            // Fallback: If Intraday fails (e.g. data error), duplicate daily to prevent crash, but warn.
-            if let d = dailyRes {
-                print("⚠️ OrionStore: Intraday data missing for \(symbol). Using Daily for both.")
-                return MultiTimeframeAnalysis(daily: d, intraday: d, generatedAt: Date())
-            }
-            
-            return nil
+            return collected
         }
         
-        if let robustResult = result {
-            self.analysis[symbol] = robustResult
-            print("🧠 OrionStore: Logic Synthesis Complete. Advice: \(robustResult.strategicAdvice)")
-        } else {
-            print("⚠️ OrionStore: Analysis Failed for \(symbol)")
+        // 3. Fallback Logic (Propagate Daily if others missing to prevent crash)
+        guard let daily = results["daily"] ?? results["h4"] ?? results["h1"] else {
+             print("⚠️ OrionStore: Analysis Failed for \(symbol) - No Daily/H4/H1 Data")
+             return
         }
+        
+        let finalAnalysis = MultiTimeframeAnalysis(
+            m5: results["m5"] ?? daily,
+            m15: results["m15"] ?? daily,
+            h1: results["h1"] ?? daily,
+            h4: results["h4"] ?? daily,
+            daily: daily,
+            weekly: results["weekly"] ?? daily,
+            generatedAt: Date()
+        )
+        
+        self.analysis[symbol] = finalAnalysis
+        print("🧠 OrionStore: Logic Synthesis Complete. Advice: \(finalAnalysis.strategicAdvice)")
     }
     
     // MARK: - Accessors

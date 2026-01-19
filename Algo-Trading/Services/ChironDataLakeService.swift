@@ -48,6 +48,25 @@ actor ChironDataLakeService {
         do {
             let data = try JSONEncoder().encode(history)
             try data.write(to: path)
+            
+            // RAG Sync - Push learning to vector database
+            let holdingDays = Calendar.current.dateComponents([.day], from: record.entryDate, to: record.exitDate).day ?? 0
+            await MainActor.run {
+                Task {
+                    await AlkindusRAGEngine.shared.syncChironTrade(
+                        id: record.id.uuidString,
+                        symbol: record.symbol,
+                        engine: record.engine.rawValue,
+                        entryPrice: record.entryPrice,
+                        exitPrice: record.exitPrice,
+                        pnlPercent: record.pnlPercent,
+                        holdingDays: holdingDays,
+                        orionScore: record.orionScoreAtEntry,
+                        atlasScore: record.atlasScoreAtEntry,
+                        regime: record.regime?.rawValue
+                    )
+                }
+            }
         } catch {
             print("❌ ChironDataLake: Failed to save trade - \(error)")
         }

@@ -23,12 +23,13 @@ struct OrionMotherboardView: View {
     private let purple = Color(red: 0.7, green: 0.3, blue: 1.0)
     
     var currentOrion: OrionScoreResult {
-        // Use daily analysis for 1D/1W, intraday for shorter timeframes
         switch selectedTimeframe {
-        case .daily, .weekly:
-            return analysis.daily
-        case .m5, .m15, .h1, .h4:
-            return analysis.intraday
+        case .m5: return analysis.m5
+        case .m15: return analysis.m15
+        case .h1: return analysis.h1
+        case .h4: return analysis.h4
+        case .daily: return analysis.daily
+        case .weekly: return analysis.weekly
         }
     }
     

@@ -16,6 +16,7 @@ final class AlkindusRAGEngine {
     private let patternNamespace = "patterns"
     private let decisionNamespace = "decisions"
     private let symbolNamespace = "symbols"
+    private let chironNamespace = "chiron"
     
     private init() {}
     
@@ -131,6 +132,74 @@ final class AlkindusRAGEngine {
                 "confidence": String(format: "%.2f", confidence)
             ],
             namespace: decisionNamespace
+        )
+    }
+    
+    /// Sync Chiron trade outcome to vector DB
+    func syncChironTrade(
+        id: String,
+        symbol: String,
+        engine: String,
+        entryPrice: Double,
+        exitPrice: Double,
+        pnlPercent: Double,
+        holdingDays: Int,
+        orionScore: Double?,
+        atlasScore: Double?,
+        regime: String?
+    ) async {
+        let text = """
+        Trade: \(symbol) | Engine: \(engine)
+        Entry: \(String(format: "%.2f", entryPrice)) → Exit: \(String(format: "%.2f", exitPrice))
+        PnL: \(String(format: "%.2f", pnlPercent))% | Duration: \(holdingDays) gün
+        Orion: \(orionScore.map { String(format: "%.1f", $0) } ?? "N/A")
+        Atlas: \(atlasScore.map { String(format: "%.1f", $0) } ?? "N/A")
+        Rejim: \(regime ?? "Bilinmiyor")
+        """
+        
+        let vectorId = "chiron_trade_\(id)"
+        
+        await upsertDocument(
+            id: vectorId,
+            content: text,
+            metadata: [
+                "type": "chiron_trade",
+                "symbol": symbol,
+                "engine": engine,
+                "pnl": String(format: "%.2f", pnlPercent),
+                "result": pnlPercent > 0 ? "win" : "loss"
+            ],
+            namespace: chironNamespace
+        )
+        
+        print("🧠 Chiron RAG: Trade synced for \(symbol)")
+    }
+    
+    /// Sync Chiron learning event to vector DB
+    func syncChironLearning(
+        symbol: String,
+        engine: String,
+        reasoning: String,
+        confidence: Double
+    ) async {
+        let text = """
+        Öğrenme: \(symbol) | Engine: \(engine)
+        Gerekçe: \(reasoning)
+        Güven: \(String(format: "%.0f", confidence * 100))%
+        """
+        
+        let id = "chiron_learning_\(symbol)_\(Date().timeIntervalSince1970)"
+        
+        await upsertDocument(
+            id: id,
+            content: text,
+            metadata: [
+                "type": "chiron_learning",
+                "symbol": symbol,
+                "engine": engine,
+                "confidence": String(format: "%.2f", confidence)
+            ],
+            namespace: chironNamespace
         )
     }
     

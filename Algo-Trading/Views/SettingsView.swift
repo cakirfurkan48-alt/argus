@@ -88,6 +88,9 @@ struct SettingsView: View {
                             .padding(.vertical, 8)
                         }
                         
+                        // MARK: - STORAGE CLEANUP
+                        StorageCleanupSection()
+                        
                         Spacer()
                     }
                     .padding(.bottom, 40)
@@ -666,4 +669,143 @@ struct ArgusShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - STORAGE CLEANUP SECTION
+struct StorageCleanupSection: View {
+    @State private var isCleaningUp = false
+    @State private var cleanupResult: String?
+    @State private var storageSize: String = "Hesaplanıyor..."
+    
+    var body: some View {
+        TerminalSection(title: "DEPOLAMA // TEMIZLIK") {
+            VStack(alignment: .leading, spacing: 12) {
+                // Current storage size
+                HStack {
+                    Image(systemName: "externaldrive.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 14))
+                    Text("KULLANILAN ALAN")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(.gray)
+                    Spacer()
+                    Text(storageSize)
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundColor(.orange)
+                }
+                
+                Divider().background(Color.gray.opacity(0.3))
+                
+                // Cleanup button
+                Button(action: performCleanup) {
+                    HStack {
+                        if isCleaningUp {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .tint(.red)
+                        } else {
+                            Image(systemName: "trash.fill")
+                                .foregroundColor(.red)
+                        }
+                        Text(isCleaningUp ? "TEMİZLENİYOR..." : "TÜM VERİLERİ TEMİZLE")
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(.red)
+                        Spacer()
+                    }
+                }
+                .disabled(isCleaningUp)
+                .padding(.vertical, 8)
+                
+                // Result
+                if let result = cleanupResult {
+                    Text(result)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.green)
+                }
+                
+                // Warning
+                Text("⚠️ Blob, cache ve eski event verileri silinir. Öğrenme verileri korunur.")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.gray)
+            }
+        }
+        .onAppear {
+            calculateStorageSize()
+        }
+    }
+    
+    private func calculateStorageSize() {
+        Task {
+            let docsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            
+            var totalSize: Int64 = 0
+            
+            if let docs = docsDir {
+                totalSize += folderSize(url: docs)
+            }
+            if let caches = cachesDir {
+                totalSize += folderSize(url: caches)
+            }
+            
+            let mb = Double(totalSize) / 1024.0 / 1024.0
+            let gb = mb / 1024.0
+            
+            await MainActor.run {
+                if gb >= 1.0 {
+                    storageSize = String(format: "%.2f GB", gb)
+                } else {
+                    storageSize = String(format: "%.0f MB", mb)
+                }
+            }
+        }
+    }
+    
+    private func folderSize(url: URL) -> Int64 {
+        let fm = FileManager.default
+        var size: Int64 = 0
+        
+        if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey], options: [.skipsHiddenFiles]) {
+            for case let fileURL as URL in enumerator {
+                if let fileSize = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                    size += Int64(fileSize ?? 0)
+                }
+            }
+        }
+        return size
+    }
+    
+    private func performCleanup() {
+        isCleaningUp = true
+        cleanupResult = nil
+        
+        Task {
+            // 1. ArgusLedger cleanup
+            let ledgerResult = await ArgusLedger.shared.aggressiveCleanup(maxBlobAgeDays: 0, maxEventAgeDays: 0)
+            
+            // 2. DiskCache cleanup
+            DiskCacheService.shared.cleanup(maxAgeDays: 0)
+            DiskCacheService.shared.clearAll()
+            
+            // 3. Clear Documents folder large files
+            if let docsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let fm = FileManager.default
+                if let contents = try? fm.contentsOfDirectory(at: docsDir, includingPropertiesForKeys: nil) {
+                    for url in contents {
+                        let name = url.lastPathComponent
+                        // Delete sqlite, json, zip files
+                        if name.hasSuffix(".sqlite") || name.hasSuffix(".json") || name.hasSuffix(".zip") || name.contains("ArgusScience") {
+                            try? fm.removeItem(at: url)
+                        }
+                    }
+                }
+            }
+            
+            await MainActor.run {
+                isCleaningUp = false
+                cleanupResult = ledgerResult.summary
+                calculateStorageSize()
+            }
+        }
+    }
 }
