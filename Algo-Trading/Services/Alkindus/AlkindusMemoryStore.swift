@@ -54,35 +54,73 @@ actor AlkindusMemoryStore {
             try? encoded.write(to: pendingPath)
         }
     }
+
+    /// Atomically appends a new observation to pending list (prevents race conditions)
+    func appendPendingObservation(_ observation: PendingObservation) async {
+        var pending = await loadPendingObservations()
+        pending.append(observation)
+        await savePendingObservations(pending)
+    }
     
     // MARK: - Update Module Calibration
     func recordOutcome(module: String, scoreBracket: String, wasCorrect: Bool, regime: String) async {
         var data = await loadCalibration()
-        
+
         // Update module bracket
         if data.modules[module] == nil {
             data.modules[module] = ModuleCalibration(brackets: [:])
         }
-        
+
         if data.modules[module]?.brackets[scoreBracket] == nil {
             data.modules[module]?.brackets[scoreBracket] = BracketStats(attempts: 0, correct: 0)
         }
-        
+
         data.modules[module]?.brackets[scoreBracket]?.attempts += 1
         if wasCorrect {
             data.modules[module]?.brackets[scoreBracket]?.correct += 1
         }
-        
+
         // Update regime insight
         if data.regimes[regime] == nil {
             data.regimes[regime] = RegimeInsight(moduleAttempts: [:], moduleCorrect: [:])
         }
-        
+
         data.regimes[regime]?.moduleAttempts[module, default: 0] += 1
         if wasCorrect {
             data.regimes[regime]?.moduleCorrect[module, default: 0] += 1
         }
-        
+
+        await saveCalibration(data)
+    }
+
+    /// Records outcome with weighted contribution (for soft bracket boundaries)
+    func recordOutcomeWeighted(module: String, scoreBracket: String, wasCorrect: Bool, weight: Double, regime: String) async {
+        var data = await loadCalibration()
+
+        // Update module bracket with weighted contribution
+        if data.modules[module] == nil {
+            data.modules[module] = ModuleCalibration(brackets: [:])
+        }
+
+        if data.modules[module]?.brackets[scoreBracket] == nil {
+            data.modules[module]?.brackets[scoreBracket] = BracketStats(attempts: 0, correct: 0)
+        }
+
+        data.modules[module]?.brackets[scoreBracket]?.updateWeighted(correct: wasCorrect, weight: weight)
+
+        // Update regime insight (using integer approximation for regime tracking)
+        // Only count full contributions to regime stats to avoid fractional counts
+        if weight >= 0.5 {
+            if data.regimes[regime] == nil {
+                data.regimes[regime] = RegimeInsight(moduleAttempts: [:], moduleCorrect: [:])
+            }
+
+            data.regimes[regime]?.moduleAttempts[module, default: 0] += 1
+            if wasCorrect {
+                data.regimes[regime]?.moduleCorrect[module, default: 0] += 1
+            }
+        }
+
         await saveCalibration(data)
     }
     
@@ -185,12 +223,29 @@ struct ModuleCalibration: Codable {
 }
 
 struct BracketStats: Codable {
-    var attempts: Int
-    var correct: Int
-    
+    var attempts: Double
+    var correct: Double
+
+    init(attempts: Int, correct: Int) {
+        self.attempts = Double(attempts)
+        self.correct = Double(correct)
+    }
+
+    init(attempts: Double, correct: Double) {
+        self.attempts = attempts
+        self.correct = correct
+    }
+
     var hitRate: Double {
         guard attempts > 0 else { return 0 }
-        return Double(correct) / Double(attempts)
+        return correct / attempts
+    }
+
+    mutating func updateWeighted(correct isCorrect: Bool, weight: Double) {
+        attempts += weight
+        if isCorrect {
+            correct += weight
+        }
     }
 }
 
