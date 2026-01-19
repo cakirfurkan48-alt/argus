@@ -274,11 +274,26 @@ final class MarketDataStore: ObservableObject {
     
     // MARK: - Bulk Operations
     func ensureQuotes(symbols: [String]) async {
+        // Optimize batch fetching if provider supports it
+        // Şu an paralel tekli fetch yapıyoruz
         await withTaskGroup(of: Void.self) { group in
             for sym in symbols {
                 group.addTask { await self.ensureQuote(symbol: sym) }
             }
         }
+    }
+    
+    /// Batch Refresh Logic - Replaces ArgusDataService call in ViewModel
+    func refreshQuotes(symbols: [String]) async throws {
+        // Use Heimdall (or ArgusDataService if available via Orchestrator)
+        // Here we assume HeimdallOrchestrator can handle batch or we loop
+        // If ArgusDataService has a specialized batch endpoint, we should expose it via Heimdall
+        
+        // Şimdilik existing pattern: HeimdallOrchestrator üstünden git
+        // İleride HeimdallOrchestrator.batchRequestQuote(symbols) eklenmeli
+        
+        // Paralel Fetch (Mevcut yapı)
+        await ensureQuotes(symbols: symbols)
     }
     // MARK: - Historical Data Access (Validator)
     

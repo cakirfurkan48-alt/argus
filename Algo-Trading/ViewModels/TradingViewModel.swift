@@ -194,8 +194,8 @@ class TradingViewModel: ObservableObject {
 
     @Published var isBacktesting: Bool = false 
     
-    // Smart Data Fetching State
-    var lastFetchTime: [String: Date] = [:]
+    // Smart Data Fetching State (Deprecated - Managed by Store)
+    
     var discoverSymbols: Set<String> = [] // Track symbols active in Discover View
     var failedFundamentals: Set<String> = [] // Circuit Breaker for Atlas Fetches
     
@@ -348,6 +348,91 @@ class TradingViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] items in
                 self?.watchlist = items
+            }
+            .store(in: &cancellables)
+            
+        // MARK: - MarketDataStore Bridge (Quotes)
+        MarketDataStore.shared.$quotes
+            .throttle(for: .seconds(0.5), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] storeQuotes in
+                guard let self = self else { return }
+                
+                // Convert DataValue<Quote> -> Quote
+                // Only update if changed prevents infinite loops & over-rendering
+                // We do a "smart merge" or full replace? Full replace is cleaner if Store is SSoT.
+                
+                var newQuotes: [String: Quote] = [:]
+                for (key, val) in storeQuotes {
+                    if let q = val.value {
+                        newQuotes[key] = q
+                    }
+                }
+                
+                if self.quotes != newQuotes {
+                    self.quotes = newQuotes
+                }
+            }
+            .store(in: &cancellables)
+            
+        // MARK: - MarketDataStore Bridge (Candles)
+        MarketDataStore.shared.$candles
+            .throttle(for: .seconds(2.0), scheduler: DispatchQueue.main, latest: true) // Throttle more aggressively for candles
+            .sink { [weak self] storeCandles in
+                guard let self = self else { return }
+                
+                var newCandles: [String: [Candle]] = [:]
+                var updatedSymbols: [String] = []
+                
+                for (key, val) in storeCandles {
+                    // Key format: SYMBOL_TIMEFRAME (e.g. AAPL_1D)
+                    // TradingViewModel uses same key format
+                    if let c = val.value {
+                        newCandles[key] = c
+                        updatedSymbols.append(key)
+                    }
+                }
+                
+                if self.candles != newCandles {
+                    self.candles = newCandles
+                    
+                    // Trigger Orion Analysis Reactively
+                    // Only analyze symbols that actually changed?
+                    // For now, analyze what we have, but maybe optimize later.
+                    // To avoid blocking, we launch a detached task
+                    Task(priority: .background) {
+                        var detectedPatterns: [String: [OrionChartPattern]] = [:]
+                        let engine = OrionPatternEngine.shared
+                        
+                        // Parse keys to get symbols (only for 1D timeframe typically? Or all?)
+                        // Orion usually works on 1D for patterns
+                        
+                        for (key, candles) in newCandles {
+                            // Extract symbol if it ends with _1D (case insensitive usually lower in Store)
+                            // Store key: symbol_1day or symbol_1d based on ensureCandles call
+                            // fetchCandles uses hardcoded "1D"
+                            
+                            // Simple check: if key contains "_", split
+                            let parts = key.components(separatedBy: "_")
+                            if parts.count >= 2 {
+                                let symbol = parts[0]
+                                // let tf = parts[1] 
+                                // Assume we analyze all available candle sets
+                                let patterns = engine.detectPatterns(candles: candles)
+                                if !patterns.isEmpty {
+                                    detectedPatterns[symbol] = patterns
+                                }
+                            }
+                        }
+                        
+                        if !detectedPatterns.isEmpty {
+                            await MainActor.run {
+                                for (symbol, patterns) in detectedPatterns {
+                                    SignalStateViewModel.shared.patterns[symbol] = patterns
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .store(in: &cancellables)
     }

@@ -11,17 +11,13 @@ extension TradingViewModel {
         
         // Heimdall Routing via Store (SSoT)
         // Store handles coalescing
-        let dataValue = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: timeframe)
+        // We just ensure data is fetched. The subscription in TradingViewModel.swift will update the UI.
         
-        // KEY FIX: Timeframe bazlı anahtar kullan (ör: "AAPL_1G", "AAPL_1S")
-        let cacheKey = "\(symbol)_\(timeframe)"
+        _ = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: timeframe)
         
         await MainActor.run {
-            if let data = dataValue.value {
-                self.candles[cacheKey] = data
-            }
-            self.isLoading = false
-                            
+             self.isLoading = false
+            
             // Update Data Health
             self.updateDataHealth(for: symbol) { health in
                 // Candles imply both quotes and intraday/history availability
@@ -88,9 +84,9 @@ extension TradingViewModel {
         defer { 
             SignpostLogger.shared.end(log: SignpostLogger.shared.quotes, name: "BatchFetchQuotes", id: spanId)
             let duration = Date().timeIntervalSince(startTime)
-            // Note: defer içinde async kullanılamıyor, DispatchQueue.main.async fire-and-forget için kabul edilebilir
             DispatchQueue.main.async { DiagnosticsViewModel.shared.recordBatchFetchDuration(duration) }
         }
+        
         let portfolioSymbols = portfolio.filter { $0.isOpen }.map { $0.symbol }
         let safeSymbols = SafeUniverseService.shared.universe.map { $0.symbol }
         // Include Discover Symbols in the loop
@@ -105,24 +101,13 @@ extension TradingViewModel {
         }
         
         do {
-            print("📡 ArgusDataService: Batch Fetching \(allSymbols.count) symbols...")
+            print("📡 TradingViewModel: Delegating Batch Fetch of \(allSymbols.count) symbols to MarketDataStore...")
             
-            // ArgusDataService kullan (Heimdall yerine)
-            let collected = try await ArgusDataService.shared.fetchQuotes(symbols: allSymbols)
+            // Delegate completely to Store
+            // Store handles coalescing, caching (TTL), and updating via $quotes publisher
+            try await MarketDataStore.shared.refreshQuotes(symbols: allSymbols)
             
-            // PERFORMANS OPTİMİZASYONU: Tek seferde batch güncelleme
-            // Her sembol için ayrı quotes[k]=v yapmak yerine tek atama
             await MainActor.run {
-                // Önce mevcut quotes'u kopyala
-                var newQuotes = self.quotes
-                // Yeni verileri merge et
-                for (k, v) in collected {
-                    newQuotes[k] = v
-                    // FIX: WatchlistViewModel için Store'u güncelle
-                    MarketDataStore.shared.injectLiveQuote(v, source: "ArgusDataService")
-                }
-                // TEK ATAMA = TEK RE-RENDER
-                self.quotes = newQuotes
                 self.isLoading = false
             }
         } catch {
@@ -159,95 +144,22 @@ extension TradingViewModel {
         let spanId = SignpostLogger.shared.begin(log: SignpostLogger.shared.candles, name: "FetchCandles")
         defer { SignpostLogger.shared.end(log: SignpostLogger.shared.candles, name: "FetchCandles", id: spanId) }
 
-        let isMarketOpen = MarketSessionManager.shared.isMarketOpen()
+        print("📡 TradingViewModel: Delegating Candle Fetch to MarketDataStore for \(watchlist.count) symbols")
         
-        print("📡 ArgusDataService: fetchCandles() called for \(watchlist.count) symbols")
-        
-        // 1. Collect Data in Background (No UI Updates yet)
-        var collectedData: [String: [Candle]] = [:]
-        
-        for symbol in watchlist {
-            // Smart Fetching Check
-            if !shouldFetchData(for: symbol, type: "candle", isMarketOpen: isMarketOpen) {
-                continue
-            }
-            
-            // Rate Limit Protection
-            try? await Task.sleep(nanoseconds: 200_000_000) // Reduced 500ms -> 200ms
-            
-            // Request 400 candles
-            do {
-                let candleData = try await ArgusDataService.shared.fetchCandles(symbol: symbol, timeframe: "1D", limit: 400)
-                // Thread-safe append to local variable
-                collectedData[symbol] = candleData
-                
-                // Track fetch time locally
-                // We'll update main Dictionary later
-            } catch {
-                print("⚠️ Candle fetch failed for \(symbol): \(error)")
-            }
-        }
-        
-        guard !collectedData.isEmpty else { return }
-        
-        // 2. Batch Update on Main Thread (SINGLE RENDER)
-        await MainActor.run {
-            // Copy current dict to minimize mutation cost
-            var newCandles = self.candles
-            
-            for (symbol, data) in collectedData {
-                newCandles[symbol] = data
-                self.lastFetchTime["\(symbol)_candle"] = Date()
-            }
-            
-            self.candles = newCandles // Trigger ONE view update
-            print("📡 ArgusDataService: Batch updated candles for \(collectedData.count) symbols")
-            
-            // 3. Trigger Orion V3 Pattern Analysis
-            Task {
-                var detectedPatterns: [String: [OrionChartPattern]] = [:]
-                let engine = OrionPatternEngine.shared
-                
-                for (symbol, candles) in collectedData {
-                    let patterns = engine.detectPatterns(candles: candles)
-                    if !patterns.isEmpty {
-                        detectedPatterns[symbol] = patterns
-                    }
-                }
-                
-                if !detectedPatterns.isEmpty {
-                    await MainActor.run {
-                        // Merge with existing patterns or replace? Replace simplifies things.
-                        for (symbol, patterns) in detectedPatterns {
-                            SignalStateViewModel.shared.patterns[symbol] = patterns
-                        }
-                    }
-                    print("📐 Orion V3: Detected patterns for \(detectedPatterns.count) symbols")
+        // Parallel Fetch Request via Store
+        // Store handles coalescing and caching
+        await withTaskGroup(of: Void.self) { group in
+            for symbol in watchlist {
+                group.addTask {
+                    _ = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: "1D")
                 }
             }
         }
+        
+        // Note: Analysis is now triggered reactively via $candles subscription in TradingViewModel.swift
     }
     
-    private func shouldFetchData(for symbol: String, type: String, isMarketOpen: Bool) -> Bool {
-        let key = "\(symbol)_\(type)"
-        guard let lastTime = lastFetchTime[key] else { return true } // Never fetched
-        
-        let now = Date()
-        let secondsSince = now.timeIntervalSince(lastTime)
-        
-        if isMarketOpen {
-            // If market is open, fetch if > 60 seconds (Quote) or > 300 seconds (Candle)
-            if type == "quote" { return secondsSince > 60 }
-            if type == "candle" { return secondsSince > 300 }
-        } else {
-            // If market is closed
-            // Only fetch if data is very old (e.g. > 12 hours) to capture late data
-            // User Rule: "Gereksiz refresh yapma"
-            if secondsSince < 12 * 3600 { return false }
-        }
-        
-        return true
-    }
+
 
     // MARK: - Macro Environment
     

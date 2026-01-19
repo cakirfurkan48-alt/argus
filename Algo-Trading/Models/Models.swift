@@ -146,7 +146,7 @@ struct Candle: Identifiable, Codable, @unchecked Sendable, Equatable {
     }
 }
 
-struct Quote: Codable, Sendable {
+struct Quote: Codable, Sendable, Equatable {
     let c: Double // Current
     var d: Double? // Change (Raw/Optional)
     var dp: Double? // Percent Change (Raw/Optional)
