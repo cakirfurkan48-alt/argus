@@ -88,6 +88,14 @@ struct PortfolioReportsView: View {
                 await viewModel.refreshReports()
             }
         }
+        .onChange(of: viewModel.transactionHistory.count) { _ in
+            print("📊 UI: Transaction count changed, refreshing reports...")
+            Task { await viewModel.refreshReports() }
+        }
+        .onChange(of: viewModel.bistBalance) { _ in
+            // Balance changed (likely trade closed), refresh reports
+            Task { await viewModel.refreshReports() }
+        }
     }
     
     private func formattedDate(_ date: Date) -> String {

@@ -89,7 +89,9 @@ actor ReportEngine {
 └─────────────────────────────────────────────────────────────┘
 
 """
+"""
         let insights = await AlkindusInsightGenerator.shared.getTodaysInsights()
+        print("📊 ReportEngine: Daily - Alkindus Insights count: \(insights.count)")
         if insights.isEmpty {
             report += "   Henüz yeterli veri biriktirilmedi. Alkindus öğrenmeye devam ediyor...\n"
         } else {
@@ -275,7 +277,9 @@ actor ReportEngine {
 └─────────────────────────────────────────────────────────────┘
 
 """
+"""
         let recentInsights = await AlkindusInsightGenerator.shared.getRecentInsights(days: 7)
+        print("📊 ReportEngine: Weekly - Alkindus Insights count: \(recentInsights.count)")
         if recentInsights.isEmpty {
             report += "   Yeterli öğrenme verisi henüz biriktirilmedi.\n\n"
         } else {

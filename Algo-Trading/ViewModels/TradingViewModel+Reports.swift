@@ -12,9 +12,14 @@ extension TradingViewModel {
         let bistTrades = trades.filter { $0.symbol.uppercased().hasSuffix(".IS") }
         let bistDecisions = decisions.filter { $0.symbol.uppercased().hasSuffix(".IS") }
         
+        // Logs
+        print("📊 Reports: Refresh triggered for \(trades.count) trades")
+        
         // Global Trades (USD işlemleri)
         let globalTrades = trades.filter { !$0.symbol.uppercased().hasSuffix(".IS") }
         let globalDecisions = decisions.filter { !$0.symbol.uppercased().hasSuffix(".IS") }
+        
+        print("   -> Global: \(globalTrades.count) Trades, \(globalDecisions.count) Decisions")
         
         let engine = ReportEngine.shared
         
@@ -25,6 +30,7 @@ extension TradingViewModel {
             decisions: globalDecisions,
             atmosphere: atmosphere
         )
+        print("   -> Global Daily Report Generated: \(self.dailyReport?.count ?? 0) chars")
         
         // 2. Global Weekly Report
         self.weeklyReport = await engine.generateWeeklyReport(
@@ -47,6 +53,12 @@ extension TradingViewModel {
             trades: bistTrades,
             decisions: bistDecisions
         )
+    }
+    
+    // Auto-refresh reports when data changes
+    func setupReportAutoRefresh() {
+        // This should be called from PortfolioReportsView.onChange
+        Task { await refreshReports() }
     }
 }
 
