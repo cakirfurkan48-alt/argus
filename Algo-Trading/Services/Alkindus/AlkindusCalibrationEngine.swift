@@ -144,7 +144,8 @@ actor AlkindusCalibrationEngine {
                     await AlkindusTemporalAnalyzer.shared.recordOutcome(
                         module: module,
                         wasCorrect: wasCorrect,
-                        timestamp: observation.decisionDate
+                        timestamp: observation.decisionDate,
+                        symbol: observation.symbol
                     )
                 }
                 
@@ -243,7 +244,7 @@ struct AlkindusStats {
     let calibration: CalibrationData
     let pendingCount: Int
     let lastUpdated: Date
-    
+
     // Get top performing module
     var topModule: (name: String, hitRate: Double)? {
         var best: (String, Double)? = nil
@@ -284,3 +285,23 @@ struct AlkindusStats {
         return worst
     }
 }
+
+// MARK: - Test Helper Methods (DEBUG only)
+#if DEBUG
+extension AlkindusCalibrationEngine {
+    /// Test helper: Expose scoreToBracket for testing (calls actual private implementation)
+    func testScoreToBracket(_ score: Double) async -> String {
+        return scoreToBracket(score)
+    }
+
+    /// Test helper: Expose scoreToBracketsWeighted for testing (calls actual private implementation)
+    func testScoreToBracketsWeighted(_ score: Double) async -> [(bracket: String, weight: Double)] {
+        return scoreToBracketsWeighted(score)
+    }
+
+    /// Test helper: Get pending observation count
+    func getPendingCount() async -> Int {
+        return await memoryStore.loadPendingObservations().count
+    }
+}
+#endif

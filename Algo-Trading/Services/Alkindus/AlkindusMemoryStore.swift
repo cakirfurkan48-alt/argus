@@ -180,6 +180,30 @@ actor AlkindusMemoryStore {
         let existing = await loadCalibration()
         return existing.modules.isEmpty
     }
+
+    // MARK: - Test Helper Methods (DEBUG only)
+    #if DEBUG
+    /// Forces save of current calibration to disk (test helper)
+    func saveToDisk() async {
+        let data = await loadCalibration()
+        await saveCalibration(data)
+    }
+
+    /// Forces reload from disk (test helper)
+    func loadFromDisk() async {
+        // This is a no-op since loadCalibration() always reads from disk
+        // But it's here for semantic clarity in tests
+        _ = await loadCalibration()
+    }
+
+    /// Removes a pending observation at the specified index (test helper)
+    func removePendingObservation(at index: Int) async {
+        var pending = await loadPendingObservations()
+        guard index >= 0 && index < pending.count else { return }
+        pending.remove(at: index)
+        await savePendingObservations(pending)
+    }
+    #endif
 }
 
 // MARK: - Bootstrap Data Model
@@ -272,7 +296,7 @@ struct PendingObservation: Codable, Identifiable {
     let horizons: [Int] // [7, 15]
     var evaluatedHorizons: [Int] // Horizons already evaluated
     
-    init(symbol: String, decisionDate: Date, action: String, moduleScores: [String: Double], regime: String, priceAtDecision: Double, horizons: [Int] = [7, 15]) {
+    init(symbol: String, decisionDate: Date, action: String, moduleScores: [String: Double], regime: String, priceAtDecision: Double, horizons: [Int] = [7, 15], evaluatedHorizons: [Int] = []) {
         self.id = UUID()
         self.symbol = symbol
         self.decisionDate = decisionDate
@@ -281,7 +305,7 @@ struct PendingObservation: Codable, Identifiable {
         self.regime = regime
         self.priceAtDecision = priceAtDecision
         self.horizons = horizons
-        self.evaluatedHorizons = []
+        self.evaluatedHorizons = evaluatedHorizons
     }
     
     // Check if a horizon is ready to be evaluated
