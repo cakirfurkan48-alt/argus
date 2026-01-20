@@ -51,28 +51,21 @@ struct ArgusDecisionEngine {
             dataSources["Price"] = "Unknown"
         }
         
-        let buyThreshold = aggressiveness > 0 ? (1.0 - aggressiveness) * 100.0 + 50.0 : 55.0 
+        // Use config thresholds
+        let effectiveBuyThreshold = config.defaultBuyThreshold - ((aggressiveness > 0 ? aggressiveness : config.defaultAggressiveness) - config.defaultAggressiveness) * config.aggressivenessMultiplier
+        let effectiveSellThreshold = config.defaultSellThreshold + ((aggressiveness > 0 ? aggressiveness : config.defaultAggressiveness) - config.defaultAggressiveness) * config.aggressivenessMultiplier
         
-        // Let's use simpler logic: 
-        // Neutral (0.55) -> 55
-        // High (0.80) -> 51
-        // Low (0.50) -> 56
-        let effectiveBuyThreshold = 55.0 - ((aggressiveness > 0 ? aggressiveness : 0.55) - 0.55) * 20.0
-        let effectiveSellThreshold = 45.0 + ((aggressiveness > 0 ? aggressiveness : 0.55) - 0.55) * 20.0
-        
-        let techAuthority = authorityTech > 0 ? authorityTech : 0.85
-        
+        let techAuthority = authorityTech > 0 ? authorityTech : config.defaultTechAuthority
         
         // --- PHASE 1: DATA HEALTH GATE (Hard Stop) ---
         var filledModules = 0.0
-        let totalModules = 4.0
         if orion != nil { filledModules += 1 }
         if atlas != nil { filledModules += 1 }
         if hermes != nil { filledModules += 1 }
         if aether != nil { filledModules += 1 }
         
-        let coveragePct = (filledModules / totalModules) * 100.0
-        let isDataSufficient = coveragePct >= 60.0 && orion != nil
+        let coveragePct = (filledModules / config.totalModules) * 100.0
+        let isDataSufficient = coveragePct >= config.minCoveragePct && orion != nil
         
         let dataHealth = DataHealthSnapshot(
             freshnessScore: traceContext?.freshness ?? 100, 
@@ -232,8 +225,8 @@ struct ArgusDecisionEngine {
         let leaderScore = leader.score
         let directionMultiplier = (claimAction == .buy) ? 1.0 : -1.0
         
-        let supportImpact = supportPower * 10.0 * directionMultiplier
-        let objectionImpact = objectionPower * 25.0 * -directionMultiplier
+        let supportImpact = supportPower * config.supportImpactMultiplier * directionMultiplier
+        let objectionImpact = objectionPower * config.objectionImpactMultiplier * -directionMultiplier
         
         var finalScore = leaderScore + supportImpact + objectionImpact
         finalScore = min(100.0, max(0.0, finalScore))
@@ -362,17 +355,35 @@ struct ArgusDecisionEngine {
         
         // Pass the RAW Consensus Score to the result
         
-        // --- PHASE 4.5: EXECUTION PLAN ---
-        let proposedAction = claimAction 
-        
-        // Use dynamic Risk Tolerance loaded at start
-        let userStopLossPct = riskTolerance > 0 ? riskTolerance : 0.05
-        let userTakeProfitPct = userStopLossPct * 2.5 // Traditional 1:2.5 Risk/Reward
-        
+        // --- PHASE 4.5: EXECUTION PLAN (ATR-BAZLI STOP LOSS) ---
+        let proposedAction = claimAction
+
+        // ATR-bazlı stop loss hesabı (daha akıllı ve volatiliteye duyarlı)
+        let price = marketData?.price ?? 0
+        let atr = phoenixAdvice?.atr ?? (price * 0.02) // Fallback: fiyatın %2'si
+
+        // Kullanıcı risk toleransını da dikkate al
+        let userRiskFactor = riskTolerance > 0 ? (riskTolerance / config.defaultRiskTolerance) : 1.0
+
+        let stopLossValue: Double?
+        let takeProfitValue: Double?
+
+        if price > 0 && proposedAction == .buy {
+            let adjustedATR = atr * userRiskFactor
+            stopLossValue = price - (adjustedATR * config.atrStopMultiplier)
+            takeProfitValue = price + (adjustedATR * config.atrTargetMultiplier)
+        } else if price > 0 {
+            stopLossValue = nil // Satış için stop loss yok
+            takeProfitValue = nil
+        } else {
+            stopLossValue = nil
+            takeProfitValue = nil
+        }
+
         let riskPlan = RiskPlan(
-            stopLoss: marketData?.price != nil ? (proposedAction == .buy ? marketData!.price * (1.0 - userStopLossPct) : nil) : nil,
-            takeProfit: marketData?.price != nil ? marketData!.price * (1.0 + userTakeProfitPct) : nil,
-            maxDrawdown: 3.0 
+            stopLoss: stopLossValue,
+            takeProfit: takeProfitValue,
+            maxDrawdown: config.maxDrawdown
         )
         
         var phGuidance: PhoenixGuidance? = nil
@@ -389,7 +400,7 @@ struct ArgusDecisionEngine {
             targetSizeR: targetSizeR, // Use dynamic tiered size
             entryGuidance: phGuidance,
             riskPlan: riskPlan,
-            validityWindow: 300 
+            validityWindow: config.validityWindow
         )
         
         let debate = AgoraDebate(
@@ -410,8 +421,8 @@ struct ArgusDecisionEngine {
 
         
         // --- PHASE 7: CHIRON GATING (Risk Budget) ---
-        let price = marketData?.price ?? 0.0
-        
+        // `price` already defined in Phase 4.5 above
+
         // Pass the PLAN to Chiron, not just "Buy"
         // TODO: Update Chiron to accept ExecutionPlan. For now, we adapt.
         
@@ -597,10 +608,11 @@ struct ArgusDecisionEngine {
         
         let aggressiveness = UserDefaults.standard.double(forKey: "kernel_aggressiveness")
         let agg = aggressiveness > 0 ? aggressiveness : 0.55
+        let config = ArgusConfig.defaults
         
         // Lower threshold = More Aggressive
-        let buyLimit = 55.0 - (agg - 0.55) * 20.0
-        let sellLimit = 45.0 + (agg - 0.55) * 20.0
+        let buyLimit = config.defaultBuyThreshold - (agg - config.defaultAggressiveness) * config.aggressivenessMultiplier
+        let sellLimit = config.defaultSellThreshold + (agg - config.defaultAggressiveness) * config.aggressivenessMultiplier
         
         var action: SignalAction = .hold
         var evidenceTrace = ""
@@ -751,8 +763,7 @@ struct ArgusDecisionEngine {
                 let age = now.timeIntervalSince(lastManual)
                 if age < config.manualOverrideDuration {
                     // EXCEPTION: Only override if score is VERY high (Cobalt Blue Confidence)
-                    // Configurable? For now hardcoded 85+
-                    if score < 85 {
+                    if score < config.tier1Threshold {
                         return ChurnGuardResult(
                             isBlocked: true,
                             ruleTriggered: "\(ChurnReason.manualOverride.rawValue) (\(Int(config.manualOverrideDuration - age))s left)",

@@ -1,19 +1,20 @@
 import SwiftUI
 
 // MARK: - BIST Portfolio View (Refactored to use main PortfolioEngine)
-// Artık TradingViewModel ve PortfolioEngine kullanıyor
+// MARK: - BIST Portfolio View (Refactored to use main PortfolioStore)
+// Artık TradingViewModel ve PortfolioStore kullanıyor
 
 struct BistPortfolioView: View {
     @EnvironmentObject var viewModel: TradingViewModel
     @State private var showSearch = false
     
-    // BIST trades from PortfolioEngine
-    private var bistTrades: [Trade] {
-        PortfolioEngine.shared.bistOpenTrades
+    // BIST trades from PortfolioStore
+    var bistTrades: [Trade] {
+        PortfolioStore.shared.bistOpenTrades
     }
     
-    private var bistBalance: Double {
-        PortfolioEngine.shared.bistBalance
+    var bistBalance: Double {
+        PortfolioStore.shared.bistBalance
     }
     
     var body: some View {
@@ -88,10 +89,10 @@ struct BistPortfolioView: View {
                 }
                 .padding()
                 .background(
-                    LinearGradient(gradient: Gradient(colors: [Color.red.opacity(0.9), Color.red.opacity(0.6)]), startPoint: .topLeading, endPoint: .bottomTrailing)
+                    LinearGradient(gradient: Gradient(colors: [Theme.bistAccent.opacity(0.9), Theme.bistSecondary.opacity(0.8)]), startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
                 .cornerRadius(20)
-                .shadow(color: Color.red.opacity(0.3), radius: 10, x: 0, y: 5)
+                .shadow(color: Theme.bistAccent.opacity(0.3), radius: 10, x: 0, y: 5)
                 .padding(.horizontal)
                 
                 // MARK: - Portfolio List
@@ -149,34 +150,91 @@ struct BistPositionRowV2: View {
     let trade: Trade
     let quote: Quote?
     
+    // Plan desteği
+    var plan: PositionPlan? {
+        PositionPlanStore.shared.getPlan(for: trade.id)
+    }
+    
     var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(trade.symbol.replacingOccurrences(of: ".IS", with: ""))
-                    .font(.headline)
-                    .bold()
-                Text("\(Int(trade.quantity)) Adet")
+        VStack(spacing: 8) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text(trade.symbol.replacingOccurrences(of: ".IS", with: ""))
+                        .font(.headline)
+                        .bold()
+                    Text("\(Int(trade.quantity)) Adet")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing) {
+                    let currentPrice = quote?.currentPrice ?? trade.entryPrice
+                    Text("₺\(String(format: "%.2f", currentPrice))")
+                        .bold()
+                    
+                    let pnl = (currentPrice - trade.entryPrice) * trade.quantity
+                    let pnlPercent = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100.0
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: pnl >= 0 ? "arrow.up" : "arrow.down")
+                        Text("\(String(format: "%.1f", pnlPercent))%")
+                        Text("(₺\(Int(pnl)))")
+                    }
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(pnl >= 0 ? Theme.bistPositive : Theme.bistNegative)
+                }
             }
             
-            Spacer()
-            
-            VStack(alignment: .trailing) {
-                let currentPrice = quote?.currentPrice ?? trade.entryPrice
-                Text("₺\(String(format: "%.2f", currentPrice))")
-                    .bold()
+            // Plan durumu gösterimi
+            if let plan = plan {
+                Divider().background(Color.white.opacity(0.1))
                 
-                let pnl = (currentPrice - trade.entryPrice) * trade.quantity
-                let pnlPercent = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100.0
-                
-                HStack(spacing: 4) {
-                    Image(systemName: pnl >= 0 ? "arrow.up" : "arrow.down")
-                    Text("\(String(format: "%.1f", pnlPercent))%")
-                    Text("(₺\(Int(pnl)))")
+                HStack(spacing: 8) {
+                    // Intent ikonu
+                    Image(systemName: plan.intent.icon)
+                        .font(.caption)
+                        .foregroundColor(Theme.bistAccent)
+                    
+                    Text(plan.intent.rawValue)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    // Aktif senaryo
+                    if plan.bullishScenario.isActive {
+                        Label("BOĞA", systemImage: "arrow.up.right")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                    } else if plan.bearishScenario.isActive {
+                        Label("AYI", systemImage: "arrow.down.right")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
+                    
+                    // Sonraki adım
+                    if let nextStep = plan.bullishScenario.steps.first(where: { !plan.executedSteps.contains($0.id) }) {
+                        Text(nextStep.trigger.displayText)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Theme.bistAccent.opacity(0.2))
+                            .cornerRadius(4)
+                    }
                 }
-                .font(.caption)
-                .foregroundColor(pnl >= 0 ? .green : .red)
+            } else {
+                // Plan yoksa oluştur butonu
+                HStack {
+                    Image(systemName: "doc.badge.plus")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Text("Plan oluştur")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                    Spacer()
+                }
             }
         }
         .padding()
@@ -184,3 +242,4 @@ struct BistPositionRowV2: View {
         .cornerRadius(12)
     }
 }
+

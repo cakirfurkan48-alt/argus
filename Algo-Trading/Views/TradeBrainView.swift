@@ -74,6 +74,11 @@ struct TradeBrainView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Trade Brain")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    AlkindusAvatarView(size: 24, isThinking: false)
+                }
+            }
             .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showPlanDetail) {
                 if let plan = selectedPlan {

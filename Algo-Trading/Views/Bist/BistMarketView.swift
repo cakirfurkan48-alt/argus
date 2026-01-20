@@ -198,7 +198,7 @@ struct BistMarketView: View {
             return
         }
         
-        let success = PortfolioEngine.shared.buy(
+        let success = PortfolioStore.shared.buy(
             symbol: symbol,
             quantity: 1,
             price: quote.currentPrice,

@@ -20,6 +20,47 @@ struct ArgusConfig: Codable, Sendable {
     
     // 4. Idempotency
     var enableIdempotency: Bool = true
+    
+    // 5. Decision Thresholds (Extracted from ArgusDecisionEngine)
+    var defaultTechAuthority: Double = 0.85
+    var defaultAggressiveness: Double = 0.55
+    var defaultBuyThreshold: Double = 55.0
+    var defaultSellThreshold: Double = 45.0
+    var aggressivenessMultiplier: Double = 20.0
+    
+    // 6. Data Health Gates
+    var totalModules: Double = 4.0
+    var minCoveragePct: Double = 60.0
+    
+    // 7. Consensus Calculation
+    var supportImpactMultiplier: Double = 10.0
+    var objectionImpactMultiplier: Double = 25.0
+    
+    // 8. Tier System
+    var tier1Threshold: Double = 85.0
+    var tier2Threshold: Double = 70.0
+    var tier3Threshold: Double = 60.0
+    
+    // 9. Quality Gates
+    var qualityGateTier1: Double = 0.8
+    var qualityGateTier2: Double = 0.5
+    var qualityGateMinimum: Double = 0.4
+    
+    // 10. Technical Veto
+    var strongTechObjectionThreshold: Double = 60.0
+    var weakTechObjectionThreshold: Double = 40.0
+    
+    // 11. Position Sizing
+    var sizeReductionThreshold: Double = 0.5
+    
+    // 12. ATR-based Risk Management
+    var atrStopMultiplier: Double = 2.0
+    var atrTargetMultiplier: Double = 3.0
+    var defaultRiskTolerance: Double = 0.05
+    var maxDrawdown: Double = 3.0
+    
+    // 13. Execution
+    var validityWindow: TimeInterval = 300 // 5 Minutes
 }
 
 // MARK: - Churn Enums

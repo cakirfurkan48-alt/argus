@@ -36,10 +36,10 @@ actor BistSektorEngine {
                 let dailyChange = quote.changePercent
                 let momentum: SektorMomentum
                 
-                if dailyChange > 2 { momentum = .strong }
-                else if dailyChange > 0.5 { momentum = .positive }
-                else if dailyChange > -0.5 { momentum = .neutral }
-                else if dailyChange > -2 { momentum = .negative }
+                if dailyChange > BistThresholds.Momentum.strong { momentum = .strong }
+                else if dailyChange > BistThresholds.Momentum.positive { momentum = .positive }
+                else if dailyChange > BistThresholds.Momentum.negativeUpper { momentum = .neutral }
+                else if dailyChange > BistThresholds.Momentum.negative { momentum = .negative }
                 else { momentum = .weak }
                 
                 sectorData.append(BistSektorItem(
@@ -74,10 +74,10 @@ actor BistSektorEngine {
     // MARK: - Rotasyon Analizi
     
     private func analyzeRotation(sectors: [BistSektorItem]) -> SektorRotasyon {
-        guard !sectors.isEmpty else { return .belirsiz }
-        
-        let strongest = sectors.first!
-        let weakest = sectors.last!
+        guard let strongest = sectors.first,
+              let weakest = sectors.last else {
+            return .belirsiz
+        }
         
         // Bankacılık liderliği - risk iştahı yüksek
         if strongest.code == "XBANK" && strongest.dailyChange > 1 {
@@ -110,9 +110,11 @@ actor BistSektorEngine {
     // MARK: - Sembolün Sektörünü Bul
     
     func getSector(for symbol: String) -> String? {
-        // Basit mapping (gerçek uygulamada API'den alınmalı)
+        // BistSectorRegistry kullanıyoruz
+        // Not: actor olduğu için sync erişim için bilinen değerleri cache'liyoruz
         let cleanSymbol = symbol.uppercased().replacingOccurrences(of: ".IS", with: "")
         
+        // Bilinen semboller (BistSectorRegistry ile sync)
         let bankSymbols = ["AKBNK", "GARAN", "ISCTR", "YKBNK", "HALKB", "VAKBN", "TSKB"]
         let industrialSymbols = ["EREGL", "KRDMD", "TOASO", "FROTO", "TUPRS", "PETKM"]
         let holdingSymbols = ["SAHOL", "KCHOL", "DOHOL", "KOZAL", "TAVHL"]

@@ -25,16 +25,16 @@ actor BistRejimEngine {
             let dailyChange = ((xu.last - xu.previousClose) / xu.previousClose) * 100
             let component: RejimComponent
             
-            if dailyChange > 2 {
-                component = RejimComponent(name: "XU100", value: dailyChange, status: .bullish, detail: "+\(String(format: "%.1f", dailyChange))% (Güçlü Yükseliş)")
+            if dailyChange > BistThresholds.Momentum.strong {
+                component = RejimComponent(name: "XU100", value: dailyChange, status: .bullish, detail: "+\(String(format: "%.1f", dailyChange))% (Güçlü Yükselis)")
                 totalScore += 20
-            } else if dailyChange > 0.5 {
+            } else if dailyChange > BistThresholds.Momentum.positive {
                 component = RejimComponent(name: "XU100", value: dailyChange, status: .positive, detail: "+\(String(format: "%.1f", dailyChange))%")
                 totalScore += 10
-            } else if dailyChange > -0.5 {
+            } else if dailyChange > BistThresholds.Momentum.negativeUpper {
                 component = RejimComponent(name: "XU100", value: dailyChange, status: .neutral, detail: "\(String(format: "%.1f", dailyChange))% (Yatay)")
                 totalScore += 0
-            } else if dailyChange > -2 {
+            } else if dailyChange > BistThresholds.Momentum.negative {
                 component = RejimComponent(name: "XU100", value: dailyChange, status: .negative, detail: "\(String(format: "%.1f", dailyChange))%")
                 totalScore -= 10
             } else {

@@ -73,14 +73,19 @@ actor BistFaktorEngine {
     private func calculateMomentumFactor(_ history: [BorsaPyCandle]?) -> BistFaktor {
         var score: Double = 50
         var details: [String] = []
-        
-        guard let candles = history, candles.count >= 20 else {
+
+        guard let candles = history, candles.count >= 20,
+              let lastCandle = candles.last else {
             return BistFaktor(name: "Momentum", score: 50, icon: "arrow.up.right", color: "green", details: ["Veri yetersiz"])
         }
-        
-        // 20 Günlük Getiri
-        let current = candles.last!.close
-        let past20 = candles[candles.count - min(20, candles.count)].close
+
+        // 20 Günlük Getiri (güvenli index erişimi)
+        let current = lastCandle.close
+        let past20Index = max(0, candles.count - 20)
+        let past20 = candles[past20Index].close
+        guard past20 > 0 else {
+            return BistFaktor(name: "Momentum", score: 50, icon: "arrow.up.right", color: "green", details: ["Hesaplama hatası"])
+        }
         let return20 = ((current - past20) / past20) * 100
         
         if return20 > 15 { score += 30; details.append("20G: +\(String(format: "%.1f", return20))% (Güçlü)") }
@@ -150,12 +155,13 @@ actor BistFaktorEngine {
         var score: Double = 30 // Temettü yoksa düşük başla
         var details: [String] = []
         
-        guard let divs = dividends, !divs.isEmpty, let price = quote?.last, price > 0 else {
+        guard let divs = dividends, !divs.isEmpty,
+              let lastDiv = divs.first,
+              let price = quote?.last, price > 0 else {
             return BistFaktor(name: "Temettü", score: 30, icon: "banknote.fill", color: "yellow", details: ["Temettü yok"])
         }
-        
-        // Son Temettü Verimi
-        let lastDiv = divs.first!
+
+        // Son Temettü Verimi (güvenli erişim)
         let yield = (lastDiv.perShare / price) * 100
         
         if yield > 8 { score = 90; details.append("Verim: \(String(format: "%.1f", yield))% (Yüksek)") }

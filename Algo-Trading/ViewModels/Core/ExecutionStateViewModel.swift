@@ -43,6 +43,10 @@ final class ExecutionStateViewModel: ObservableObject {
     /// AutoPilot Execution Logs
     @Published var autoPilotLogs: [String] = []
 
+    /// Last Trade Times (Shared for Agora Checks)
+    @Published var lastTradeTimes: [String: Date] = [:]
+
+
     
     /// Trade Brain alerts
     @Published var planAlerts: [TradeBrainAlert] = []

@@ -29,6 +29,12 @@ struct Theme {
     static let chartUp = positive
     static let chartDown = negative
     
+    // 5. BIST Market Colors
+    static let bistAccent = Color(hex: "FF3B30") // Borsa Kırmızısı
+    static let bistSecondary = Color(hex: "8B0000") // Dark Red
+    static let bistPositive = positive // Aynı pozitif renk
+    static let bistNegative = negative // Aynı negatif renk
+    
     // MARK: - Layout Constants
     struct Spacing {
         static let small: CGFloat = 8

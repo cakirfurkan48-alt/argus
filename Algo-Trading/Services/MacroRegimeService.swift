@@ -261,12 +261,15 @@ final class MacroRegimeService: @unchecked Sendable {
     /// Trend analizi - son N gözlemin yönü ve gücünü hesaplar
     private func analyzeTrend(_ values: [(Date, Double)], periods: Int = 3) -> TrendResult? {
         guard values.count >= periods else { return nil }
-        
+
         let recent = Array(values.suffix(periods))
-        let first = recent.first!.1
-        let last = recent.last!.1
-        
-        guard first != 0 else { return nil }
+        guard let firstValue = recent.first?.1,
+              let lastValue = recent.last?.1,
+              firstValue != 0 else {
+            return nil
+        }
+        let first = firstValue
+        let last = lastValue
         let change = ((last - first) / first) * 100
         
         let direction: TrendDirection
@@ -435,21 +438,25 @@ final class MacroRegimeService: @unchecked Sendable {
         // High CPI -> Risk Off -> Low Score
         // Target 2%: Score 100. >5%: Score 0.
         var cpiScore = 50.0
-        if fred.cpi.count >= 12 {
-            // Calculate Year-over-Year inflation
-            let current = fred.cpi.last!.1
-            let yearAgo = fred.cpi[fred.cpi.count - 12].1
-            let yoyInflation = ((current - yearAgo) / yearAgo) * 100
-            
-            // Score: 2% = 100, 5%+ = 0, linear in between
-            if yoyInflation <= 2.0 {
-                cpiScore = 100.0
-            } else if yoyInflation >= 5.0 {
-                cpiScore = 0.0
-            } else {
-                cpiScore = 100.0 - ((yoyInflation - 2.0) / 3.0 * 100.0)
+        if fred.cpi.count >= 12,
+           let currentCPI = fred.cpi.last?.1 {
+            // Calculate Year-over-Year inflation (güvenli index erişimi)
+            let yearAgoIndex = fred.cpi.count - 12
+            let current = currentCPI
+            let yearAgo = fred.cpi[yearAgoIndex].1
+            if yearAgo > 0 {
+                let yoyInflation = ((current - yearAgo) / yearAgo) * 100
+                
+                // Score: 2% = 100, 5%+ = 0, linear in between
+                if yoyInflation <= 2.0 {
+                    cpiScore = 100.0
+                } else if yoyInflation >= 5.0 {
+                    cpiScore = 0.0
+                } else {
+                    cpiScore = 100.0 - ((yoyInflation - 2.0) / 3.0 * 100.0)
+                }
+                // DEBUG: print("📊 AETHER CPI: YoY=\(String(format: "%.2f", yoyInflation))% -> Score=\(Int(cpiScore))")
             }
-            // DEBUG: print("📊 AETHER CPI: YoY=\(String(format: "%.2f", yoyInflation))% -> Score=\(Int(cpiScore))")
         } else if fred.cpi.count > 0 {
             // Not enough for YoY but have some data
             // DEBUG: print("⚠️ AETHER CPI: Only \(fred.cpi.count) observations, need 12 for YoY")
@@ -512,9 +519,12 @@ final class MacroRegimeService: @unchecked Sendable {
         
         // 4. Growth (Payrolls MoM Change) - Granular
         var growthScore = 50.0
-        if fred.payems.count >= 2 {
-            let current = fred.payems.last!.1
-            let previous = fred.payems[fred.payems.count - 2].1
+        if fred.payems.count >= 2,
+           let currentPayems = fred.payems.last?.1 {
+            // Güvenli index erişimi
+            let previousIndex = fred.payems.count - 2
+            let current = currentPayems
+            let previous = fred.payems[previousIndex].1
             let momChange = (current - previous) // Actual job gains/losses in thousands
             
             if momChange > 200 {

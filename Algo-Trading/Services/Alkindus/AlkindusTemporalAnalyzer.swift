@@ -5,6 +5,49 @@ import Foundation
 /// "Mondays are weak for momentum modules"
 /// "End of month boosts Aether accuracy"
 
+// MARK: - Timezone Helpers
+
+private extension Date {
+    /// BIST için İstanbul timezone'ında saat
+    var istanbulHour: Int {
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone(identifier: "Europe/Istanbul")
+        formatter.dateFormat = "HH"
+        return Int(formatter.string(from: self)) ?? 0
+    }
+
+    /// NYSE için New York timezone'unda saat
+    var newYorkHour: Int {
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone(identifier: "America/New_York")
+        formatter.dateFormat = "HH"
+        return Int(formatter.string(from: self)) ?? 0
+    }
+
+    /// Sembolün market'ına göre local saat
+    func marketHour(for symbol: String) -> Int {
+        let isBist = symbol.hasSuffix(".IS") || symbol.uppercased().contains("BIST")
+        return isBist ? istanbulHour : newYorkHour
+    }
+
+    /// Get weekday symbol for given market
+    func marketWeekday(for symbol: String) -> String {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.timeZone = symbol.hasSuffix(".IS") || symbol.uppercased().contains("BIST")
+            ? TimeZone(identifier: "Europe/Istanbul")
+            : TimeZone(identifier: "America/New_York")
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: self)
+    }
+}
+
+/// Get timezone-aware hour for symbol
+private func getMarketHour(for symbol: String, from date: Date = Date()) -> String {
+    let hour = date.marketHour(for: symbol)
+    return String(format: "%02d", hour)
+}
+
 actor AlkindusTemporalAnalyzer {
     static let shared = AlkindusTemporalAnalyzer()
     
@@ -57,13 +100,13 @@ actor AlkindusTemporalAnalyzer {
     // MARK: - API
     
     /// Records a decision outcome with temporal context
-    func recordOutcome(module: String, wasCorrect: Bool, timestamp: Date = Date()) async {
+    func recordOutcome(module: String, wasCorrect: Bool, timestamp: Date = Date(), symbol: String = "") async {
         var data = await loadData()
         let calendar = Calendar.current
-        
-        // Extract temporal components
-        let weekday = calendar.weekdaySymbols[calendar.component(.weekday, from: timestamp) - 1]
-        let hour = String(format: "%02d", calendar.component(.hour, from: timestamp))
+
+        // Extract temporal components with timezone awareness
+        let weekday = timestamp.marketWeekday(for: symbol)
+        let hour = getMarketHour(for: symbol, from: timestamp)
         let month = calendar.monthSymbols[calendar.component(.month, from: timestamp) - 1]
         let weekOfMonth = String(calendar.component(.weekOfMonth, from: timestamp))
         

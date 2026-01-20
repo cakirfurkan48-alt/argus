@@ -32,7 +32,7 @@ actor AtlasBistScoringEngine {
         let profitabilityScore = calculateProfitabilityScore(financials)
         let debtScore = calculateDebtScore(financials)
         let valuationScore = calculateValuationScore(financials, quote: quote)
-        let dividendScore = calculateDividendScore(dividends, quote: quote)
+        let dividendScore = calculateDividendScore(dividends, quote: quote, financials: financials)
         let analystScore = calculateAnalystScore(analysts, quote: quote)
         
         // 6. Toplam Skor
@@ -295,19 +295,38 @@ actor AtlasBistScoringEngine {
             totalPoints += peScore
         }
         
-        // PD/DD (P/B) - Max 50 puan
+        // PD/DD (P/B) - Max 50 puan + VALUE TRAP KONTROLÜ
         if let pb = f.pb, pb > 0 {
-            let pbScore: Double
-            let pbExplanation: String
-            switch pb {
-            case ...0.5: pbScore = 50; pbExplanation = "Defter değerinin altında"
-            case 0.5..<1.0: pbScore = 45; pbExplanation = "Ucuz - Defter değerine yakın"
-            case 1.0..<1.5: pbScore = 35; pbExplanation = "Makul değerleme"
-            case 1.5..<2.0: pbScore = 25; pbExplanation = "Adil değer"
-            case 2.0..<3.0: pbScore = 15; pbExplanation = "Prim içeriyor"
-            case 3.0..<5.0: pbScore = 10; pbExplanation = "Yüksek prim"
-            default: pbScore = 5; pbExplanation = "Aşırı primli"
+            var pbScore: Double
+            var pbExplanation: String
+
+            // Düşük P/B için ROE kontrolü (Value Trap tespiti)
+            if pb <= 0.5 {
+                if let roe = f.roe, roe >= 10 {
+                    // ROE yüksek = Gerçek deep value
+                    pbScore = 50
+                    pbExplanation = "Defter değerinin altında (ROE: %\(Int(roe)) - Gerçek Değer)"
+                } else if let roe = f.roe {
+                    // ROE düşük = Value Trap riski
+                    pbScore = 15
+                    pbExplanation = "⚠️ VALUE TRAP: Düşük P/B ama ROE yetersiz (%\(Int(roe)))"
+                } else {
+                    // ROE verisi yok, dikkatli ol
+                    pbScore = 30
+                    pbExplanation = "Defter değerinin altında (ROE verisi yok - dikkatli ol)"
+                }
+            } else {
+                // Normal P/B aralıkları
+                switch pb {
+                case 0.5..<1.0: pbScore = 45; pbExplanation = "Ucuz - Defter değerine yakın"
+                case 1.0..<1.5: pbScore = 35; pbExplanation = "Makul değerleme"
+                case 1.5..<2.0: pbScore = 25; pbExplanation = "Adil değer"
+                case 2.0..<3.0: pbScore = 15; pbExplanation = "Prim içeriyor"
+                case 3.0..<5.0: pbScore = 10; pbExplanation = "Yüksek prim"
+                default: pbScore = 5; pbExplanation = "Aşırı primli"
+                }
             }
+
             metrics.append(AtlasBistMetric(
                 name: "PD/DD (Piyasa/Defter Değeri)",
                 value: pb,
@@ -331,13 +350,13 @@ actor AtlasBistScoringEngine {
     }
     
     // MARK: - Temettü Puanı (%10)
-    
-    private func calculateDividendScore(_ dividends: [BistDividend]?, quote: BistQuote?) -> AtlasBistScoreComponent {
+
+    private func calculateDividendScore(_ dividends: [BistDividend]?, quote: BistQuote?, financials: BistFinancials?) -> AtlasBistScoreComponent {
         var metrics: [AtlasBistMetric] = []
         var totalPoints: Double = 0
         let maxPoints: Double = 100
-        
-        guard let divs = dividends, !divs.isEmpty, let price = quote?.last, price > 0 else {
+
+        guard let divs = dividends, let lastDiv = divs.first, let price = quote?.last, price > 0 else {
             return AtlasBistScoreComponent(
                 name: "Temettü",
                 score: 25, // Temettü yoksa düşük puan
@@ -353,21 +372,51 @@ actor AtlasBistScoringEngine {
                 summary: "Hisseden elde edilen temettü gelirini ölçer"
             )
         }
-        
-        // Son Temettü Verimi - Max 60 puan
-        let lastDiv = divs.first!
+
+        // Son Temettü Verimi - Max 60 puan + SÜRDÜRÜLEBİLİRLİK KONTROLÜ
         let divYield = (lastDiv.perShare / price) * 100
-        
-        let yieldScore: Double
-        let yieldExplanation: String
-        switch divYield {
-        case 10...: yieldScore = 60; yieldExplanation = "Çok yüksek temettü verimi"
-        case 7..<10: yieldScore = 50; yieldExplanation = "Yüksek temettü verimi"
-        case 5..<7: yieldScore = 40; yieldExplanation = "İyi temettü verimi"
-        case 3..<5: yieldScore = 30; yieldExplanation = "Orta düzey verim"
-        case 1..<3: yieldScore = 20; yieldExplanation = "Düşük temettü verimi"
-        default: yieldScore = 10; yieldExplanation = "Çok düşük verim"
+
+        var yieldScore: Double
+        var yieldExplanation: String
+
+        // Yüksek temettü verimi için nakit akışı kontrolü (Value Trap tespiti)
+        if divYield >= 10 {
+            // Çok yüksek verim - sürdürülebilir mi kontrol et
+            if let netProfit = financials?.netProfit,
+               let equity = financials?.totalEquity,
+               equity > 0 {
+                // Temettü ödeme oranı kontrolü (payout ratio)
+                let payoutRatio = (lastDiv.perShare * (equity / (netProfit > 0 ? netProfit : 1))) / 100
+
+                if payoutRatio < 0.7 && netProfit > 0 {
+                    // Kar yeterli, ödeme oranı makul
+                    yieldScore = 60
+                    yieldExplanation = "Çok yüksek temettü verimi - Sürdürülebilir görünüyor"
+                } else if payoutRatio < 1.0 && netProfit > 0 {
+                    // Kar sınırda
+                    yieldScore = 45
+                    yieldExplanation = "Yüksek temettü verimi - Dikkatli ol (ödeme oranı yüksek)"
+                } else {
+                    // Kar yetersiz veya zarar
+                    yieldScore = 20
+                    yieldExplanation = "⚠️ SÜRDÜRÜLEMEZ: Yüksek verim ama kâr yetersiz"
+                }
+            } else {
+                // Finansal veri yok
+                yieldScore = 35
+                yieldExplanation = "Çok yüksek temettü verimi (doğrulama yapılamadı)"
+            }
+        } else {
+            // Normal temettü aralıkları
+            switch divYield {
+            case 7..<10: yieldScore = 50; yieldExplanation = "Yüksek temettü verimi"
+            case 5..<7: yieldScore = 40; yieldExplanation = "İyi temettü verimi"
+            case 3..<5: yieldScore = 30; yieldExplanation = "Orta düzey verim"
+            case 1..<3: yieldScore = 20; yieldExplanation = "Düşük temettü verimi"
+            default: yieldScore = 10; yieldExplanation = "Çok düşük verim"
+            }
         }
+
         metrics.append(AtlasBistMetric(
             name: "Temettü Verimi",
             value: divYield,

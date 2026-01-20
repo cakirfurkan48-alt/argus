@@ -28,6 +28,8 @@ struct ObservatoryContainerView: View {
                         ObservatoryTimelineContentView()
                     case .learning:
                         ObservatoryLearningContentView()
+                    case .trades:
+                        TradeHistoryView()
                     case .health:
                         ObservatoryHealthContentView()
                     }
@@ -114,12 +116,14 @@ struct ObservatoryContainerView: View {
 enum ObservatoryTab: String, CaseIterable {
     case timeline
     case learning
+    case trades
     case health
     
     var title: String {
         switch self {
         case .timeline: return "ZAMANÇİZ"
         case .learning: return "ÖĞRENME"
+        case .trades: return "TRADE"
         case .health: return "SAĞLIK"
         }
     }
@@ -128,6 +132,7 @@ enum ObservatoryTab: String, CaseIterable {
         switch self {
         case .timeline: return "clock.arrow.circlepath"
         case .learning: return "brain.head.profile"
+        case .trades: return "chart.line.uptrend.xyaxis"
         case .health: return "waveform.path.ecg"
         }
     }

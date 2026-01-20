@@ -40,9 +40,9 @@ actor ChironDataLakeService {
         var history = await loadTradeHistory(symbol: record.symbol)
         history.append(record)
         
-        // Keep last 100 trades per symbol
-        if history.count > 100 {
-            history = Array(history.suffix(100))
+        // Keep last 500 trades per symbol (artırıldı: daha fazla öğrenme verisi)
+        if history.count > 500 {
+            history = Array(history.suffix(500))
         }
         
         do {

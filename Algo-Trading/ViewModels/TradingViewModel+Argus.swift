@@ -10,23 +10,13 @@ extension TradingViewModel {
     // Loading Argus Data
     // MARK: - Scout Logic
     func startScoutLoop() {
-        scoutTimer?.invalidate()
-        // Run every 5 minutes (300s)
-        scoutTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                await self?.runScout()
-            }
-        }
-        // Run IMMEDIATELY (no delay!)
-        print("🔭 Scout Loop: BAŞLATILIYOR...")
-        Task {
-            await self.runScout()
-        }
+        // Legacy Scout Loop replaced by AutoPilotStore Loop
+        print("🔭 Scout Loop: Delegated to AutoPilotStore")
+        // AutoPilotStore.shared.startAutoPilotLoop() // Already called by TVM.startAutoPilotLoop
     }
     
     func stopScoutLoop() {
-        scoutTimer?.invalidate()
-        scoutTimer = nil
+        // No-op
     }
     
     func runScout() async {

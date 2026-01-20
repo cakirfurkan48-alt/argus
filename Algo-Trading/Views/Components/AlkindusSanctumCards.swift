@@ -3,6 +3,70 @@ import SwiftUI
 // MARK: - Alkindus Indicator Card
 /// Shows trusted/avoided indicators for a symbol in Sanctum.
 
+// MARK: - Alkindus Sage Card (Header)
+/// The "Persona" card. Shows the animated Avatar and a high-level summary/message.
+struct AlkindusSageCard: View {
+    let symbol: String
+    @State private var message: String = "Piyasadaki izleri okuyorum..."
+    @State private var isThinking: Bool = true
+    
+    // Theme Colors
+    private let cardBg = Color(red: 0.05, green: 0.07, blue: 0.10)
+    private let gold = Color(red: 1.0, green: 0.8, blue: 0.2)
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Avatar
+            AlkindusAvatarView(size: 80, isThinking: isThinking, hasIdea: false)
+            
+            // Message Bubble
+            VStack(alignment: .leading, spacing: 6) {
+                Text("ALKINDUS")
+                    .font(.system(size: 12, weight: .bold, design: .serif))
+                    .foregroundColor(gold)
+                    .tracking(2)
+                
+                Text(message)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.9))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(gold.opacity(0.1), lineWidth: 1)
+                    )
+            )
+        }
+        .padding()
+        .background(cardBg)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        gradient: Gradient(colors: [gold.opacity(0.3), Color.clear]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .task {
+            // Simulate "Thinking" phase then show wisdom
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            isThinking = false
+            message = "\(symbol) için yıldızlar ve fraktallar belirginleşiyor. Trend yapısında ilginç bir uyum var."
+        }
+    }
+}
+
+
 struct AlkindusIndicatorCard: View {
     let symbol: String
     

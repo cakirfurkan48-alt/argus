@@ -129,9 +129,16 @@ final class DemeterEngine: ObservableObject {
     
     // Helper: Percentage Change Shock
     private func detectChangeShock(candles: [Candle], days: Int, upThresh: Double, downThresh: Double, type: ShockType) -> ShockFlag? {
-        guard candles.count > days else { return nil }
-        let current = candles.last!.close
-        let old = candles[candles.count - days - 1].close
+        // Güvenli bounds kontrolü
+        let oldIndex = candles.count - days - 1
+        guard candles.count > days,
+              oldIndex >= 0,
+              let currentCandle = candles.last else {
+            return nil
+        }
+        let current = currentCandle.close
+        let old = candles[oldIndex].close
+        guard old > 0 else { return nil } // Division by zero koruması
         let change = (current - old) / old
         
         if change > upThresh {
@@ -144,9 +151,15 @@ final class DemeterEngine: ObservableObject {
     
     // Helper: Absolute Change Shock (for Rates)
     private func detectAbsoluteShock(candles: [Candle], days: Int, upThresh: Double, downThresh: Double, type: ShockType) -> ShockFlag? {
-        guard candles.count > days else { return nil }
-        let current = candles.last!.close
-        let old = candles[candles.count - days - 1].close
+        // Güvenli bounds kontrolü
+        let oldIndex = candles.count - days - 1
+        guard candles.count > days,
+              oldIndex >= 0,
+              let currentCandle = candles.last else {
+            return nil
+        }
+        let current = currentCandle.close
+        let old = candles[oldIndex].close
         let change = current - old
         
         if change > upThresh {

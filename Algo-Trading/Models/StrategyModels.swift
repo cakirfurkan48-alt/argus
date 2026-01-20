@@ -68,7 +68,7 @@ struct RSIStrategy: Strategy {
                 let profitPct = ((price - entryPrice) / entryPrice) * 100
                 trades.append(profitPct)
                 
-                let newEquity = equityCurve.last! * (1 + profitPct/100)
+                let newEquity = (equityCurve.last ?? 10000.0) * (1 + profitPct/100)
                 equityCurve.append(newEquity)
                 
                 if newEquity > maxEquity { maxEquity = newEquity }
@@ -123,7 +123,7 @@ struct MACDStrategy: Strategy {
                 let profitPct = ((price - entryPrice) / entryPrice) * 100
                 trades.append(profitPct)
                 
-                let newEquity = equityCurve.last! * (1 + profitPct/100)
+                let newEquity = (equityCurve.last ?? 10000.0) * (1 + profitPct/100)
                 equityCurve.append(newEquity)
                 
                 if newEquity > maxEquity { maxEquity = newEquity }
@@ -173,7 +173,7 @@ struct SMACrossoverStrategy: Strategy {
                 let profitPct = ((price - entryPrice) / entryPrice) * 100
                 trades.append(profitPct)
                 
-                let newEquity = equityCurve.last! * (1 + profitPct/100)
+                let newEquity = (equityCurve.last ?? 10000.0) * (1 + profitPct/100)
                 equityCurve.append(newEquity)
                 
                 if newEquity > maxEquity { maxEquity = newEquity }
@@ -221,7 +221,7 @@ struct BollingerStrategy: Strategy {
                 let profitPct = ((price - entryPrice) / entryPrice) * 100
                 trades.append(profitPct)
                 
-                let newEquity = equityCurve.last! * (1 + profitPct/100)
+                let newEquity = (equityCurve.last ?? 10000.0) * (1 + profitPct/100)
                 equityCurve.append(newEquity)
                 
                 if newEquity > maxEquity { maxEquity = newEquity }
@@ -268,7 +268,7 @@ struct StochasticStrategy: Strategy {
                 let profitPct = ((price - entryPrice) / entryPrice) * 100
                 trades.append(profitPct)
                 
-                let newEquity = equityCurve.last! * (1 + profitPct/100)
+                let newEquity = (equityCurve.last ?? 10000.0) * (1 + profitPct/100)
                 equityCurve.append(newEquity)
                 
                 if newEquity > maxEquity { maxEquity = newEquity }
@@ -315,7 +315,7 @@ struct CCIStrategy: Strategy {
                 let profitPct = ((price - entryPrice) / entryPrice) * 100
                 trades.append(profitPct)
                 
-                let newEquity = equityCurve.last! * (1 + profitPct/100)
+                let newEquity = (equityCurve.last ?? 10000.0) * (1 + profitPct/100)
                 equityCurve.append(newEquity)
                 
                 if newEquity > maxEquity { maxEquity = newEquity }
@@ -351,7 +351,8 @@ struct OrionStrategy: Strategy {
         }
         
         for i in 60..<candles.count {
-            let window = Array(candles[(i-59)...i])
+            // LOOK-AHEAD BIAS FIX: i HARİÇ - sadece geçmiş veriler kullanılır
+            let window = Array(candles[(i-60)..<i])
             
             // Calculate Score
             // Calculate Score
@@ -397,7 +398,7 @@ struct OrionStrategy: Strategy {
                     let profitPct = pnl * 100
                     trades.append(profitPct)
                     
-                    let newEquity = equityCurve.last! * (1 + profitPct/100)
+                    let newEquity = (equityCurve.last ?? 10000.0) * (1 + profitPct/100)
                     equityCurve.append(newEquity)
                     
                     if newEquity > maxEquity { maxEquity = newEquity }

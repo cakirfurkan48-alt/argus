@@ -164,37 +164,49 @@ actor ChironCouncilLearningService {
     // MARK: - Learning Logic
     
     private func learnFromRecord(_ record: CouncilVotingRecord) async {
-        guard let outcome = record.outcome else { return }
-        
-        let isWin = outcome == .win
+        guard record.outcome != nil else { return }
+
+        let pnl = record.pnlPercent ?? 0
         let symbol = record.symbol
         let engine = record.engine
-        
+
         // Get current weights
         var weights = getCouncilWeights(symbol: symbol, engine: engine)
-        
-        // Learning rates
-        let proposerBonus = 0.03       // Öneri getiren kazanırsa
-        let proposerPenalty = -0.02    // Öneri getiren kaybederse
-        let approverBonus = 0.015      // Onaylayan kazanırsa
-        let approverPenalty = -0.01    // Onaylayan kaybederse
-        let vetoerCorrectBonus = 0.025 // Veto eden kaybederse (doğru veto)
-        let vetoerIncorrectPenalty = -0.02 // Veto eden kazanırsa (yanlış veto)
-        
+
+        // SÜREKLİ ÖDÜL FONKSİYONU (Binary yerine PnL bazlı)
+        // PnL'e göre ödül/ceza hesapla (-1.0 ile +1.0 arasında normalize)
+        let reward: Double
+        switch pnl {
+        case ..<(-10): reward = -1.0      // Büyük kayıp → Tam ceza
+        case -10..<(-5): reward = -0.7    // Orta kayıp
+        case -5..<0: reward = -0.3        // Küçük kayıp
+        case 0..<3: reward = 0.2          // Başabaş / Küçük kazanç
+        case 3..<7: reward = 0.5          // İyi kazanç
+        case 7..<15: reward = 0.8         // Güçlü kazanç
+        default: reward = 1.0             // Mükemmel kazanç (>%15)
+        }
+
+        // Adaptif öğrenme oranı (lineer decay - sqrt'dan daha kontrollü)
+        let tradeCount = Double(completedRecords.count + 1)
+        // Trade 1: 0.099, Trade 50: 0.05, Trade 80+: 0.02 (sabit)
+        let baseLearningRate = max(0.02, 0.1 - (0.001 * tradeCount))
+
+        // Learning rates (ödüle göre ölçeklenmiş)
+        let proposerDelta = reward * baseLearningRate * 1.0    // Öneri getiren
+        let approverDelta = reward * baseLearningRate * 0.5    // Onaylayan
+        let vetoerDelta = -reward * baseLearningRate * 0.7     // Veto eden (ters yönde öğrenir)
+
         // Update proposer weight
-        let proposerDelta = isWin ? proposerBonus : proposerPenalty
         weights = updateMemberWeight(weights, memberId: record.proposerId, delta: proposerDelta)
-        
+
         // Update approvers
         for approver in record.approvers {
-            let delta = isWin ? approverBonus : approverPenalty
-            weights = updateMemberWeight(weights, memberId: approver, delta: delta)
+            weights = updateMemberWeight(weights, memberId: approver, delta: approverDelta)
         }
-        
-        // Update vetoers
+
+        // Update vetoers (veto eden için ödül/ceza ters)
         for vetoer in record.vetoers {
-            let delta = isWin ? vetoerIncorrectPenalty : vetoerCorrectBonus
-            weights = updateMemberWeight(weights, memberId: vetoer, delta: delta)
+            weights = updateMemberWeight(weights, memberId: vetoer, delta: vetoerDelta)
         }
         
         // Normalize and save
@@ -215,7 +227,7 @@ actor ChironCouncilLearningService {
         }
         councilWeightsMatrix[symbol]?[engine] = weights
         
-        print("🧠 Chiron Öğrendi: \(symbol) | \(outcome.rawValue)")
+        print("🧠 Chiron Öğrendi: \(symbol) | PnL: %\(String(format: "%.1f", pnl)) | Reward: \(String(format: "%.2f", reward))")
         print("   Trend: \(String(format: "%.0f", weights.trendMaster * 100))%, Momentum: \(String(format: "%.0f", weights.momentumMaster * 100))%, Structure: \(String(format: "%.0f", weights.structureMaster * 100))%, Pattern: \(String(format: "%.0f", weights.patternMaster * 100))%, Price: \(String(format: "%.0f", weights.priceMaster * 100))%")
     }
     

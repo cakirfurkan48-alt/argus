@@ -101,10 +101,12 @@ final class OrionPatternEngine {
     // MARK: - ZigZag Algorithm
     
     private func calculateZigZag(candles: [Candle], deviation: Double) -> [SwingPoint] {
+        guard let firstCandle = candles.first else { return [] }
+
         var swings: [SwingPoint] = []
         var trend = 0 // 1 = up, -1 = down
-        var lastHigh = candles[0].high
-        var lastLow = candles[0].low
+        var lastHigh = firstCandle.high
+        var lastLow = firstCandle.low
         var lastHighIndex = 0
         var lastLowIndex = 0
         
@@ -163,10 +165,11 @@ final class OrionPatternEngine {
     private func checkDoubleTop(swings: [SwingPoint], candles: [Candle]) -> OrionChartPattern? {
         // Need at least High-Low-High sequence
         let highs = swings.filter { $0.isHigh }
-        guard highs.count >= 2 else { return nil }
-        
-        let peek1 = highs[highs.count - 2]
-        let peek2 = highs[highs.count - 1]
+        guard highs.count >= 2,
+              let peek2 = highs.last,
+              let peek1 = highs.dropLast().last else {
+            return nil
+        }
         
         // Check if peeks are roughly equal (within 2%)
         let priceDiff = abs(peek1.price - peek2.price)
@@ -198,10 +201,11 @@ final class OrionPatternEngine {
     
     private func checkDoubleBottom(swings: [SwingPoint], candles: [Candle]) -> OrionChartPattern? {
         let lows = swings.filter { !$0.isHigh }
-        guard lows.count >= 2 else { return nil }
-        
-        let dip1 = lows[lows.count - 2]
-        let dip2 = lows[lows.count - 1]
+        guard lows.count >= 2,
+              let dip2 = lows.last,
+              let dip1 = lows.dropLast().last else {
+            return nil
+        }
         
         let priceDiff = abs(dip1.price - dip2.price)
         let tolerance = dip1.price * 0.02
@@ -227,10 +231,13 @@ final class OrionPatternEngine {
         // H&S requires High(Left) - High(Head) - High(Right) with Head > Shoulders
         let highs = swings.filter { $0.isHigh }
         guard highs.count >= 3 else { return nil }
-        
-        let right = highs[highs.count - 1]
-        let head = highs[highs.count - 2]
-        let left = highs[highs.count - 3]
+
+        // Güvenli erişim
+        let highsArray = Array(highs.suffix(3))
+        guard highsArray.count == 3 else { return nil }
+        let left = highsArray[0]
+        let head = highsArray[1]
+        let right = highsArray[2]
         
         // Rule 1: Head must be higher than both shoulders
         if head.price > left.price && head.price > right.price {

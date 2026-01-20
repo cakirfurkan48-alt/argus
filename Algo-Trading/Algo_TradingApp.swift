@@ -12,6 +12,10 @@ import SwiftData
 struct Algo_TradingApp: App {
     // Create container manually to access context easily for Singleton injection
     let container: ModelContainer
+
+    // Static timer holder to prevent memory leaks from multiple timer instances
+    private static var maturationTimer: Timer?
+    private static var cleanupTimer: Timer?
     
     // Unified Singleton ViewModel (Legacy - Geçiş döneminde korunuyor)
     @StateObject private var tradingViewModel = TradingViewModel()
@@ -97,6 +101,9 @@ struct Algo_TradingApp: App {
 
                             // 👁️ Alkindus: Start periodic maturation checks
                             startAlkindusPeriodicCheck()
+                            
+                            // 🧹 Argus Cleanup: Start periodic aggressive cleanup
+                            startAutomaticCleanup()
                         }
                 } else {
                     DisclaimerView()
@@ -109,18 +116,55 @@ struct Algo_TradingApp: App {
     // MARK: - Alkindus Periodic Check
 
     private func startAlkindusPeriodicCheck() {
+        // Cancel existing timer if any (prevents memory leaks from multiple timers)
+        Self.maturationTimer?.invalidate()
+
         // Başlangıçta bir kez çalıştır (delay ile app settle olsun)
         Task.detached(priority: .background) {
-            // Delay to let app and market data settle
-            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
-            await AlkindusCalibrationEngine.shared.periodicMatureCheck()
-            print("👁️ Alkindus: Startup maturation check completed")
+            do {
+                // Delay to let app and market data settle
+                try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                await AlkindusCalibrationEngine.shared.periodicMatureCheck()
+                print("Alkindus: Startup maturation check completed")
+            } catch {
+                print("Alkindus maturation check failed: \(error)")
+            }
         }
 
-        // Her saat başı tekrarla
-        Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
+        // Her saat başı tekrarla - single timer instance
+        Self.maturationTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
             Task {
-                await AlkindusCalibrationEngine.shared.periodicMatureCheck()
+                do {
+                    await AlkindusCalibrationEngine.shared.periodicMatureCheck()
+                } catch {
+                    print("Alkindus hourly maturation check failed: \(error)")
+                }
+            }
+        }
+    }
+    
+    // MARK: - Automatic Storage Cleanup
+    
+    private func startAutomaticCleanup() {
+        // Cancel existing timer if any
+        Self.cleanupTimer?.invalidate()
+        
+        // Başlangıçta bir kez çalıştır
+        Task.detached(priority: .background) {
+            do {
+                try await Task.sleep(nanoseconds: 30_000_000_000) // 30 saniye bekle
+                await ArgusLedger.shared.aggressiveCleanup()
+                print("🧹 Argus: Startup cleanup completed")
+            } catch {
+                print("Argus cleanup failed: \(error)")
+            }
+        }
+        
+        // Her 6 saatte bir tekrarla
+        Self.cleanupTimer = Timer.scheduledTimer(withTimeInterval: 21600, repeats: true) { _ in
+            Task {
+                await ArgusLedger.shared.aggressiveCleanup()
+                print("🧹 Argus: Periodic cleanup completed")
             }
         }
     }

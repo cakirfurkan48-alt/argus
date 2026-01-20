@@ -144,18 +144,25 @@ class OrionStructureService {
     private func determineTrend(points: [SwingPoint]) -> TrendState {
         // Look at last 4 points ideally
         guard points.count >= 4 else { return .range }
-        
+
         // Sequence: Low(p4) -> High(p3) -> Low(p2) -> High(p1) OR High(p4)->Low(p3)->High(p2)->Low(p1)
-        
-        let recentHighs = points.filter { $0.type == .high }.suffix(2)
-        let recentLows = points.filter { $0.type == .low }.suffix(2)
-        
-        if recentHighs.count < 2 || recentLows.count < 2 { return .range }
-        
-        let h1 = recentHighs.last!.price
-        let h2 = recentHighs.dropLast().last!.price
-        let l1 = recentLows.last!.price
-        let l2 = recentLows.dropLast().last!.price
+
+        let recentHighs = Array(points.filter { $0.type == .high }.suffix(2))
+        let recentLows = Array(points.filter { $0.type == .low }.suffix(2))
+
+        // Güvenli erişim kontrolü
+        guard recentHighs.count >= 2, recentLows.count >= 2,
+              let h1Point = recentHighs.last,
+              let h2Point = recentHighs.dropLast().last,
+              let l1Point = recentLows.last,
+              let l2Point = recentLows.dropLast().last else {
+            return .range
+        }
+
+        let h1 = h1Point.price
+        let h2 = h2Point.price
+        let l1 = l1Point.price
+        let l2 = l2Point.price
         
         if h1 > h2 && l1 > l2 { return .uptrend }
         if h1 < h2 && l1 < l2 { return .downtrend }
@@ -177,12 +184,13 @@ class OrionStructureService {
         
         // Simple Logic: Take the global Min/Max of the last N points?
         // Or better: The last fulfilled swing leg.
-        
+
         let relevantPoints = points.suffix(3) // Last 3 swings
-        guard !relevantPoints.isEmpty else { return ([], 0, 0, 0, 0) }
-        
-        let maxPoint = relevantPoints.max(by: { $0.price < $1.price })!
-        let minPoint = relevantPoints.min(by: { $0.price < $1.price })!
+        guard !relevantPoints.isEmpty,
+              let maxPoint = relevantPoints.max(by: { $0.price < $1.price }),
+              let minPoint = relevantPoints.min(by: { $0.price < $1.price }) else {
+            return ([], 0, 0, 0, 0)
+        }
         
         anchorHigh = maxPoint.price
         anchorLow = minPoint.price

@@ -17,6 +17,14 @@ enum ArgusAction: String, Sendable, Codable {
         case .liquidate: return "Red"
         }
     }
+
+    func toProposedAction() -> ProposedAction {
+        switch self {
+        case .aggressiveBuy, .accumulate: return .buy
+        case .neutral: return .hold
+        case .trim, .liquidate: return .sell
+        }
+    }
 }
 
 enum SignalStrength: String, Sendable, Codable {
@@ -544,10 +552,10 @@ actor ArgusGrandCouncil {
             
             if isPositive {
                 hermesAction = .buy
-                hermesMultiplier = 1.15 // %15 Boost
+                hermesMultiplier = getSectorBasedNewsMultiplier(symbol: symbol, isPositive: true, isNegative: false)
             } else if isNegative {
                 hermesAction = .sell
-                hermesMultiplier = 0.85 // %15 Drag
+                hermesMultiplier = getSectorBasedNewsMultiplier(symbol: symbol, isPositive: false, isNegative: true)
             } else {
                 hermesAction = .hold
                 hermesMultiplier = 1.0
@@ -567,15 +575,16 @@ actor ArgusGrandCouncil {
             }
         }
         
-        // --- DECISION LOGIC V3 ---
-        
+        // --- DECISION LOGIC V4: AĞIRLIKLI OYLAMA SİSTEMİ ---
+
         var finalAction: ArgusAction = .neutral
         var strength: SignalStrength = .normal
         var reasoning = ""
-        
+
         // Veto Check
         if !vetoes.isEmpty {
-            if isOrionSell {
+            let sellVotes = contributors.filter { $0.action == .sell }
+            if sellVotes.count >= 2 || isOrionSell {
                 finalAction = .liquidate
                 reasoning = "Kritik Satış Sinyali ve Konsey Vetosu."
                 strength = .strong
@@ -585,48 +594,93 @@ actor ArgusGrandCouncil {
                 reasoning = "Konsey VETOSU: \(vetoes.map{ $0.reason }.joined(separator: ", "))"
             }
         } else {
-            // No Vetoes - Clean Path
-            
-            switch orion.action {
-            case .buy:
-                // Check synergy: Atlas or Aether support
-                let synergy = (atlas?.action == .buy) || (aether.stance == .riskOn)
-                
-                if isStrongOrion && synergy {
+            // No Vetoes - Ağırlıklı Oylama Sistemi
+
+            // Modül ağırlıkları (Chiron tarafından dinamik olarak ayarlanabilir)
+            let moduleWeights: [String: Double] = [
+                "Orion": 0.35,       // Teknik analiz
+                "Orion Patterns": 0.10, // Formasyon tespiti
+                "Atlas": 0.25,       // Temel analiz
+                "Aether": 0.20,      // Makro ekonomi
+                "Hermes": 0.10       // Haber analizi
+            ]
+
+            // Ağırlıklı oyları hesapla
+            var totalBuyWeight: Double = 0
+            var totalSellWeight: Double = 0
+            var totalHoldWeight: Double = 0
+            var buyVoters: [String] = []
+            var sellVoters: [String] = []
+
+            for contrib in contributors {
+                let weight = moduleWeights[contrib.module] ?? 0.1
+                let vote = weight * contrib.confidence
+
+                switch contrib.action {
+                case .buy:
+                    totalBuyWeight += vote
+                    buyVoters.append(contrib.module)
+                case .sell:
+                    totalSellWeight += vote
+                    sellVoters.append(contrib.module)
+                case .hold:
+                    totalHoldWeight += vote
+                }
+            }
+
+            // Hermes çarpanını uygula
+            totalBuyWeight *= hermesMultiplier
+            if hermesMultiplier < 1.0 {
+                totalSellWeight *= (2.0 - hermesMultiplier) // Olumsuz haber satışı güçlendirir
+            }
+
+            // Karar mantığı: En yüksek ağırlıklı oy kazanır
+            let maxWeight = max(totalBuyWeight, totalSellWeight, totalHoldWeight)
+
+            if maxWeight == totalBuyWeight && totalBuyWeight > 0.15 {
+                // Alım kararı
+                if totalBuyWeight > 0.45 && buyVoters.count >= 3 {
                     finalAction = .aggressiveBuy
                     strength = .strong
-                    reasoning = "Teknik ve Temel/Makro Uyumda. Tam Güç."
+                    reasoning = "Güçlü Konsey Mutabakatı: \(buyVoters.joined(separator: ", "))"
+                } else if totalBuyWeight > 0.30 && buyVoters.count >= 2 {
+                    finalAction = .aggressiveBuy
+                    strength = .normal
+                    reasoning = "Konsey Çoğunluğu Alım: \(buyVoters.joined(separator: ", "))"
                 } else {
                     finalAction = .accumulate
                     strength = .normal
-                    reasoning = "Teknik olumlu, kademeli giriş."
+                    reasoning = "Kademeli Alım Önerisi: \(buyVoters.joined(separator: ", "))"
                 }
-                
-                // HERMES MOMENTUM BOOST
-                // Eğer haberler çok iyiyse ve Aether engellemiyorsa, Accumulate -> Aggressive Buy olabilir
-                if hermesMultiplier > 1.1 && finalAction == .accumulate && aether.stance != .defensive {
-                     finalAction = .aggressiveBuy
-                     reasoning += " + Hermes Momentum Desteği"
+            } else if maxWeight == totalSellWeight && totalSellWeight > 0.15 {
+                // Satış kararı
+                if totalSellWeight > 0.40 && sellVoters.count >= 2 {
+                    finalAction = .liquidate
+                    strength = .strong
+                    reasoning = "Güçlü Satış Sinyali: \(sellVoters.joined(separator: ", "))"
+                } else {
+                    finalAction = .trim
+                    strength = .normal
+                    reasoning = "Kar Al Önerisi: \(sellVoters.joined(separator: ", "))"
                 }
-                
-            case .hold:
+            } else {
+                // Hold veya yetersiz sinyal
                 finalAction = .neutral
-                reasoning = "Mevcut pozisyon korunmalı."
-                
-            case .sell:
-                finalAction = .trim
-                reasoning = "Trend zayıflıyor, kar alma zamanı."
+                reasoning = "Konsey Kararsız - Bekle ve Gör"
             }
         }
-        
+
         // Apply Aether Warning to Buy Actions
         if (finalAction == .aggressiveBuy || finalAction == .accumulate) && (aether.marketMode == .fear) {
             finalAction = .accumulate // Don't go aggressive in fear
             reasoning += " (Makro korku nedeniyle baskılandı)"
         }
-        
-        // Apply Confidence Calculation with Boost
-        let finalConfidence = min(orion.netSupport * hermesMultiplier, 1.0)
+
+        // Nihai güven hesabı - tüm olumlu oyların ortalaması
+        let positiveContributors = contributors.filter { $0.action == finalAction.toProposedAction() }
+        let avgConfidence = positiveContributors.isEmpty ? orion.netSupport :
+            positiveContributors.map { $0.confidence }.reduce(0, +) / Double(positiveContributors.count)
+        let finalConfidence = min(avgConfidence * hermesMultiplier, 1.0)
         
         return ArgusGrandDecision(
             id: UUID(),
@@ -648,6 +702,81 @@ actor ArgusGrandCouncil {
             patterns: patterns,
             timestamp: Date()
         )
+    }
+    
+    // MARK: - Sector-Based News Multiplier
+    /// Haberin sektöre göre etkisini ayarlar
+    /// Biotech/Healthcare: Haber daha önemli
+    /// Utilities: Haber daha az önemli
+    /// Technology: Orta düzeyde
+    private func getSectorBasedNewsMultiplier(symbol: String, isPositive: Bool, isNegative: Bool) -> Double {
+        let sector = detectSector(symbol: symbol)
+        
+        switch sector.lowercased() {
+        case "healthcare", "biotech", "pharmaceuticals", "ilac", "saglik":
+            // Biotech/Healthcare: Haber çok önemli (FDA onayları, klinik sonuçlar)
+            return isPositive ? 1.20 : (isNegative ? 0.80 : 1.0)
+            
+        case "utilities", "infrastructure", "enerji", "elektrik":
+            // Utilities: Haber daha az önemli (regülasyon bazlı, yavaş hareket)
+            return 1.0
+            
+        case "technology", "tech", "software", "teknoloji", "bilisim":
+            // Technology: Orta seviye (ürün lansmanları, rekabet)
+            return isPositive ? 1.10 : (isNegative ? 0.90 : 1.0)
+            
+        case "finance", "banking", "finans", "banka":
+            // Finance: Makro haberlere duyarlı
+            return isPositive ? 1.08 : (isNegative ? 0.92 : 1.0)
+            
+        default:
+            // Varsayılan: Hafif etki
+            return isPositive ? 1.05 : (isNegative ? 0.95 : 1.0)
+        }
+    }
+    
+    /// Sembol bazlı sektör tespiti (basitleştirilmiş)
+    private func detectSector(symbol: String) -> String {
+        let sym = symbol.uppercased()
+        
+        // BIST Sektör Tespiti
+        if sym.hasSuffix(".IS") {
+            // Bilinen BIST sembolleri
+            switch sym.replacingOccurrences(of: ".IS", with: "") {
+            case "SASA", "TUPRS", "PETKM", "AYGAZ":
+                return "Enerji"
+            case "THYAO", "PGSUS":
+                return "Transportation"
+            case "GARAN", "AKBNK", "YKBNK", "ISCTR", "HALKB", "VAKBN":
+                return "Banking"
+            case "ASELS", "KCHOL":
+                return "Technology"
+            case "BIMAS", "MGROS", "SOKM":
+                return "Retail"
+            case "EREGL", "KRDMD":
+                return "Industrials"
+            case "EKGYO", "ENKAI":
+                return "Infrastructure"
+            default:
+                return "General"
+            }
+        }
+        
+        // US Sektör Tespiti (Bilinen semboller)
+        switch sym {
+        case "AAPL", "MSFT", "GOOGL", "GOOG", "META", "NVDA", "AMD", "INTC":
+            return "Technology"
+        case "JNJ", "PFE", "MRK", "ABBV", "LLY":
+            return "Healthcare"
+        case "JPM", "BAC", "WFC", "GS", "MS":
+            return "Finance"
+        case "XOM", "CVX", "COP":
+            return "Enerji"
+        case "NEE", "DUK", "SO":
+            return "Utilities"
+        default:
+            return "General"
+        }
     }
 }
 

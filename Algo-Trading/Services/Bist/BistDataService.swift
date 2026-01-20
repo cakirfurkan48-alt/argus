@@ -70,7 +70,9 @@ class BistDataService: ObservableObject {
         let formattedSymbol = symbol.uppercased().hasSuffix(".IS") ? symbol.uppercased() : "\(symbol.uppercased()).IS"
         let urlString = "\(baseUrl)\(formattedSymbol)?interval=\(interval)&range=\(range)"
         
-        guard let url = URL(string: urlString) else { return [] }
+        guard let url = URL(string: urlString) else {
+            throw BistDataError.invalidURL(urlString)
+        }
         
         let (data, _) = try await session.data(for: URLRequest(url: url))
         let yahooResponse = try JSONDecoder().decode(BistYahooChartResponse.self, from: data)
@@ -120,6 +122,23 @@ class BistDataService: ObservableObject {
             print("📈 Değişim: %\(String(format: "%.2f", ticker.changePercent))")
         } catch {
             print("❌ BIST BAĞLANTISI BAŞARISIZ: \(error.localizedDescription)")
+        }
+    }
+}
+
+// MARK: - BIST Data Errors
+enum BistDataError: LocalizedError {
+    case invalidURL(String)
+    case invalidResponse
+    case noData
+    case parseFailed
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL(let url): return "Geçersiz URL: \(url)"
+        case .invalidResponse: return "Sunucu yanıtı geçersiz"
+        case .noData: return "Veri bulunamadı"
+        case .parseFailed: return "Veri işlenemedi"
         }
     }
 }

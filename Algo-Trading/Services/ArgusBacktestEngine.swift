@@ -397,28 +397,40 @@ actor ArgusBacktestEngine {
                 details: logDetails
             ))
             
-            // EXECUTION (Updated for Partial)
+            // EXECUTION (Updated for Partial + Transaction Costs)
+            let execModel = config.executionModel
+
             if action == .buy && shares == 0 {
-                let qty = (currentCapital * 0.99) / price
+                // Slippage uygula (alım fiyatını artır)
+                let executionPrice = execModel.calculateBuyPrice(marketPrice: price)
+                let availableForTrade = currentCapital * 0.99
+                let commission = execModel.calculateCommission(tradeValue: availableForTrade)
+                let netAvailable = availableForTrade - commission
+                let qty = netAvailable / executionPrice
+
                 shares = qty
-                currentCapital -= (qty * price)
+                currentCapital -= (qty * executionPrice + commission)
                 activeTrade = BacktestTrade(
                     entryDate: candle.date,
                     exitDate: Date.distantFuture,
-                    entryPrice: price,
+                    entryPrice: executionPrice,
                     exitPrice: 0,
                     quantity: qty,
                     type: .long,
                     exitReason: ""
                 )
-            } 
+            }
             else if case .sell(let pct) = action, shares > 0, let trade = activeTrade {
-                let sellPrice = exitPriceOverride ?? price
+                let basePrice = exitPriceOverride ?? price
+                // Slippage uygula (satış fiyatını düşür)
+                let sellPrice = execModel.calculateSellPrice(marketPrice: basePrice)
                 let qtyToSell = shares * pct
-                let revenue = qtyToSell * sellPrice
-                
+                let grossRevenue = qtyToSell * sellPrice
+                let commission = execModel.calculateCommission(tradeValue: grossRevenue)
+                let netRevenue = grossRevenue - commission
+
                 // Update Portfolio
-                currentCapital += revenue
+                currentCapital += netRevenue
                 shares -= qtyToSell
                 
                 // Log Completed Segment

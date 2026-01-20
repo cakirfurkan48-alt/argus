@@ -11,9 +11,9 @@ struct PriceMasterEngine: TechnicalCouncilMember, Sendable {
     // MARK: - Analyze & Propose
     
     func analyze(candles: [Candle], symbol: String) async -> CouncilProposal? {
-        guard candles.count >= 30 else { return nil }
-        
-        let currentCandle = candles.last!
+        guard candles.count >= 30, let currentCandle = candles.last else {
+            return nil
+        }
         let currentPrice = currentCandle.close
         
         // Volume analysis
@@ -32,9 +32,13 @@ struct PriceMasterEngine: TechnicalCouncilMember, Sendable {
         var action: ProposedAction = .hold
         var reasoning = ""
         
+        // Güvenli önceki mum erişimi
+        let prevIndex = candles.count - 2
+        guard prevIndex >= 0 else { return nil }
+        let prevCandle = candles[prevIndex]
+
         // BULLISH ENGULFING with Volume
         if currentCandle.close > currentCandle.open { // Green candle
-            let prevCandle = candles[candles.count - 2]
             if prevCandle.close < prevCandle.open && // Previous red
                currentCandle.close > prevCandle.open && // Engulfs
                volumeRatio > 1.5 {
@@ -43,10 +47,9 @@ struct PriceMasterEngine: TechnicalCouncilMember, Sendable {
                 action = .buy
             }
         }
-        
+
         // BEARISH ENGULFING with Volume
         if currentCandle.close < currentCandle.open { // Red candle
-            let prevCandle = candles[candles.count - 2]
             if prevCandle.close > prevCandle.open && // Previous green
                currentCandle.close < prevCandle.open && // Engulfs
                volumeRatio > 1.5 {
@@ -97,11 +100,9 @@ struct PriceMasterEngine: TechnicalCouncilMember, Sendable {
     // MARK: - Vote on Others' Proposals
     
     func vote(on proposal: CouncilProposal, candles: [Candle], symbol: String) -> CouncilVote {
-        guard candles.count >= 20 else {
+        guard candles.count >= 20, let currentCandle = candles.last else {
             return CouncilVote(voter: id, voterName: name, decision: .abstain, reasoning: "Yetersiz veri", weight: 0)
         }
-        
-        let currentCandle = candles.last!
         
         // Volume analysis
         let volumes = candles.map { $0.volume }

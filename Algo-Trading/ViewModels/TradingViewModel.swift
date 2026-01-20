@@ -74,21 +74,9 @@ class TradingViewModel: ObservableObject {
     @Published var candles: [String: [Candle]] = [:]
     var patterns: [String: [OrionChartPattern]] { SignalStateViewModel.shared.patterns }
 
-    @Published var portfolio: [Trade] = [] {
-        didSet {
-            savePortfolio()
-        }
-    }
-    @Published var balance: Double = 100000.0 { // USD bakiyesi
-        didSet {
-            saveBalance()
-        }
-    }
-    @Published var bistBalance: Double = 1000000.0 { // 1M TL BIST demo bakiyesi
-        didSet {
-            saveBistBalance()
-        }
-    }
+    @Published var portfolio: [Trade] = []
+    @Published var balance: Double = 100000.0 // USD bakiyesi
+    @Published var bistBalance: Double = 1000000.0 // 1M TL BIST demo bakiyesi
     @Published var usdTryRate: Double = 35.0 // Varsayılan kur
     
     @Published var aiSignals: [AISignal] = []
@@ -138,13 +126,10 @@ class TradingViewModel: ObservableObject {
     func addToWatchlist(symbol: String) {
         WatchlistStore.shared.add(symbol)
     }
-    @Published var transactionHistory: [Transaction] = [] {
-        didSet {
-            saveTransactions()
-        }
-    }
-    @Published var scoutingCandidates: [TradeSignal] = [] // Opportunities found by Scout
-    @Published var scoutLogs: [ScoutLog] = [] // Detailed logs of why trades were accepted/rejected
+    @Published var transactionHistory: [Transaction] = []
+    // AutoPilot & Scout delegated to AutoPilotStore
+    var scoutingCandidates: [TradeSignal] { AutoPilotStore.shared.scoutingCandidates }
+    var scoutLogs: [ScoutLog] { AutoPilotStore.shared.scoutLogs }
     
     // Trade Brain Plan Execution Alerts
     var planAlerts: [TradeBrainAlert] { ExecutionStateViewModel.shared.planAlerts }
@@ -155,7 +140,11 @@ class TradingViewModel: ObservableObject {
 
 
 
-    var lastTradeTimes: [String: Date] = [:] // Symbol -> Date
+    // Last Trade Times delegated to ExecutionStateViewModel
+    var lastTradeTimes: [String: Date] {
+        get { ExecutionStateViewModel.shared.lastTradeTimes }
+        set { ExecutionStateViewModel.shared.lastTradeTimes = newValue }
+    }
     
     // Universe Cache
     @Published var universeCache: [String: UniverseItem] = [:]
@@ -184,7 +173,7 @@ class TradingViewModel: ObservableObject {
     @Published var activeShocks: [ShockFlag] = []
     
     // Argus Scout (Pre-Cognition)
-    var scoutTimer: Timer?
+    // Internal timer removed - handled by AutoPilotStore
     
     // Hermes / News State
     @Published var hermesSummaries: [String: [HermesSummary]] = [:] // Symbol -> Summaries
@@ -228,7 +217,8 @@ class TradingViewModel: ObservableObject {
 
     
     // Search State
-    internal var autoPilotTimer: Timer?
+    // Internal timer removed - handled by AutoPilotStore
+
     
     // MARK: - Demeter Integration
     
@@ -275,12 +265,13 @@ class TradingViewModel: ObservableObject {
     
     init() {
         // Init is now lightweight.
-        loadWatchlist() // Ensure watchlist is ready immediately (Real Data)
+        // Legacy Loading Removed - Stores handle self-initialization
+
         
         setupViewModelLinking()
         
-        // MIGRATION: PortfolioEngine'den veri çek (Artık tek kaynak PortfolioEngine)
-        setupPortfolioEngineBridge()
+        // MIGRATION: PortfolioStore'dan veri çek (Artık tek kaynak PortfolioStore)
+        setupPortfolioStoreBridge()
         
         setupStreamingObservation()
         
@@ -439,10 +430,10 @@ class TradingViewModel: ObservableObject {
 
 
     
-    /// PortfolioEngine ile senkronizasyon - Tek Kaynak köprüsü
-    private func setupPortfolioEngineBridge() {
+    /// PortfolioStore ile senkronizasyon - Tek Kaynak köprüsü
+    private func setupPortfolioStoreBridge() {
         // Portfolio senkronizasyonu
-        PortfolioEngine.shared.$trades
+        PortfolioStore.shared.$trades
             .receive(on: DispatchQueue.main)
             .sink { [weak self] trades in
                 self?.portfolio = trades
@@ -450,7 +441,7 @@ class TradingViewModel: ObservableObject {
             .store(in: &cancellables)
         
         // Global Balance senkronizasyonu
-        PortfolioEngine.shared.$globalBalance
+        PortfolioStore.shared.$globalBalance
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newBalance in
                 // didSet tetiklenmemesi için direkt atama
@@ -461,7 +452,7 @@ class TradingViewModel: ObservableObject {
             .store(in: &cancellables)
         
         // BIST Balance senkronizasyonu
-        PortfolioEngine.shared.$bistBalance
+        PortfolioStore.shared.$bistBalance
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newBalance in
                 if self?.bistBalance != newBalance {
@@ -471,7 +462,7 @@ class TradingViewModel: ObservableObject {
             .store(in: &cancellables)
         
         // Transaction History senkronizasyonu (Raporlar için kritik!)
-        PortfolioEngine.shared.$transactions
+        PortfolioStore.shared.$transactions
             .receive(on: DispatchQueue.main)
             .sink { [weak self] transactions in
                 self?.transactionHistory = transactions
@@ -492,14 +483,9 @@ class TradingViewModel: ObservableObject {
                 // We map DataValue<Quote> -> Quote
                 self.quotes = storeQuotes.compactMapValues { $0.value }
                 
-                // 2. Auto-Pilot Checks (Triggered by data updates)
-                // We iterate only through open positions to check stop losses
-                for trade in self.portfolio.filter({ $0.isOpen }) {
-                    if let quote = self.quotes[trade.symbol] {
-                        self.checkStopLoss(for: trade, currentPrice: quote.currentPrice)
-                        self.checkTakeProfit(for: trade, currentPrice: quote.currentPrice)
-                    }
-                }
+                // 2. Auto-Pilot Checks (Delegated to PortfolioStore & AutoPilotStore)
+                // SL/TP logic is now handled by PortfolioStore.handleQuoteUpdates()
+
             }
             .store(in: &cancellables)
             
@@ -620,8 +606,7 @@ class TradingViewModel: ObservableObject {
     deinit {
         // Timer cleanup - memory leak prevention
         stopAutoPilotTimer()
-        scoutTimer?.invalidate()
-        scoutTimer = nil
+
         
         // Combine subscriptions cleanup
         cancellables.removeAll()
@@ -632,7 +617,8 @@ class TradingViewModel: ObservableObject {
 
     
     func stopAutoPilotTimer() {
-        // AutoPilot is now handled by ExecutionStateViewModel
+        // AutoPilot is now handled by AutoPilotStore
+        AutoPilotStore.shared.stopAutoPilotLoop()
     }
     
     // MARK: - Data Export (For AI Analysis)
@@ -1156,7 +1142,8 @@ class TradingViewModel: ObservableObject {
                 decisionId: !self.agoraSnapshots.isEmpty ? self.agoraSnapshots.last!.id.uuidString : nil,
                 intentId: UUID().uuidString
             ))
-            saveTransactions() // Persist immediately
+            // transactionHistory updated via PortfolioStore binding
+            // saveTransactions handled by PortfolioStore
             
             // Log Message (Currency aware)
             let currencySymbol = currency.symbol
@@ -1558,7 +1545,8 @@ class TradingViewModel: ObservableObject {
         decisionId: !self.agoraSnapshots.isEmpty ? self.agoraSnapshots.last!.id.uuidString : nil,
         intentId: UUID().uuidString
     ))
-    saveTransactions() // Persist immediately
+    // saveTransactions handled by PortfolioStore
+
     
     // CHIRON LEARNING HOOK: Trade kapandığında konsey ağırlıklarını güncelle
     if source == .autoPilot && abs(totalRealizedPnL) > 0.01 {
@@ -1789,18 +1777,8 @@ class TradingViewModel: ObservableObject {
         }
     }
     
-    func updateTradeHighWaterMark(symbol: String, price: Double) {
-        if let index = portfolio.firstIndex(where: { $0.symbol == symbol && $0.isOpen }) {
-            var trade = portfolio[index]
-            let oldMark = trade.highWaterMark ?? trade.entryPrice
-            if price > oldMark {
-                trade.highWaterMark = price
-                portfolio[index] = trade
-                savePortfolio()
-                // print("🌊 High Water Mark Updated: \(symbol) -> \(price)")
-            }
-        }
-    }
+    // updateTradeHighWaterMark removed - handled by PortfolioStore handledQuoteUpdates
+
 
     // MARK: - Discovery Data Fetching
     
@@ -2059,8 +2037,7 @@ extension TradingViewModel {
             guardrailHit: true,
             guardrailReason: blockReason
         )
-        transactionHistory.append(attempt)
-        saveTransactions() // Persist immediately
+        PortfolioStore.shared.addTransaction(attempt)
     }    
 
     var bistPortfolio: [Trade] {
@@ -2079,27 +2056,9 @@ extension TradingViewModel {
 
     // MARK: - BIST Tam Reset Functions
     func resetBistPortfolio() {
-        print("🚨 BIST PORTFÖYÜ SIFIRLANIYOR...")
-        
-        // 1. BIST Pozisyonlarını Sil
-        portfolio.removeAll { trade in
-            trade.currency == .TRY
-        }
-        savePortfolio()
-        print("✅ BIST pozisyonları silindi.")
-        
-        // 2. BIST İşlem Geçmişini Sil - Transaction modelinde currency yoksa symbol check devam
-        transactionHistory.removeAll { tx in
-            tx.symbol.uppercased().hasSuffix(".IS") || SymbolResolver.shared.isBistSymbol(tx.symbol)
-        }
-        saveTransactions()
-        print("✅ BIST işlem geçmişi silindi.")
-        
-        // 3. Bakiyeyi Sıfırla (1M TL)
-        bistBalance = 1_000_000.0
-        saveBistBalance()
-        print("✅ Bakiye 1.000.000 TL olarak ayarlandı.")
+        PortfolioStore.shared.resetBistPortfolio()
     }
+
     
     // MARK: - Smart Rebalancing (Portföy Dengesi Analizi - GLOBAL ONLY)
     

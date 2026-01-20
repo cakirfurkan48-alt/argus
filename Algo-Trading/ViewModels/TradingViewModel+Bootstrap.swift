@@ -27,13 +27,9 @@ extension TradingViewModel {
         
         // PHASE 1: HIZLI - UI'ı bloklamayan işlemler (~100ms hedef)
         // ---------------------------------------------------------
-        
-        // Load Persistent Data (Disk I/O - hızlı)
-        loadWatchlist()
-        loadPortfolio()
-        loadTransactions()
-        loadBalance()
-        loadBistBalance()
+        // MARK: - 1. Legacy Persistence Load (Removed)
+        // Stores (WatchlistStore, PortfolioStore) initialize themselves.
+
         
         // BIST Bakiye Tutarlılık Kontrolü (Gerekirse düzelt, sıfırlama YAPMA)
         // Not: resetBistPortfolio() KALDIRILDI - bu debug koduydu ve her açılışta 

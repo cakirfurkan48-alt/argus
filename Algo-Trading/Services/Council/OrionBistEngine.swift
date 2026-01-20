@@ -165,7 +165,9 @@ class OrionBistEngine {
         let k = 2.0 / Double(period + 1)
         var result: [Double] = [data[0]]
         for i in 1..<data.count {
-            result.append((data[i] * k) + (result.last! * (1.0 - k)))
+            // Güvenli erişim - result her zaman en az 1 eleman içerir
+            let lastResult = result.last ?? data[0]
+            result.append((data[i] * k) + (lastResult * (1.0 - k)))
         }
         return result
     }

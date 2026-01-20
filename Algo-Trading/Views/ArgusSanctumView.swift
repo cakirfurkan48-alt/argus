@@ -145,10 +145,9 @@ struct ArgusSanctumView: View {
                 
                 // Alkindus Button (Brain)
                 Button(action: { showAlkindusSheet = true }) {
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 18))
+                    AlkindusAvatarView(size: 24, isThinking: false, hasIdea: false)
                         .foregroundColor(Color(red: 0.6, green: 0.4, blue: 1.0))
-                        .padding(10)
+                        .padding(8)
                         .background(Color.black.opacity(0.3))
                         .cornerRadius(8)
                 }
@@ -916,7 +915,7 @@ struct HoloPanelView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Header
                 HStack {
-                    Image(systemName: "brain.head.profile.fill")
+                    AlkindusAvatarView(size: 14, isThinking: false, hasIdea: false)
                         .font(.title2)
                         .foregroundColor(.white)
                     Text("Chiron Öğrenme Sistemi")

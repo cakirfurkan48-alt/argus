@@ -135,7 +135,12 @@ actor ArgusInboxService: ObservableObject {
     // Actually getDocumentsDirectory is just a helper using FileManager. 
     // FileManager.default is thread-safe.
     nonisolated private func getDocumentsDirectory() -> URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        // Güvenli erişim - .first kullanımı crash önler
+        guard let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            // Fallback: Temporary directory (son çare)
+            return FileManager.default.temporaryDirectory
+        }
+        return url
     }
     
     private func loadHistory() async {

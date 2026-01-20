@@ -264,6 +264,7 @@ struct Trade: Identifiable, Codable {
     var stopLoss: Double?
     var takeProfit: Double? // (Optional, usually dynamic now)
     var highWaterMark: Double? // Highest price seen since entry (For Trailing Stop)
+    var isPendingSale: Bool = false // Duplicate stop loss/TP trigger koruması
     var rationale: String?
     var voiceReport: String? // Cached Argus Voice Report
     var decisionContext: DecisionContext? // Snapshot of the decision (Why/How/Who)

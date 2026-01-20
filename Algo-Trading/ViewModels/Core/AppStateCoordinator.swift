@@ -13,7 +13,12 @@ final class AppStateCoordinator: ObservableObject {
     
     // MARK: - Sub ViewModels
     let watchlist: WatchlistViewModel
-    let portfolio: PortfolioViewModel
+    
+    // MARK: - Legacy Accessor for Views (Backward Compatibility)
+    // Views that access `coordinator.portfolio` will now get the Store directly.
+    var portfolio: PortfolioStore {
+        PortfolioStore.shared
+    }
     
     // MARK: - Shared State (Alt ViewModel'ler arası paylaşım)
     @Published var selectedSymbol: String?
@@ -26,9 +31,8 @@ final class AppStateCoordinator: ObservableObject {
     private init() {
         // Alt ViewModel'leri oluştur
         self.watchlist = WatchlistViewModel()
-        self.portfolio = PortfolioViewModel()
         
-        // Koordinasyon: Watchlist değişikliklerini dinle
+        // Koordinasyon: Watchlist ve MarketData değişikliklerini dinle
         setupCoordination()
     }
     
@@ -52,7 +56,7 @@ final class AppStateCoordinator: ObservableObject {
         MarketDataStore.shared.$quotes
             .receive(on: RunLoop.main)
             .sink { [weak self] storeQuotes in
-                // Portfolio'ya quote güncellemelerini ilet
+                // PortfolioStore'a quote güncellemelerini ilet (SL/TP kontrolü için)
                 self?.portfolio.handleQuoteUpdates(storeQuotes)
             }
             .store(in: &cancellables)
@@ -66,7 +70,8 @@ final class AppStateCoordinator: ObservableObject {
     }
     
     /// Global yükleme durumu
+    // PortfolioStore doesn't expose isLoading, so we remove it from the OR chain or assume false
     var isLoading: Bool {
-        watchlist.isLoading || portfolio.isLoading || isGlobalLoading
+        watchlist.isLoading || isGlobalLoading
     }
 }

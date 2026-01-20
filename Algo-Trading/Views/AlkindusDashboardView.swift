@@ -89,7 +89,7 @@ struct AlkindusDashboardView: View {
     private func headerCard(stats: AlkindusStats) -> some View {
         VStack(spacing: 16) {
             HStack {
-                Image(systemName: "brain.head.profile")
+                AlkindusAvatarView(size: 24, isThinking: isProcessing, hasIdea: false)
                     .font(.system(size: 40))
                     .foregroundColor(gold)
                 
@@ -512,7 +512,7 @@ struct AlkindusDashboardView: View {
                 HStack(spacing: 12) {
                     Button(action: processEvents) {
                         HStack {
-                            Image(systemName: "brain.head.profile")
+                            AlkindusAvatarView(size: 16, isThinking: false, hasIdea: false)
                             Text("Eventlerden Öğren")
                         }
                         .font(.caption)
@@ -548,7 +548,7 @@ struct AlkindusDashboardView: View {
     // MARK: - Empty State
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Image(systemName: "brain")
+            AlkindusAvatarView(size: 40, isThinking: true, hasIdea: false)
                 .font(.system(size: 60))
                 .foregroundColor(.gray)
             Text("Alkindus henüz veri toplamadı")

@@ -31,9 +31,9 @@ DerivedData
 crash_logs/
 
 # Secrets & Keys (User Specific)
-Algo-Trading/Services/Secrets.swift
+Secrets.xcconfig
+*.xcconfig
 Algo-Trading/Services/ChironLLMAdapter.swift
-Algo-Trading/Services/GeminiNewsService.swift
 Algo-Trading/Services/GroqClient.swift
 *.sqlite
 *.sqlite.zip

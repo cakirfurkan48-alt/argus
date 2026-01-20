@@ -266,30 +266,49 @@ final class AlkindusRAGEngine {
     }
     
     // MARK: - Private Helpers
-    
+
     private func upsertDocument(id: String, content: String, metadata: [String: String], namespace: String) async {
         do {
-            // Get embedding
-            let values = try await embedding.embed(text: content)
-            
-            // Add content to metadata for retrieval
-            var enrichedMetadata = metadata
-            enrichedMetadata["content"] = content
-            enrichedMetadata["timestamp"] = ISO8601DateFormatter().string(from: Date())
-            
-            // Upsert to Pinecone
-            let vector = PineconeService.Vector(
-                id: id,
-                values: values,
-                metadata: enrichedMetadata
-            )
-            
-            let count = try await pinecone.upsert(vectors: [vector], namespace: namespace)
-            print("✅ RAG: Upserted \(count) vector(s) to \(namespace)")
-            
+            try await upsertDocument(namespace: namespace, id: id, text: content, metadata: metadata)
         } catch {
             print("❌ RAG upsert error: \(error)")
+
+            // Enqueue for retry
+            let failedSync = AlkindusSyncRetryQueue.FailedSync(
+                id: UUID(),
+                namespace: namespace,
+                documentId: id,
+                text: content,
+                metadata: metadata,
+                failedAt: Date(),
+                retryCount: 0
+            )
+            await AlkindusSyncRetryQueue.shared.enqueue(failedSync)
         }
+    }
+
+    // MARK: - Public Upsert (for retry queue)
+
+    /// Public upsert method for retry queue access
+    /// - Throws: Error if embedding or Pinecone upsert fails
+    func upsertDocument(namespace: String, id: String, text: String, metadata: [String: String]) async throws {
+        // Get embedding
+        let values = try await embedding.embed(text: text)
+
+        // Add content to metadata for retrieval
+        var enrichedMetadata = metadata
+        enrichedMetadata["content"] = text
+        enrichedMetadata["timestamp"] = ISO8601DateFormatter().string(from: Date())
+
+        // Upsert to Pinecone
+        let vector = PineconeService.Vector(
+            id: id,
+            values: values,
+            metadata: enrichedMetadata
+        )
+
+        let count = try await pinecone.upsert(vectors: [vector], namespace: namespace)
+        print("✅ RAG: Upserted \(count) vector(s) to \(namespace)")
     }
     
     // MARK: - Bulk Sync

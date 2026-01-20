@@ -32,42 +32,42 @@ actor BistMoneyFlowEngine {
         var totalScore: Double = 50
         var signals: [MoneyFlowSignal] = []
         
-        // Hacim Artışı
-        if volumeAnalysis.volumeRatio > 2.0 {
-            totalScore += 25
+        // Hacim Artışı - BistThresholds kullan
+        if volumeAnalysis.volumeRatio > BistThresholds.Volume.highRatio {
+            totalScore += BistThresholds.Scoring.highVolumeScore
             signals.append(MoneyFlowSignal(type: .highVolume, description: "Hacim ortalamanın \(String(format: "%.1f", volumeAnalysis.volumeRatio))x üzerinde"))
-        } else if volumeAnalysis.volumeRatio > 1.5 {
-            totalScore += 15
+        } else if volumeAnalysis.volumeRatio > BistThresholds.Volume.moderateRatio {
+            totalScore += BistThresholds.Scoring.moderateVolumeScore
             signals.append(MoneyFlowSignal(type: .risingVolume, description: "Hacim artışı tespit edildi"))
-        } else if volumeAnalysis.volumeRatio < 0.5 {
-            totalScore -= 10
+        } else if volumeAnalysis.volumeRatio < BistThresholds.Volume.lowRatio {
+            totalScore += BistThresholds.Scoring.lowVolumeDeduction
             signals.append(MoneyFlowSignal(type: .lowVolume, description: "Düşük hacim - ilgi azalmış"))
         }
         
-        // Fiyat-Hacim İlişkisi
+        // Fiyat-Hacim İlişkisi - BistThresholds kullan
         if priceVolumeRelation == .accumulation {
-            totalScore += 20
+            totalScore += BistThresholds.Scoring.accumulationScore
             signals.append(MoneyFlowSignal(type: .accumulation, description: "Birikim tespit edildi (Fiyat↑ Hacim↑)"))
         } else if priceVolumeRelation == .distribution {
-            totalScore -= 20
+            totalScore += BistThresholds.Scoring.distributionDeduction
             signals.append(MoneyFlowSignal(type: .distribution, description: "Dağıtım tespit edildi (Fiyat↓ Hacim↑)"))
         }
         
-        // A/D Göstergesi
-        if accumulationDistribution > 0.6 {
-            totalScore += 15
+        // A/D Göstergesi - BistThresholds kullan
+        if accumulationDistribution > BistThresholds.ADIndicator.bullishThreshold {
+            totalScore += BistThresholds.Scoring.bullishFlowScore
             signals.append(MoneyFlowSignal(type: .bullishFlow, description: "A/D: Pozitif para akışı"))
-        } else if accumulationDistribution < -0.6 {
-            totalScore -= 15
+        } else if accumulationDistribution < BistThresholds.ADIndicator.bearishThreshold {
+            totalScore += BistThresholds.Scoring.bearishFlowDeduction
             signals.append(MoneyFlowSignal(type: .bearishFlow, description: "A/D: Negatif para akışı"))
         }
         
-        // Flow Durumu
+        // Flow Durumu - BistThresholds kullan
         let flowStatus: FlowStatus
-        if totalScore >= 75 { flowStatus = .strongInflow }
-        else if totalScore >= 60 { flowStatus = .inflow }
-        else if totalScore >= 40 { flowStatus = .neutral }
-        else if totalScore >= 25 { flowStatus = .outflow }
+        if totalScore >= BistThresholds.Scoring.strongInflowThreshold { flowStatus = .strongInflow }
+        else if totalScore >= BistThresholds.Scoring.inflowThreshold { flowStatus = .inflow }
+        else if totalScore >= BistThresholds.Scoring.neutralThreshold { flowStatus = .neutral }
+        else if totalScore >= BistThresholds.Scoring.outflowThreshold { flowStatus = .outflow }
         else { flowStatus = .strongOutflow }
         
         return BistMoneyFlowResult(
@@ -85,16 +85,19 @@ actor BistMoneyFlowEngine {
     // MARK: - Hacim Analizi
     
     private func analyzeVolume(_ candles: [BorsaPyCandle]) -> (volumeRatio: Double, avgVolume: Double) {
-        guard candles.count >= 5 else { return (1.0, 0) }
-        
+        guard candles.count >= 5, let lastCandle = candles.last else {
+            return (1.0, 0)
+        }
+
         // Son 20 günün ortalama hacmi
         let recentCandles = Array(candles.suffix(min(20, candles.count)))
-        let avgVolume = recentCandles.dropLast().map { $0.volume }.reduce(0, +) / Double(max(1, recentCandles.count - 1))
-        
-        // Bugünkü hacim / ortalama
-        let todayVolume = candles.last!.volume
+        let divisor = max(1, recentCandles.count - 1)
+        let avgVolume = recentCandles.dropLast().map { $0.volume }.reduce(0, +) / Double(divisor)
+
+        // Bugünkü hacim / ortalama (division by zero koruması)
+        let todayVolume = lastCandle.volume
         let ratio = avgVolume > 0 ? todayVolume / avgVolume : 1.0
-        
+
         return (ratio, avgVolume)
     }
     
@@ -102,12 +105,21 @@ actor BistMoneyFlowEngine {
     
     private func analyzePriceVolumeRelation(_ candles: [BorsaPyCandle]) -> PriceVolumeRelation {
         guard candles.count >= 5 else { return .neutral }
-        
+
         let recent = Array(candles.suffix(5))
-        
-        // Son 5 günün fiyat ve hacim değişimi
-        let priceChange = (recent.last!.close - recent.first!.close) / recent.first!.close
-        let volumeChange = (recent.last!.volume - recent.first!.volume) / max(1, recent.first!.volume)
+
+        // Güvenli erişim
+        guard let lastCandle = recent.last,
+              let firstCandle = recent.first,
+              firstCandle.close > 0 else {
+            return .neutral
+        }
+
+        // Son 5 günün fiyat ve hacim değişimi (division by zero koruması)
+        let priceChange = (lastCandle.close - firstCandle.close) / firstCandle.close
+        let volumeChange = firstCandle.volume > 0
+            ? (lastCandle.volume - firstCandle.volume) / firstCandle.volume
+            : 0
         
         if priceChange > 0.02 && volumeChange > 0.2 {
             return .accumulation // Fiyat↑ Hacim↑ = Birikim

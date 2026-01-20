@@ -8,18 +8,16 @@ final class EODHDProvider: HeimdallProvider {
         return [.quote, .candles, .screener]
     }
     
-    private let apiKeys = ["693f198731bda4.10429799"]
     private let baseURL = "https://eodhd.com/api"
-    private let currentKeyIndex = 0
-    
-    // Fetches from KeyStore (SSoT)
+
+    // API Key'i güvenli şekilde Secrets'tan al
     private func getApiKey() async -> String {
-        // Try KeyStore first (Dynamically updated keys)
-        if let key = APIKeyStore.shared.getKey(for: .eodhd) {
+        // Önce KeyStore'dan dene (Dinamik key yönetimi)
+        if let key = APIKeyStore.shared.getKey(for: .eodhd), !key.isEmpty {
             return key
         }
-        // Fallback to Hardcoded Secret
-        return Secrets.shared.eodhd
+        // Fallback: Secrets (Info.plist'ten)
+        return Secrets.eodhdKey
     }
     
     func fetchQuote(symbol: String) async throws -> Quote {

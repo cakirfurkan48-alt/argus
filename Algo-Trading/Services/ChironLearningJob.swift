@@ -24,12 +24,34 @@ final class ChironLearningJob {
         
         print("🧠 Chiron Learning: Analyzing \(symbol)...")
         
-        // 1. Load trade history
+        // 1. Load trade history - MİNİMUM ÖRNEKLEM KONTROLÜ
         let trades = await dataLake.loadTradeHistory(symbol: symbol)
-        guard trades.count >= 3 else {
-            print("⏳ Not enough trades for \(symbol) (min 3)")
+        let minTradesRequired = 5 // Daha erken öğrenme başlasın
+
+        guard trades.count >= minTradesRequired else {
+            print("⏳ Yetersiz örneklem: \(symbol) için \(trades.count)/\(minTradesRequired) trade - öğrenme atlanıyor")
             return
         }
+
+        // İstatistiksel güven aralığı kontrolü
+        let pnls = trades.compactMap { $0.pnlPercent }
+        guard pnls.count >= minTradesRequired else {
+            print("⏳ Yetersiz PnL verisi: \(symbol) - öğrenme atlanıyor")
+            return
+        }
+
+        let mean = pnls.reduce(0, +) / Double(pnls.count)
+        let variance = pnls.map { pow($0 - mean, 2) }.reduce(0, +) / Double(pnls.count)
+        let stdDev = sqrt(variance)
+        let confidenceInterval = 1.96 * stdDev / sqrt(Double(pnls.count)) // %95 güven aralığı
+
+        // Güven aralığı çok geniş ise öğrenme güvenilir değil
+        if confidenceInterval > 15.0 { // %15'ten büyük güven aralığı = belirsiz sonuçlar (gevşetildi)
+            print("⚠️ Güven aralığı çok geniş (\(String(format: "%.1f", confidenceInterval))%) - öğrenme ertelendi")
+            return
+        }
+
+        print("✅ Örneklem yeterli: \(trades.count) trade, güven aralığı: ±\(String(format: "%.1f", confidenceInterval))%")
         
         // 2. Analyze performance by engine
         let corseTrades = trades.filter { $0.engine == .corse }
