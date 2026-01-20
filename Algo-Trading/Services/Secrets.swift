@@ -7,10 +7,6 @@ enum Secrets {
         guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
               !value.isEmpty,
               !value.hasPrefix("$(") else {
-            // Geliştirme ortamında fallback - Production'da kaldırılmalı
-            #if DEBUG
-            print("⚠️ API Key '\(key)' Info.plist'te bulunamadı. Secrets.xcconfig dosyasını kontrol edin.")
-            #endif
             return ""
         }
         return value

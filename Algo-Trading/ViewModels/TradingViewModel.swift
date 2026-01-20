@@ -344,7 +344,7 @@ class TradingViewModel: ObservableObject {
             
         // MARK: - MarketDataStore Bridge (Quotes)
         MarketDataStore.shared.$quotes
-            .throttle(for: .seconds(0.5), scheduler: DispatchQueue.main, latest: true)
+            .throttle(for: .seconds(2.0), scheduler: DispatchQueue.main, latest: true)
             .sink { [weak self] storeQuotes in
                 guard let self = self else { return }
                 
@@ -471,26 +471,13 @@ class TradingViewModel: ObservableObject {
     }
     
     private func setupStreamingObservation() {
-        // SINGLE SOURCE OF TRUTH: Bind directly to MarketDataStore
-        // The Store handles "Session Baseline", "Merge Logic", and "Staleness".
-        // We just display what the Store tells us.
-        MarketDataStore.shared.$quotes
-            .receive(on: RunLoop.main)
-            .sink { [weak self] storeQuotes in
-                guard let self = self else { return }
-                
-                // 1. Update UI State (Efficiently)
-                // We map DataValue<Quote> -> Quote
-                self.quotes = storeQuotes.compactMapValues { $0.value }
-                
-                // 2. Auto-Pilot Checks (Delegated to PortfolioStore & AutoPilotStore)
-                // SL/TP logic is now handled by PortfolioStore.handleQuoteUpdates()
-
-            }
-            .store(in: &cancellables)
-            
+        // SINGLE SOURCE OF TRUTH: Quote subscription handled by setupViewModelLinking() with throttle
+        // DO NOT add another subscription here - it causes duplicate updates and UI thrashing
+        
+        // PortfolioStore now handles SL/TP checks via its own subscription
+        // AutoPilot handled by AutoPilotStore
+        
         // ORION STORE BINDING REMOVED (Handled by SignalStateViewModel Facade)
-
     }
     
     // MARK: - Trade Brain Execution Handlers
