@@ -803,81 +803,103 @@ class TradingViewModel: ObservableObject {
     
     // MARK: - Terminal Bootstrap (Fetches data and updates health for all watchlist)
     func bootstrapTerminalData() async {
+        // GUARD: Zaten çalışıyorsa tekrar başlatma
+        guard !isBootstrapping else { return }
+        isBootstrapping = true
+        defer { isBootstrapping = false }
+        
         // 0. Ensure macro data is loaded first (for 100% quality)
         _ = await MacroRegimeService.shared.evaluate()
         
         let symbols = watchlist // No limit - analyze all
+        let batchSize = 10 // 10'ar sembol paketler halinde
         
-        for symbol in symbols {
-            // FIX: Quote (fiyat) verisini önce çek!
-            if quotes[symbol] == nil {
-                let val = await MarketDataStore.shared.ensureQuote(symbol: symbol)
-                if let q = val.value {
-                    await MainActor.run { self.quotes[symbol] = q }
-                }
-            }
-            
-            // FULL ANALYSIS: Use the same loadArgusData as detail view for consistency
-            // This is slower but ensures Terminal and Detail show the same decision
-            if grandDecisions[symbol] == nil {
-                await loadArgusData(for: symbol)
-            }
-            
-            // PROMETHEUS: 5-day price forecast
-            // Ensure forecast exists or is generated
-            if prometheusForecastBySymbol[symbol] == nil {
-                // 1. Ensure Candles (Data Dependency)
-                if candles[symbol] == nil {
-                    let cVal = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: "1day")
-                    if let c = cVal.value {
-                        await MainActor.run { self.candles[symbol] = c }
+        // Sembolleri batch'lere böl
+        let batches = stride(from: 0, to: symbols.count, by: batchSize).map {
+            Array(symbols[$0..<min($0 + batchSize, symbols.count)])
+        }
+        
+        print("📦 Terminal Bootstrap: \(symbols.count) sembol, \(batches.count) paket")
+        
+        for (batchIndex, batch) in batches.enumerated() {
+            // Her batch için paralel yükleme
+            await withTaskGroup(of: Void.self) { group in
+                for symbol in batch {
+                    group.addTask { [weak self] in
+                        await self?.loadSymbolData(symbol)
                     }
                 }
-                
-                // 2. Generate Forecast if enough data
-                if let candleData = candles[symbol], candleData.count >= 30 {
-                    // Prices are usually oldest-first coming from provider.
-                    // Prometheus expects newest-first.
-                    let prices = candleData.map { $0.close }.reversed()
-                    let forecast = await PrometheusEngine.shared.forecast(symbol: symbol, historicalPrices: Array(prices))
-                    await MainActor.run { self.prometheusForecastBySymbol[symbol] = forecast }
+            }
+            
+            // Paket tamamlandı - Terminal'i güncelle
+            await MainActor.run {
+                self.refreshTerminal()
+            }
+            
+            print("📦 Paket \(batchIndex + 1)/\(batches.count) tamamlandı")
+            
+            // UI'ın nefes alması için kısa yield
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        
+        print("✅ Terminal Bootstrap tamamlandı")
+    }
+    
+    /// Tek bir sembol için tüm verileri yükle (batch tarafından çağrılır)
+    private func loadSymbolData(_ symbol: String) async {
+        // 1. Quote (fiyat) verisini çek
+        if quotes[symbol] == nil {
+            let val = await MarketDataStore.shared.ensureQuote(symbol: symbol)
+            if let q = val.value {
+                await MainActor.run { self.quotes[symbol] = q }
+            }
+        }
+        
+        // 2. Full Analysis (Council)
+        if grandDecisions[symbol] == nil {
+            await loadArgusData(for: symbol)
+        }
+        
+        // 3. Prometheus Forecast
+        if prometheusForecastBySymbol[symbol] == nil {
+            // Candles yoksa çek
+            if candles[symbol] == nil {
+                let cVal = await MarketDataStore.shared.ensureCandles(symbol: symbol, timeframe: "1day")
+                if let c = cVal.value {
+                    await MainActor.run { self.candles[symbol] = c }
                 }
             }
             
-            // 5. Update DataHealth based on ACTUAL data availability
-            await MainActor.run {
-                let candleCount = self.candles[symbol]?.count ?? 0
-                let hasQuote = self.quotes[symbol] != nil
-                let hasOrion = self.orionScores[symbol] != nil
-                let hasFund = self.getFundamentalScore(for: symbol) != nil
-                let hasCouncil = self.grandDecisions[symbol] != nil
-                
-                // Technical: Full quality if we have enough data
-                let techQuality = (hasQuote || candleCount > 0) ? 1.0 : 0.0
-                
-                // Fundamental: Full quality if Atlas calculated
-                let fundQuality = hasFund ? 1.0 : 0.0
-                
-                // Macro: Check if MacroRegimeService has cached data
-                let hasMacro = MacroRegimeService.shared.getCachedRating() != nil
-                let macroQuality = hasMacro ? 1.0 : 0.0
-                
-                // News: Check if we have news for this symbol
-                let hasNews = !(self.newsInsightsBySymbol[symbol]?.isEmpty ?? true)
-                let newsQuality = hasNews ? 1.0 : 0.5 // Partial if no specific news
-                
-                let health = DataHealth(
-                    symbol: symbol,
-                    lastUpdated: Date(),
-                    fundamental: CoverageComponent(available: hasFund, quality: fundQuality),
-                    technical: CoverageComponent(available: hasQuote || candleCount > 0, quality: techQuality),
-                    macro: CoverageComponent(available: hasMacro, quality: macroQuality),
-                    news: CoverageComponent(available: true, quality: newsQuality)
-                )
-                self.dataHealthBySymbol[symbol] = health
+            // Forecast hesapla
+            if let candleData = candles[symbol], candleData.count >= 30 {
+                let prices = candleData.map { $0.close }.reversed()
+                let forecast = await PrometheusEngine.shared.forecast(symbol: symbol, historicalPrices: Array(prices))
+                await MainActor.run { self.prometheusForecastBySymbol[symbol] = forecast }
             }
         }
+        
+        // 4. DataHealth güncelle
+        await MainActor.run {
+            let candleCount = self.candles[symbol]?.count ?? 0
+            let hasQuote = self.quotes[symbol] != nil
+            let hasFund = self.getFundamentalScore(for: symbol) != nil
+            let hasMacro = MacroRegimeService.shared.getCachedRating() != nil
+            let hasNews = !(self.newsInsightsBySymbol[symbol]?.isEmpty ?? true)
+            
+            let health = DataHealth(
+                symbol: symbol,
+                lastUpdated: Date(),
+                fundamental: CoverageComponent(available: hasFund, quality: hasFund ? 1.0 : 0.0),
+                technical: CoverageComponent(available: hasQuote || candleCount > 0, quality: (hasQuote || candleCount > 0) ? 1.0 : 0.0),
+                macro: CoverageComponent(available: hasMacro, quality: hasMacro ? 1.0 : 0.0),
+                news: CoverageComponent(available: true, quality: hasNews ? 1.0 : 0.5)
+            )
+            self.dataHealthBySymbol[symbol] = health
+        }
     }
+    
+    // Bootstrap lock flag
+    @Published private var isBootstrapping = false
 
     // MARK: - Portfolio Management
     

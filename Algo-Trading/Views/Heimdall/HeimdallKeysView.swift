@@ -12,6 +12,17 @@ struct HeimdallKeysView: View {
                 if store.keys.isEmpty {
                     Text("Hiç anahtar bulunamadı. Migration bekleniyor veya manuel ekleyin.")
                         .foregroundColor(.secondary)
+                    
+                    // Debug: Provider listesi
+                    Text("Toplam Provider Sayısı: \(APIProvider.allCases.count)")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                    
+                    ForEach(APIProvider.allCases, id: \.self) { provider in
+                        Text("- \(provider.rawValue)")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
                 } else {
                     // Map dictionary to array
                     let keysArray = store.keys.map { $0 }.sorted { $0.key.rawValue < $1.key.rawValue }
