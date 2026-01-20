@@ -158,26 +158,23 @@ actor ReportScheduler {
 
     private func shouldGenerateDailyReport() -> Bool {
         let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: Date())
         let weekday = calendar.component(.weekday, from: Date())
-
-        // Hafta içi (Pazartesi-Cuma) ve saat 18-22 arası
+        
+        // Hafta içi (Pazartesi-Cuma) - saat kısıtı yok, rapor her saat oluşturulabilir
         let isWeekday = weekday >= 2 && weekday <= 6
-        let isAfterMarketClose = hour >= 18 && hour <= 22
-
-        return isWeekday && isAfterMarketClose
+        
+        return isWeekday
     }
-
+    
     private func shouldGenerateWeeklyReport() -> Bool {
         let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: Date())
         let weekday = calendar.component(.weekday, from: Date())
-
-        // Cuma (weekday = 6) ve saat 18-22 arası
-        let isFriday = weekday == 6
-        let isAfterMarketClose = hour >= 18 && hour <= 22
-
-        return isFriday && isAfterMarketClose
+        
+        // Hafta içi (Pazartesi-Cuma) - saat kısıtı yok, rapor her saat oluşturulabilir
+        // Not: Piyasa alım-satım timing'i ayrıdır
+        let isWeekday = weekday >= 2 && weekday <= 6
+        
+        return isWeekday
     }
 
     // MARK: - Report Generation

@@ -104,6 +104,13 @@ struct Algo_TradingApp: App {
                             
                             // 🧹 Argus Cleanup: Start periodic aggressive cleanup
                             startAutomaticCleanup()
+                            
+                            // 📅 ReportScheduler: Otomatik rapor oluşturmayı başlat (sistem rahatladıktan sonra)
+                            Task.detached(priority: .background) {
+                                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 saniye bekle
+                                await ReportScheduler.shared.start()
+                                print("📅 ReportScheduler: Başlatıldı (5 saniye gecikme)")
+                            }
                         }
                 } else {
                     DisclaimerView()
