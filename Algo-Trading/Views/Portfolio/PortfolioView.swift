@@ -40,23 +40,22 @@ struct PortfolioView: View {
                 Theme.background.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // 1. LIQUID DASHBOARD HEADER (Unified)
-                    LiquidDashboardHeader(
-                        viewModel: viewModel,
-                        selectedMarket: $selectedMarket,
-                        onBrainTap: { showTradeBrain = true },
-                        onHistoryTap: { showHistory = true }
-                    )
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-                    .padding(.bottom, 16)
-                    
-                    // 2. CONTENT SCROLL
+                // 2. CONTENT SCROLL
                     ScrollView {
                         VStack(spacing: 20) {
+                             // 1. HEADER (Artık ScrollView içinde)
+                            LiquidDashboardHeader(
+                                viewModel: viewModel,
+                                selectedMarket: $selectedMarket,
+                                onBrainTap: { showTradeBrain = true },
+                                onHistoryTap: { showHistory = true }
+                            )
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                            
                             // A. REPORTS & SELECTOR
                             PortfolioReportsView(viewModel: viewModel, mode: selectedMarket)
-                                
+                            
                             if selectedMarket == .global {
                                 EngineSelector(selected: $selectedEngine)
                             }

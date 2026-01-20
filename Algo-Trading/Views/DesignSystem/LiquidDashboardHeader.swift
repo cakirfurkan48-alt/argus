@@ -37,63 +37,68 @@ struct LiquidDashboardHeader: View {
     }
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // A. BACKGROUND (Liquid Effect)
+        ZStack(alignment: .top) { // Bottom yerine Top alignment
+            // A. BACKGROUND (Liquid Effect) - Daha kompakt
             LiquidEffectView(
                 color: themeColor,
-                intensity: isBist ? 0.8 : 0.6 // BIST biraz daha yoğun
+                intensity: isBist ? 0.8 : 0.6
             )
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .shadow(color: themeColor.opacity(0.3), radius: 20, x: 0, y: 10)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous)) // Yuvarlatma azaltıldı
+            .shadow(color: themeColor.opacity(0.2), radius: 15, x: 0, y: 8)
             
             // B. CONTENT LAYER
-            VStack(spacing: 20) {
+            VStack(spacing: 16) { // Spacing azaltıldı
                 // 1. Top Control Bar (Market Switcher & Buttons)
                 HStack {
-                    // Custom Glass Segmented Control
+                    // Custom Glass Segmented Control - Daha ince
                     HStack(spacing: 0) {
-                        marketToggle(title: "Global 🌎", mode: .global)
-                        marketToggle(title: "BIST 🇹🇷", mode: .bist)
+                        marketToggle(title: "Global", mode: .global)
+                        marketToggle(title: "BIST", mode: .bist)
                     }
-                    .padding(4)
+                    .padding(3)
                     .background(Material.ultraThinMaterial)
                     .clipShape(Capsule())
                     .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
                     
                     Spacer()
                     
-                    // Action Buttons
+                    // Action Buttons - Biraz daha küçük
                     HStack(spacing: 8) {
                         glassIconButton(icon: "brain.head.profile", action: onBrainTap)
                         glassIconButton(icon: "clock.arrow.circlepath", action: onHistoryTap)
                     }
                 }
                 
-                Spacer().frame(height: 10)
-                
                 // 2. Main Balance (Center)
-                VStack(spacing: 6) {
-                    Text(isBist ? "BIST PORTFÖY DEĞERİ" : "TOPLAM VARLIK")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(2)
-                        .foregroundColor(Color.white.opacity(0.6))
+                VStack(spacing: 4) {
+                    Text(isBist ? "BIST DEĞERİ" : "TOPLAM VARLIK")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .tracking(1.5)
+                        .foregroundColor(Color.white.opacity(0.7))
                     
+                    // Ana Bakiye - Küçültüldü (48 -> 36)
                     Text("\(currencySymbol)\(String(format: "%.0f", equity))")
-                        .font(.system(size: 48, weight: .black, design: .rounded))
+                        .font(.system(size: 36, weight: .black, design: .rounded))
                         .foregroundColor(.white)
-                        .shadow(color: themeColor.opacity(0.5), radius: 15)
+                        .shadow(color: themeColor.opacity(0.3), radius: 10)
                 }
                 
-                // 3. Stats Grid
-                HStack(spacing: 20) {
+                // 3. Stats Grid (3 Columns)
+                HStack(spacing: 12) {
+                    // Nakit
                     statPill(title: "NAKİT", value: balance, color: .white.opacity(0.9))
+                    
+                    // Net K/Z (Toplam)
                     statPill(title: "NET K/Z", value: realized + unrealized, color: (realized + unrealized) >= 0 ? Theme.positive : Theme.negative)
+                    
+                    // Anlık K/Z (Unrealized) - YENİ
+                    statPill(title: "ANLIK", value: unrealized, color: unrealized >= 0 ? Theme.positive : Theme.negative)
                 }
-                .padding(.bottom, 10)
+                .padding(.bottom, 8)
             }
-            .padding(24)
+            .padding(16) // Padding azaltıldı
         }
-        .frame(height: 280) // Biraz daha uzun, çünkü kontroller içinde
+        // Sabit frame height kaldırıldı, içeriğe göre şekil alacak
     }
     
     // MARK: - Subviews
