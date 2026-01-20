@@ -37,24 +37,41 @@ class TradeBrainExecutor: ObservableObject {
     ) async {
         guard isEnabled else { return }
         
+        print("⚖️ TradeBrainExecutor: \(decisions.count) karar değerlendiriliyor...")
+        
         let openTrades = portfolio.filter { $0.isOpen }
         let openSymbols = Set(openTrades.map { $0.symbol })
         
+        print("📦 TradeBrainExecutor: \(openSymbols.count) açık pozisyon")
+        
+        var processedCount = 0
+        var skippedCooldown = 0
+        var skippedNoPrice = 0
+        
         for (symbol, decision) in decisions {
+            processedCount += 1
+            
             // Cooldown kontrolü
             if let lastTime = lastExecutionTime[symbol],
                Date().timeIntervalSince(lastTime) < cooldownSeconds {
+                skippedCooldown += 1
                 continue
             }
             
             let currentPrice = quotes[symbol]?.currentPrice ?? 0
-            guard currentPrice > 0 else { continue }
+            guard currentPrice > 0 else { 
+                skippedNoPrice += 1
+                continue 
+            }
             
             let hasOpenPosition = openSymbols.contains(symbol)
+            
+            print("💡 TradeBrainExecutor: \(symbol) - Action: \(decision.action.rawValue), OpenPos: \(hasOpenPosition)")
             
             // ALIM KARARLARI
             if !hasOpenPosition {
                 if decision.action == .aggressiveBuy || decision.action == .accumulate {
+                    print("✅ TradeBrainExecutor: ALIM yapılıyor: \(symbol)")
                     await executeBuy(
                         symbol: symbol,
                         decision: decision,
@@ -66,7 +83,11 @@ class TradeBrainExecutor: ObservableObject {
                         orionScore: orionScores[symbol]?.score ?? 50,
                         candles: candles[symbol] ?? []
                     )
+                } else {
+                    print("⚠️ TradeBrainExecutor: \(symbol) - Action \(decision.action.rawValue) alım için değil")
                 }
+            } else {
+                print("⚠️ TradeBrainExecutor: \(symbol) - Zaten açık pozisyon var, alım yapılmayacak")
             }
             
             // SATIM KARARLARI (Plan bazlı - Trade Brain)
@@ -74,6 +95,7 @@ class TradeBrainExecutor: ObservableObject {
             // Burada sadece acil durum satışları (liquidate) yapalım
             if hasOpenPosition && decision.action == .liquidate {
                 if let trade = openTrades.first(where: { $0.symbol == symbol }) {
+                    print("🔴 TradeBrainExecutor: ACİL SATIŞ: \(symbol)")
                     await executeEmergencySell(
                         trade: trade,
                         decision: decision,
@@ -82,6 +104,8 @@ class TradeBrainExecutor: ObservableObject {
                 }
             }
         }
+        
+        print("📊 TradeBrainExecutor: Özet - İşlenen: \(processedCount), Cooldown: \(skippedCooldown), Fiyat Yok: \(skippedNoPrice)")
     }
     
     // MARK: - Buy Execution
@@ -97,8 +121,12 @@ class TradeBrainExecutor: ObservableObject {
         orionScore: Double,
         candles: [Candle]
     ) async {
+        print("💰 executeBuy: \(symbol) - Fiyat: \(currentPrice)")
+        
         let isBist = symbol.hasSuffix(".IS")
         let availableBalance = isBist ? bistBalance : balance
+        
+        print("💰 executeBuy: Available Balance = \(availableBalance), isBist = \(isBist)")
         
         // 1. ALLOCATION HESAPLA
         let allocation: Double
@@ -107,13 +135,16 @@ class TradeBrainExecutor: ObservableObject {
         if isBist {
             allocation = availableBalance * 0.05  // %5
             minTradeAmount = 1000.0
+            print("💰 executeBuy: BIST Allocation = %5 of ₺\(availableBalance) = ₺\(allocation)")
         } else {
             allocation = availableBalance * 0.10  // %10
             minTradeAmount = 50.0
+            print("💰 executeBuy: Global Allocation = %10 of $\(availableBalance) = $\(allocation)")
         }
         
         guard allocation >= minTradeAmount else {
             log("⚠️ \(symbol): Yetersiz bakiye (gereken: \(minTradeAmount), mevcut: \(allocation))")
+            print("🛑 executeBuy: Yetersiz bakiye - Gereken: \(minTradeAmount), Mevcut: \(allocation)")
             return
         }
         
@@ -138,9 +169,23 @@ class TradeBrainExecutor: ObservableObject {
             totalEquity: totalEquity
         )
         
+        print("🛡️ executeBuy: Risk Check - CanTrade: \(riskCheck.canTrade), Blockers: \(riskCheck.blockers)")
+        
         if !riskCheck.canTrade {
             log("🛑 \(symbol): Risk engeli - \(riskCheck.blockers.joined(separator: ", "))")
+            print("🛑 executeBuy: Risk engeli - \(riskCheck.blockers.joined(separator: ", "))")
             return
+        }
+        
+        // Uyarıları logla
+        for warning in riskCheck.warnings {
+            log("⚠️ \(symbol): \(warning)")
+            print("⚠️ executeBuy: \(warning)")
+        }
+        
+        if let adjustedQty = riskCheck.adjustedQuantity {
+            proposedQuantity = adjustedQty
+            print("📊 executeBuy: Quantity adjusted to \(adjustedQty)")
         }
         
         // Uyarıları logla
@@ -155,6 +200,7 @@ class TradeBrainExecutor: ObservableObject {
         // 3. GOVERNOR KONTROLÜ (YENİ - Execution Logic Centralization)
         if isBist {
             // BIST Vali (BistExecutionGovernor) Kontrolü
+            print("🇹🇷 executeBuy: BIST Vali kontrolü yapılıyor...")
             if let bistDecision = decision.bistDetails {
                 let snapshot = BistExecutionGovernor.shared.audit(
                     decision: bistDecision,
@@ -164,24 +210,34 @@ class TradeBrainExecutor: ObservableObject {
                     lastTradeTime: nil // Executor zaten cooldown kontrolü yapıyor
                 )
                 
+                print("🇹🇷 executeBuy: BIST Vali kararı - Action: \(snapshot.action), Reason: \(snapshot.reason)")
+                
                 if snapshot.action != .buy {
                     log("🇹🇷 BIST Vali VETO: \(symbol) -> \(snapshot.reason)")
+                    print("🛑 executeBuy: BIST Vali VETO - \(snapshot.reason)")
                     return // İŞLEM İPTAL
                 } else {
                     log("🇹🇷 BIST Vali ONAY: \(symbol)")
+                    print("✅ executeBuy: BIST Vali ONAY")
                 }
             } else {
                 log("⚠️ \(symbol): BIST detayı eksik, Vali kontrolü atlanıyor.")
+                print("⚠️ executeBuy: BIST detayı eksik")
             }
         }
         
         // 3. TAKVİM KONTROLÜ
+        print("📅 executeBuy: Takvim kontrolü yapılıyor...")
         let eventRisk = EventCalendarService.shared.assessPositionRisk(symbol: symbol)
+        
+        print("📅 executeBuy: Event Risk - ShouldAvoid: \(eventRisk.shouldAvoidNewPosition)")
         
         if eventRisk.shouldAvoidNewPosition {
             log("📅 \(symbol): Takvim engeli - Yaklaşan kritik olay")
+            print("🛑 executeBuy: Takvim engeli")
             for warning in eventRisk.warnings {
                 log("   ⚠️ \(warning)")
+                print("   ⚠️ \(warning)")
             }
             return
         }
@@ -213,17 +269,23 @@ class TradeBrainExecutor: ObservableObject {
             scores: (scores.atlas, scores.orion, scores.aether, nil)
         )
         
+        print("🛡️ executeBuy: ExecutionGovernor karar bekleniyor...")
+        
         switch governorDecision {
         case .approved(_, let adjustedQty):
             proposedQuantity = adjustedQty
+            print("✅ executeBuy: ExecutionGovernor ONAY - Quantity: \(adjustedQty)")
             
         case .rejected(let reason):
             log("🛡️ \(symbol): Governor VETO - \(reason)")
+            print("🛑 executeBuy: ExecutionGovernor VETO - \(reason)")
             return
         }
         
         // 5. ALIM YAP - Notification ile TradingViewModel'e bildir
         // Not: TradingViewModel.shared kullanılamıyor, NotificationCenter ile çözüyoruz
+        print("📨 executeBuy: Notification gönderiliyor - Symbol: \(symbol), Qty: \(proposedQuantity), Price: \(currentPrice)")
+        
         NotificationCenter.default.post(
             name: .tradeBrainBuyOrder,
             object: nil,
@@ -237,8 +299,11 @@ class TradeBrainExecutor: ObservableObject {
         log("✅ \(symbol): ALIM - \(String(format: "%.2f", proposedQuantity)) adet @ \(String(format: "%.2f", currentPrice))")
         log("   📋 Karar: \(decision.action.rawValue) (\(String(format: "%.0f", decision.confidence * 100))%)")
         
+        print("✅ executeBuy: ALIM EMRİ GÖNDERİLDİ - \(symbol): \(proposedQuantity) @ \(currentPrice)")
+        
         // Cooldown ayarla
         lastExecutionTime[symbol] = Date()
+        print("⏱️ executeBuy: Cooldown ayarlandı - \(symbol)")
     }
     
     // MARK: - Emergency Sell (Liquidate Only)

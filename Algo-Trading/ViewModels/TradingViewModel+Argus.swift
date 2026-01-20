@@ -999,7 +999,7 @@ extension TradingViewModel {
     }
     
     func hydrateAtlas() async {
-        print("🏛️ Atlas: Hydrating Fundamentals for \(watchlist.count) symbols...")
+        ArgusLogger.phase(.atlas, "Temel Analiz: \(watchlist.count) sembol işleniyor...")
         
         let now = Date()
         var symbolsToHydrate: [String] = []
@@ -1016,11 +1016,11 @@ extension TradingViewModel {
         }
         
         if symbolsToHydrate.isEmpty {
-            print("🏛️ Atlas: Tüm veriler güncel, hydration atlandı.")
+            ArgusLogger.info(.atlas, "Tüm veriler güncel (önbellek valid)")
             return
         }
         
-        print("🏛️ Atlas: \(symbolsToHydrate.count) sembol güncellenmeli")
+        ArgusLogger.info(.atlas, "\(symbolsToHydrate.count) sembol güncellenecek")
         
         // 2. Batch halinde işle (5'er sembol - Yahoo rate limit hassasiyeti)
         let batchSize = 5
@@ -1040,14 +1040,13 @@ extension TradingViewModel {
                 }
             }
             
-            hydratedCount += batch.count
-            print("🏛️ Atlas: Paket \(batchIndex + 1)/\(batches.count) tamamlandı (\(hydratedCount)/\(symbolsToHydrate.count))")
+            ArgusLogger.batchProgress(module: .atlas, batch: batchIndex + 1, totalBatches: batches.count, processed: hydratedCount, total: symbolsToHydrate.count)
             
             // Rate limit için kısa bekleme (Yahoo 429 önlemi)
             try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
         }
         
-        print("🏛️ Atlas: Hydration Complete. Processed \(hydratedCount) symbols.")
+        ArgusLogger.complete("Atlas Temel Analiz tamamlandı (\(hydratedCount) sembol)")
     }
     
     // MARK: - Widget Integration
@@ -1093,7 +1092,7 @@ extension TradingViewModel {
     /// Athena faktör analizini çalıştır ve sonucu kaydet
     func loadAthena(for symbol: String) async {
         guard let candles = self.candles[symbol], candles.count >= 50 else {
-            print("⚠️ Athena: Yetersiz veri - \(symbol)")
+            ArgusLogger.warning(.argus, "Athena: Yetersiz veri - \(symbol)")
             return
         }
         
@@ -1119,18 +1118,18 @@ extension TradingViewModel {
             SignalStateViewModel.shared.athenaResults[symbol] = athenaResult
         }
         
-        print("🧠 Athena: \(symbol) analizi tamamlandı - Skor: \(athenaResult.factorScore)")
+        ArgusLogger.success(.argus, "Athena: \(symbol) analizi tamamlandı - Skor: \(athenaResult.factorScore)")
     }
     
     // MARK: - Demeter (Sector Analysis)
     
     /// Global sektör analizini çalıştır
     func loadDemeterSectorAnalysis() async {
-        print("🌾 Demeter: Sektör analizi başlatılıyor...")
+        ArgusLogger.phase(.argus, "Demeter: Sektör analizi başlatılıyor...")
         
         await DemeterEngine.shared.analyze()
         
-        print("🌾 Demeter: Sektör analizi tamamlandı")
+        ArgusLogger.success(.argus, "Demeter: Sektör analizi tamamlandı")
     }
     
     /// Belirli bir sembol için Demeter skoru al (sektör bazlı)

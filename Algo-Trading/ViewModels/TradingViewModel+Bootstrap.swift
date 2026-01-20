@@ -21,7 +21,7 @@ extension TradingViewModel {
         defer { 
             signpost.end(log: signpost.startup, name: "BOOTSTRAP", id: id) 
             let duration = Date().timeIntervalSince(startTime)
-            print("🚀 BOOTSTRAP FINISHED in \(String(format: "%.3f", duration))s")
+            ArgusLogger.bootstrapComplete(seconds: duration)
             Task { @MainActor in DiagnosticsViewModel.shared.recordBootstrapDuration(duration) }
         }
         
@@ -39,7 +39,7 @@ extension TradingViewModel {
         // Setup SSoT Bindings (Memory - hızlı)
         setupStoreBindings()
         
-        print("🚀 Phase 1: UI Ready (persisted data loaded)")
+        ArgusLogger.success(.bootstrap, "Faz 1: UI hazır")
         
         // PHASE 2: GECİKTİRİLMİŞ - Ağır işlemler background'da
         // ---------------------------------------------------------
@@ -57,7 +57,7 @@ extension TradingViewModel {
                 self.isLiveMode = true
                 
                 // Connect Stream for Watchlist
-                print("🔌 Bootstrap Phase 2: Connecting Stream...")
+                ArgusLogger.phase(.veri, "Faz 2: Stream bağlanıyor...")
                 self.marketDataProvider.connectStream(symbols: self.watchlist)
             }
         }
@@ -72,14 +72,17 @@ extension TradingViewModel {
                 guard let self = self else { return }
                 
                 // Start Scout Loop
-                print("🚀 Bootstrap Phase 3: Starting Scout Loop...")
+                ArgusLogger.phase(.autopilot, "Faz 3: Scout döngüsü başlatılıyor...")
                 self.startScoutLoop()
-                
-                // Start Auto-Pilot Loop if enabled
-                self.startAutoPilotLoop()
                 
                 // Start Watchlist Loop (Polling Backup)
                 self.startWatchlistLoop()
+                
+                // Start Auto-Pilot Loop (Delayed 3s to reduce network burst)
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    self.startAutoPilotLoop()
+                }
             }
         }
         
@@ -91,7 +94,7 @@ extension TradingViewModel {
             
             guard let self = self else { return }
             
-            print("🚀 Bootstrap Phase 4: Starting Atlas/Demeter...")
+            ArgusLogger.phase(.atlas, "Faz 4: Atlas/Demeter başlatılıyor...")
             await self.hydrateAtlas()
             await self.runDemeterAnalysis()
             
@@ -101,7 +104,7 @@ extension TradingViewModel {
             await QuotaLedger.shared.reset(provider: "Yahoo Finance")
         }
         
-        print("🚀 TradingViewModel Bootstrap Queued (Lazy Loading Active)")
+        ArgusLogger.info(.bootstrap, "Lazy loading aktif")
     }
     
 
@@ -113,7 +116,7 @@ extension TradingViewModel {
         let spanId = SignpostLogger.shared.begin(log: SignpostLogger.shared.ui, name: "LoadData")
         
         Task {
-             print("🚀 Starting Parallel Data Load...")
+             ArgusLogger.phase(.veri, "Paralel veri yüklemesi...")
              
              // 1. High Priority: Prices (Watchlist + Safe Cards)
              // Run concurrently

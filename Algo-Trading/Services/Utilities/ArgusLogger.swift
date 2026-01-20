@@ -111,6 +111,7 @@ actor ArgusLogger {
         return recentLogs
     }
     
+
     func clearLogs() {
         recentLogs.removeAll()
     }
@@ -123,4 +124,79 @@ struct ArgusLogEntry: Identifiable, Sendable {
     let category: String
     let message: String
     let metadata: [String: String]?
+}
+
+// MARK: - Legacy / Simplified Static API
+extension ArgusLogger {
+    // MARK: - Modüller
+    enum Module: String {
+        case bootstrap = "BAŞLATMA"
+        case portfoy = "PORTFÖY"
+        case fiyat = "FİYAT"
+        case atlas = "ATLAS"
+        case aether = "AETHER"
+        case autopilot = "OTOPİLOT"
+        case chiron = "CHIRON"
+        case orion = "ORION"
+        case argus = "ARGUS"
+        case heimdall = "HEIMDALL"
+        case veri = "VERİ"
+    }
+    
+    // MARK: - Static Log Methods (Direct Print)
+    
+    static func header(_ text: String) {
+        print("═══════════════════════════════════════")
+        print(text)
+        print("═══════════════════════════════════════")
+    }
+    
+    static func phase(_ module: Module, _ message: String) {
+        print("⏳ [\(module.rawValue)] \(message)")
+    }
+    
+    static func progress(_ module: Module, _ current: Int, _ total: Int, _ extra: String = "") {
+        let pct = total > 0 ? Int(Double(current) / Double(total) * 100) : 0
+        let extraText = extra.isEmpty ? "" : " - \(extra)"
+        print("   ▸ \(current)/\(total) (%\(pct))\(extraText)")
+    }
+    
+    static func success(_ module: Module, _ message: String) {
+        print("   ✓ [\(module.rawValue)] \(message)")
+    }
+    
+    static func warning(_ module: Module, _ message: String) {
+        print("   ⚠️ [\(module.rawValue)] \(message)")
+    }
+    
+    static func error(_ module: Module, _ message: String) {
+        print("   ❌ [\(module.rawValue)] \(message)")
+    }
+    
+    static func info(_ module: Module, _ message: String) {
+        print("   ℹ️ [\(module.rawValue)] \(message)")
+    }
+    
+    static func complete(_ message: String) {
+        print("✅ \(message)")
+    }
+    
+    static func bootstrapComplete(seconds: Double) {
+        print("")
+        header("✅ ARGUS HAZIR (\(String(format: "%.1f", seconds))s)")
+    }
+    
+    static func watchlist(count: Int) {
+         print("📋 İzleme Listesi: \(count) sembol")
+    }
+    
+    static func bakiye(usd: Double, tryAmount: Double) {
+        let usdStr = usd >= 1000 ? String(format: "$%.0fK", usd / 1000) : String(format: "$%.0f", usd)
+        let tryStr = tryAmount >= 1000 ? String(format: "₺%.0fK", tryAmount / 1000) : String(format: "₺%.0f", tryAmount)
+        print("💵 Bakiye: \(usdStr) | \(tryStr)")
+    }
+    
+    static func batchProgress(module: Module, batch: Int, totalBatches: Int, processed: Int, total: Int) {
+        print("   ▸ Paket \(batch)/\(totalBatches) (\(processed)/\(total))")
+    }
 }

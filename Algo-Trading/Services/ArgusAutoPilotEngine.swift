@@ -156,6 +156,9 @@ final class ArgusAutoPilotEngine: Sendable {
             if totalWeight > 0 {
                 overallScore = weightedSum / totalWeight
             }
+            // ArgusLogger.verbose(.autopilot, "Argus Skoru Hesaplandı (\(symbol)): \(Int(overallScore)) (Orion: \(Int(orionScore ?? 0)), Atlas: \(Int(atlasScore ?? 0)), Aether: \(Int(aetherRating?.numericScore ?? 0)))")
+        } else {
+             // ArgusLogger.verbose(.autopilot, "Mevcut Argus Skoru (\(symbol)): \(Int(overallScore))")
         }
         
         // ----------------------------------------------------------------

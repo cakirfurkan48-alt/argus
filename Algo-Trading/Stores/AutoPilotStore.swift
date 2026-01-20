@@ -37,6 +37,7 @@ final class AutoPilotStore: ObservableObject {
     
     func startAutoPilotLoop() {
         print("🤖 AutoPilotStore: Starting Loop...")
+        self.isAutoPilotEnabled = true // Force enable explicitly
         startTimer()
     }
     
@@ -56,6 +57,11 @@ final class AutoPilotStore: ObservableObject {
     
     private func startTimer() {
         autoPilotTimer?.invalidate()
+        
+        print("🚀 AutoPilotStore: Timer başlatılıyor...")
+        print("📊 AutoPilotStore: isAutoPilotEnabled = \(isAutoPilotEnabled)")
+        print("📋 AutoPilotStore: Watchlist count = \(WatchlistStore.shared.items.count)")
+        
         autoPilotTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
             Task { [weak self] in
                 await self?.runAutoPilot()
@@ -72,6 +78,8 @@ final class AutoPilotStore: ObservableObject {
     func runAutoPilot() async {
         guard isAutoPilotEnabled else { return }
         
+        print("🔄 AutoPilotStore: runAutoPilot başlatılıyor...")
+        
         let symbols = WatchlistStore.shared.items
         
         // Prepare Quotes Map
@@ -84,12 +92,21 @@ final class AutoPilotStore: ObservableObject {
         let equity = portfolioStore.getGlobalEquity(quotes: simpleQuotes)
         let bistEquity = portfolioStore.getBistEquity(quotes: simpleQuotes)
         
+        print("💰 AutoPilotStore: Bakiye - Global: $\(balance), BIST: ₺\(bistBalance)")
+        print("💎 AutoPilotStore: Equity - Global: $\(equity), BIST: ₺\(bistEquity)")
+        print("📋 AutoPilotStore: \(symbols.count) sembol taranacak...")
+        
         // Build Portfolio Map
         var portfolioMap: [String: Trade] = [:]
         for trade in portfolio where trade.isOpen {
             if portfolioMap[trade.symbol] == nil {
                 portfolioMap[trade.symbol] = trade
             }
+        }
+        if portfolioMap.isEmpty {
+            ArgusLogger.warning(.autopilot, "Hiç açık pozisyon yok, portföy boş.")
+        } else {
+             ArgusLogger.info(.autopilot, "Açık pozisyon sayısı: \(portfolioMap.count)")
         }
         
         // 1. Get Signals (Argus Engine) - Offload to Background
@@ -107,6 +124,12 @@ final class AutoPilotStore: ObservableObject {
         let signals = results.signals
         let logs = results.logs
         
+        if !signals.isEmpty {
+            ArgusLogger.success(.autopilot, "Tespit edilen sinyal sayısı: \(signals.count)")
+        } else {
+            ArgusLogger.info(.autopilot, "Yeni sinyal bulunamadı.")
+        }
+        
         if !signals.isEmpty || !logs.isEmpty {
             await MainActor.run {
                 // Update UI State
@@ -120,6 +143,8 @@ final class AutoPilotStore: ObservableObject {
                 // Process Buy Signals -> Grand Council -> Executor
                 self.processSignals(signals)
             }
+        } else {
+            print("⚠️ AutoPilotStore: Hiç sinyal veya log yok!")
         }
     }
     
@@ -141,10 +166,20 @@ final class AutoPilotStore: ObservableObject {
 
     @MainActor
     private func processSignals(_ signals: [TradeSignal]) {
+        print("🔍 AutoPilotStore: Toplam \(signals.count) sinyal işleniyor...")
+        print("📊 Sinyal detayları: \(signals.map { "\($0.symbol): \($0.action)" })")
+        
         Task {
+            var buyCount = 0
             for signal in signals where signal.action == .buy {
+                buyCount += 1
+                ArgusLogger.info(.autopilot, "💡 BUY sinyali bulundu: \(signal.symbol) - \(signal.reason)")
+                
                 // Skip if decision exists
-                if SignalStateViewModel.shared.grandDecisions[signal.symbol] != nil { continue }
+                if SignalStateViewModel.shared.grandDecisions[signal.symbol] != nil { 
+                    print("⏭️ Mevcut karar var, atlanıyor: \(signal.symbol)")
+                    continue 
+                }
                 
                 // BIST Check
                 if signal.symbol.uppercased().hasSuffix(".IS") {
@@ -180,19 +215,36 @@ final class AutoPilotStore: ObservableObject {
                 print("🏛️ AutoPilotStore: Grand Council Decision for \(signal.symbol): \(decision.action.rawValue)")
             }
             
-            // Execute Decisions (Trade Brain)
-            // Note: We need to access 'quotes'. MarketDataStore has them but TradeBrain might need a map.
-             let simpleQuotes = MarketDataStore.shared.liveQuotes
-             
-             await TradeBrainExecutor.shared.evaluateDecisions(
-                 decisions: SignalStateViewModel.shared.grandDecisions,
-                 portfolio: self.portfolioStore.trades,
-                 quotes: simpleQuotes,
-                 balance: self.portfolioStore.globalBalance,
-                 bistBalance: self.portfolioStore.bistBalance,
-                 orionScores: [:], // TODO: Populate if needed
-                 candles: [:] // TradeBrain logic might need updating to pull from Store if candles missing
-             )
+             // Execute Decisions (Trade Brain)
+             // Note: We need to access 'quotes'. MarketDataStore has them but TradeBrain might need a map.
+              let simpleQuotes = MarketDataStore.shared.liveQuotes
+              
+              // Prepare Orion Scores & Candles for Governance
+              var orionScoresMap: [String: OrionScoreResult] = [:]
+              var candlesMap: [String: [Candle]] = [:]
+              
+              for (symbol, _) in SignalStateViewModel.shared.grandDecisions {
+                  if let score = SignalStateViewModel.shared.orionScores[symbol] {
+                      orionScoresMap[symbol] = score
+                  } else {
+                      // Attempt lazy calculate if missing? Or rely on defaults
+                      // For now, let TradeExecutor default to 50 if missing
+                  }
+                  
+                  if let cVal = MarketDataStore.shared.candles[symbol], let candles = cVal.value {
+                      candlesMap[symbol] = candles
+                  }
+              }
+              
+              await TradeBrainExecutor.shared.evaluateDecisions(
+                  decisions: SignalStateViewModel.shared.grandDecisions,
+                  portfolio: self.portfolioStore.trades,
+                  quotes: simpleQuotes,
+                  balance: self.portfolioStore.globalBalance,
+                  bistBalance: self.portfolioStore.bistBalance,
+                  orionScores: orionScoresMap,
+                  candles: candlesMap
+              )
              
              // Check Plan Triggers
              await self.checkPlanTriggers()

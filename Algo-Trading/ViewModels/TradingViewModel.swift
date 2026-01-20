@@ -819,7 +819,7 @@ class TradingViewModel: ObservableObject {
             Array(symbols[$0..<min($0 + batchSize, symbols.count)])
         }
         
-        print("📦 Terminal Bootstrap: \(symbols.count) sembol, \(batches.count) paket")
+        ArgusLogger.header("📦 Terminal Bootstrap: \(symbols.count) sembol, \(batches.count) paket")
         
         for (batchIndex, batch) in batches.enumerated() {
             // Her batch için paralel yükleme
@@ -836,13 +836,13 @@ class TradingViewModel: ObservableObject {
                 self.refreshTerminal()
             }
             
-            print("📦 Paket \(batchIndex + 1)/\(batches.count) tamamlandı")
+            ArgusLogger.batchProgress(module: .argus, batch: batchIndex + 1, totalBatches: batches.count, processed: min((batchIndex + 1) * batchSize, symbols.count), total: symbols.count)
             
             // UI'ın nefes alması için kısa yield
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
         }
         
-        print("✅ Terminal Bootstrap tamamlandı")
+        ArgusLogger.complete("Terminal Bootstrap tamamlandı")
     }
     
     /// Tek bir sembol için tüm verileri yükle (batch tarafından çağrılır)
@@ -1033,7 +1033,7 @@ class TradingViewModel: ObservableObject {
         
         guard validation.isValid else {
             let errorMessage = validation.error?.localizedDescription ?? "Bilinmeyen hata"
-            print("🛑 İŞLEM REDDEDİLDİ: \(errorMessage)")
+            ArgusLogger.error(.portfoy, "İŞLEM REDDEDİLDİ: \(errorMessage)")
             self.lastAction = "🛑 \(errorMessage)"
             return
         }
@@ -1054,7 +1054,7 @@ class TradingViewModel: ObservableObject {
             
             // Check Lock
             if snapshot.locks.isLocked {
-                print("🛑 AGORA BLOCKED BUY: \(snapshot.reasonOneLiner)")
+                ArgusLogger.warning(.autopilot, "AGORA BLOCKED BUY: \(snapshot.reasonOneLiner)")
                 self.lastAction = "⚠️ İşlem Engellendi: \(snapshot.reasonOneLiner)"
                 ExecutionStateViewModel.shared.addAgoraSnapshot(snapshot) // Log the rejection
                 return // ABORT TRADE
@@ -1335,7 +1335,7 @@ class TradingViewModel: ObservableObject {
         
         guard validation.isValid else {
             let errorMessage = validation.error?.localizedDescription ?? "Bilinmeyen hata"
-            print("🛑 SATIŞ REDDEDİLDİ: \(errorMessage)")
+            ArgusLogger.error(.portfoy, "SATIŞ REDDEDİLDİ: \(errorMessage)")
             self.lastAction = "🛑 \(errorMessage)"
             return
         }
@@ -1352,7 +1352,7 @@ class TradingViewModel: ObservableObject {
             )
             
             if snapshot.locks.isLocked {
-                 print("🛑 AGORA BLOCKED SELL: \(snapshot.reasonOneLiner)")
+                 ArgusLogger.warning(.autopilot, "AGORA BLOCKED SELL: \(snapshot.reasonOneLiner)")
                  self.lastAction = "⚠️ İşlem Engellendi: \(snapshot.reasonOneLiner)"
                  ExecutionStateViewModel.shared.addAgoraSnapshot(snapshot)
                  return
@@ -1375,7 +1375,7 @@ class TradingViewModel: ObservableObject {
         }
         
         // GHOST BUSTER: Explicit Log
-        print("👻 GHOST BUSTER: Selling \(symbol). Reason: \(reason ?? "Unknown"). Price: \(price). Source: \(source).")
+        ArgusLogger.info(.portfoy, "GHOST BUSTER: Satılıyor \(symbol). Sebep: \(reason ?? "Bilinmiyor"). Fiyat: \(price). Kaynak: \(source).")
         
         let currencySymbol = isBist ? "₺" : "$"
         self.lastAction = "Satıldı: \(String(format: "%.2f", quantity))x \(symbol) (Net: \(currencySymbol)\(String(format: "%.2f", netRevenue)))"
@@ -1426,7 +1426,7 @@ class TradingViewModel: ObservableObject {
                             regime: nil
                         )
                         await ChironDataLakeService.shared.logTrade(record)
-                        print("🧠 Chiron: Trade logged for learning - \(symbol) \(pnlPercent > 0 ? "WIN" : "LOSS")")
+                        ArgusLogger.info(.chiron, "Trade öğrenme için kaydedildi - \(symbol) \(pnlPercent > 0 ? "WIN" : "LOSS")")
                         
                         // 🆕 OTOMATİK ÖĞRENME TETİKLE - Her 3 trade'de 1 analiz
                         Task {
@@ -1464,7 +1464,7 @@ class TradingViewModel: ObservableObject {
                     )
                     Task {
                         await ChironDataLakeService.shared.logTrade(record)
-                        print("🧠 Chiron: Partial trade logged - \(symbol) \(pnlPercent > 0 ? "WIN" : "LOSS")")
+                        ArgusLogger.info(.chiron, "Partial trade kaydedildi - \(symbol) \(pnlPercent > 0 ? "WIN" : "LOSS")")
                     }
                     
                     // Modify current to be "Sold"
@@ -1566,7 +1566,7 @@ class TradingViewModel: ObservableObject {
                 outcome: outcome,
                 pnlPercent: pnlPercent
             )
-            print("📚 Chiron Öğrenme: \(symbol) \(outcome.rawValue) (\(String(format: "%.2f", pnlPercent))%)")
+            ArgusLogger.info(.chiron, "Öğrenme: \(symbol) \(outcome.rawValue) (\(String(format: "%.2f", pnlPercent))%)")
         }
     }
     }
