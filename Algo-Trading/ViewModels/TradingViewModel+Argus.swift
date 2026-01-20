@@ -1002,29 +1002,51 @@ extension TradingViewModel {
         print("🏛️ Atlas: Hydrating Fundamentals for \(watchlist.count) symbols...")
         
         let now = Date()
+        var symbolsToHydrate: [String] = []
+        
+        // 1. Önce hangi sembollerin güncellenmesi gerektiğini belirle
+        for symbol in watchlist {
+            if let score = fundamentalScoreStore.getScore(for: symbol) {
+                let daysOld = Calendar.current.dateComponents([.day], from: score.date, to: now).day ?? 999
+                if daysOld < 7 {
+                    continue // Valid cache
+                }
+            }
+            symbolsToHydrate.append(symbol)
+        }
+        
+        if symbolsToHydrate.isEmpty {
+            print("🏛️ Atlas: Tüm veriler güncel, hydration atlandı.")
+            return
+        }
+        
+        print("🏛️ Atlas: \(symbolsToHydrate.count) sembol güncellenmeli")
+        
+        // 2. Batch halinde işle (5'er sembol - Yahoo rate limit hassasiyeti)
+        let batchSize = 5
+        let batches = stride(from: 0, to: symbolsToHydrate.count, by: batchSize).map {
+            Array(symbolsToHydrate[$0..<min($0 + batchSize, symbolsToHydrate.count)])
+        }
+        
         var hydratedCount = 0
         
-        for symbol in watchlist {
-            // Smart Hydration:
-            // 1. Check if score exists
-            if let score = fundamentalScoreStore.getScore(for: symbol) {
-                // 2. Check Freshness (7 Days Stale Limit)
-                let daysOld = Calendar.current.dateComponents([.day], from: score.date, to: now).day ?? 999
-                
-                if daysOld < 7 {
-                    // Valid cache, skip
-                    continue
-                } else {
-                    print("🏛️ Atlas: Refreshing \(symbol) (Stale: \(daysOld) days)")
+        for (batchIndex, batch) in batches.enumerated() {
+            // Paralel yükleme
+            await withTaskGroup(of: Void.self) { group in
+                for symbol in batch {
+                    group.addTask { [weak self] in
+                        await self?.calculateFundamentalScore(for: symbol)
+                    }
                 }
-            } else {
-                print("🏛️ Atlas: Fetching \(symbol) (New/Missing)")
             }
             
-            // Fetch
-            await calculateFundamentalScore(for: symbol)
-            hydratedCount += 1
+            hydratedCount += batch.count
+            print("🏛️ Atlas: Paket \(batchIndex + 1)/\(batches.count) tamamlandı (\(hydratedCount)/\(symbolsToHydrate.count))")
+            
+            // Rate limit için kısa bekleme (Yahoo 429 önlemi)
+            try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
         }
+        
         print("🏛️ Atlas: Hydration Complete. Processed \(hydratedCount) symbols.")
     }
     
