@@ -146,8 +146,8 @@ struct PortfolioView: View {
                                     }
                                 } else {
                                     // BIST LIST
-                                    if !viewModel.bistPortfolio.isEmpty {
-                                        ForEach(viewModel.bistPortfolio) { trade in
+                                    if !viewModel.bistOpenPortfolio.isEmpty {
+                                        ForEach(viewModel.bistOpenPortfolio) { trade in
                                             PremiumPositionCard(
                                                 trade: trade,
                                                 currentPrice: viewModel.quotes[trade.symbol]?.currentPrice ?? trade.entryPrice,
@@ -170,7 +170,7 @@ struct PortfolioView: View {
                                         VStack(spacing: 16) {
                                             Image(systemName: "case.fill")
                                                 .font(.system(size: 48))
-                                                .foregroundColor(Color.red.opacity(0.3))
+                                                .foregroundColor(Theme.bistAccent.opacity(0.3))
                                             Text("BIST Portföyün Boş")
                                                 .font(.headline)
                                                 .foregroundColor(.white)

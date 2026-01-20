@@ -6,44 +6,44 @@ import Foundation
 
 actor BistSectorRegistry {
     static let shared = BistSectorRegistry()
-    
+
     private init() {}
-    
-    // MARK: - Sektör Sembolleri
-    
+
+    // MARK: - Sektör Sembolleri (Static - Sync erişim için)
+
     /// Bankacılık Sektörü
-    let banks = ["AKBNK", "GARAN", "ISCTR", "YKBNK", "HALKB", "VAKBN", "TSKB"]
-    
+    static let banks = ["AKBNK", "GARAN", "ISCTR", "YKBNK", "HALKB", "VAKBN", "TSKB"]
+
     /// Sınai/Sanayi Sektörü
-    let industrials = ["EREGL", "KRDMD", "TOASO", "FROTO", "TUPRS", "PETKM"]
-    
+    static let industrials = ["EREGL", "KRDMD", "TOASO", "FROTO", "TUPRS", "PETKM"]
+
     /// Holding Şirketleri
-    let holdings = ["SAHOL", "KCHOL", "DOHOL", "KOZAL", "TAVHL"]
-    
+    static let holdings = ["SAHOL", "KCHOL", "DOHOL", "KOZAL", "TAVHL"]
+
     /// Teknoloji/Bilişim Sektörü
-    let tech = ["ASELS", "LOGO", "NETAS"]
-    
+    static let tech = ["ASELS", "LOGO", "NETAS"]
+
     /// GYO (Gayrimenkul)
-    let realEstate = ["EKGYO", "ISGYO", "HLGYO"]
-    
+    static let realEstate = ["EKGYO", "ISGYO", "HLGYO"]
+
     /// Ulaştırma
-    let transportation = ["THYAO", "PGSUS"]
-    
+    static let transportation = ["THYAO", "PGSUS"]
+
     /// Enerji
-    let energy = ["AYGAZ", "AKSEN", "ODAS"]
-    
+    static let energy = ["AYGAZ", "AKSEN", "ODAS"]
+
     /// Perakende
-    let retail = ["BIMAS", "MGROS", "SOKM", "BIZIM"]
-    
+    static let retail = ["BIMAS", "MGROS", "SOKM", "BIZIM"]
+
     /// Telekomünikasyon
-    let telecom = ["TCELL", "TTKOM"]
+    static let telecom = ["TCELL", "TTKOM"]
     
     // MARK: - Sektör Mapping
     
-    /// Sembol için sektör kodunu döner
-    func sectorCode(for symbol: String) -> String? {
+    /// Sembol için sektör kodunu döner (nonisolated - sync erişim)
+    nonisolated static func sectorCode(for symbol: String) -> String? {
         let cleanSymbol = symbol.uppercased().replacingOccurrences(of: ".IS", with: "")
-        
+
         if banks.contains(cleanSymbol) { return "XBANK" }
         if industrials.contains(cleanSymbol) { return "XUSIN" }
         if holdings.contains(cleanSymbol) { return "XHOLD" }
@@ -53,14 +53,14 @@ actor BistSectorRegistry {
         if energy.contains(cleanSymbol) { return "XELKT" }
         if retail.contains(cleanSymbol) { return "XGIDA" }
         if telecom.contains(cleanSymbol) { return "XILTM" }
-        
+
         return nil
     }
-    
-    /// Sembol için sektör adını döner
-    func sectorName(for symbol: String) -> String? {
+
+    /// Sembol için sektör adını döner (nonisolated - sync erişim)
+    nonisolated static func sectorName(for symbol: String) -> String? {
         let cleanSymbol = symbol.uppercased().replacingOccurrences(of: ".IS", with: "")
-        
+
         if banks.contains(cleanSymbol) { return "Bankacılık" }
         if industrials.contains(cleanSymbol) { return "Sınai" }
         if holdings.contains(cleanSymbol) { return "Holding" }
@@ -70,12 +70,12 @@ actor BistSectorRegistry {
         if energy.contains(cleanSymbol) { return "Enerji" }
         if retail.contains(cleanSymbol) { return "Perakende" }
         if telecom.contains(cleanSymbol) { return "Telekomünikasyon" }
-        
+
         return nil
     }
-    
-    /// Belirli bir sektördeki tüm sembolleri döner
-    func symbols(for sectorCode: String) -> [String] {
+
+    /// Belirli bir sektördeki tüm sembolleri döner (nonisolated - sync erişim)
+    nonisolated static func symbols(for sectorCode: String) -> [String] {
         switch sectorCode.uppercased() {
         case "XBANK": return banks
         case "XUSIN": return industrials
@@ -89,10 +89,10 @@ actor BistSectorRegistry {
         default: return []
         }
     }
-    
+
     /// Tüm bilinen sembolleri döner
-    var allSymbols: [String] {
-        banks + industrials + holdings + tech + realEstate + 
+    nonisolated static var allSymbols: [String] {
+        banks + industrials + holdings + tech + realEstate +
         transportation + energy + retail + telecom
     }
 }

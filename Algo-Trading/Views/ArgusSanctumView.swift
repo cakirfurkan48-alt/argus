@@ -35,7 +35,7 @@ struct ArgusSanctumView: View {
     }
     
     var bistModules: [BistModuleType] = [
-        .grafik, .bilanco, .rejim, .sirkiye, .kulis, .moneyflow // Selected active modules
+        .grafik, .bilanco, .rejim, .sirkiye, .kulis // Orbit zaten tümünü gösteriyor, ekstra eklemeye gerek yok
     ]
     var moduleCount: Double {
         Double(bistModules.count)

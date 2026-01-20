@@ -2044,8 +2044,18 @@ extension TradingViewModel {
         portfolio.filter { $0.currency == .TRY }
     }
 
+    /// BIST portföyündeki SADECE AÇIK pozisyonlar
+    var bistOpenPortfolio: [Trade] {
+        portfolio.filter { $0.currency == .TRY && $0.isOpen }
+    }
+
     var globalPortfolio: [Trade] {
         portfolio.filter { $0.currency == .USD }
+    }
+
+    /// Global portföydeki SADECE AÇIK pozisyonlar
+    var globalOpenPortfolio: [Trade] {
+        portfolio.filter { $0.currency == .USD && $0.isOpen }
     }
     
     

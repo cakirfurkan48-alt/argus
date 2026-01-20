@@ -10,7 +10,7 @@ final class AutoPilotStore: ObservableObject {
     static let shared = AutoPilotStore()
     
     // MARK: - State
-    @Published var isAutoPilotEnabled: Bool = false {
+    @Published var isAutoPilotEnabled: Bool = true {
         didSet {
             handleAutoPilotStateChange()
             // Sync with Legacy ViewModel if needed, or UI binds to this directly

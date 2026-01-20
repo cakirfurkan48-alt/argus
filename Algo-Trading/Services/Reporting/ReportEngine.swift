@@ -1,242 +1,506 @@
 import Foundation
 
 /// Generates premium quality Daily and Weekly summaries for the user.
-/// Aggregates Trade Log, Decision Trace, and Market Atmosphere.
+/// Aggregates Trade Log, Decision Trace, Market Atmosphere, and Alkindus Insights.
+/// "Aşırı öğretici" - Her rapor bir öğrenme fırsatı
 actor ReportEngine {
     static let shared = ReportEngine()
+
+    private let storagePath: URL = {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return docs.appendingPathComponent("reports")
+    }()
+
+    private init() {
+        try? FileManager.default.createDirectory(at: storagePath, withIntermediateDirectories: true)
+    }
+
+    // MARK: - Report Storage
+
+    struct StoredReport: Codable {
+        let id: UUID
+        let type: ReportType
+        let date: Date
+        let content: String
+        let metrics: ReportMetrics
+    }
+
+    struct ReportMetrics: Codable {
+        let totalTrades: Int
+        let winRate: Double
+        let totalPnL: Double
+        let topInsight: String?
+    }
+
+    enum ReportType: String, Codable {
+        case daily = "GÜNLÜK"
+        case weekly = "HAFTALIK"
+    }
+
+    /// Saves report to persistent storage
+    private func saveReport(_ report: StoredReport) async {
+        let filename = "\(report.type.rawValue)_\(ISO8601DateFormatter().string(from: report.date)).json"
+        let fileURL = storagePath.appendingPathComponent(filename)
+        guard let data = try? JSONEncoder().encode(report) else { return }
+        try? data.write(to: fileURL)
+    }
+
+    /// Gets recent reports
+    func getRecentReports(limit: Int = 10) async -> [StoredReport] {
+        guard let files = try? FileManager.default.contentsOfDirectory(at: storagePath, includingPropertiesForKeys: [.creationDateKey]) else {
+            return []
+        }
+
+        var reports: [StoredReport] = []
+        for file in files.suffix(limit) {
+            guard let data = try? Data(contentsOf: file),
+                  let report = try? JSONDecoder().decode(StoredReport.self, from: data) else { continue }
+            reports.append(report)
+        }
+        return reports.sorted { $0.date > $1.date }
+    }
     
-    private init() {}
-    
-    // MARK: - Daily Report
-    
+    // MARK: - Daily Report (Enhanced with Alkindus)
+
     func generateDailyReport(
         date: Date = Date(),
-        trades: [Transaction], // Completed transactions today
-        decisions: [AgoraTrace], // Decisions made today
+        trades: [Transaction],
+        decisions: [AgoraTrace],
         atmosphere: (aether: Double?, demeter: CorrelationMatrix?)
-    ) -> String {
-        
+    ) async -> String {
+
         let formatter = DateFormatter()
-        formatter.dateFormat = "dd MMMM yyyy"
+        formatter.dateFormat = "dd MMMM yyyy, EEEE"
         formatter.locale = Locale(identifier: "tr_TR")
         let dateStr = formatter.string(from: date)
-        
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "HH:mm"
-        let timeStr = timeFormatter.string(from: date)
-        
+
         var report = """
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ARGUS PİYASA ANALİZ RAPORU
-\(dateStr) | Kapanış Seansı
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔══════════════════════════════════════════════════════════════╗
+║              ARGUS GÜNLÜK ANALİZ RAPORU                      ║
+║              \(dateStr.padding(toLength: 35, withPad: " ", startingAt: 0))          ║
+╚══════════════════════════════════════════════════════════════╝
 
-1. MAKRO ORTAM DEĞERLENDİRMESİ (AETHER)
-───────────────────────────────────────
 """
-        
-        // 1. Atmosphere
-        if let aether = atmosphere.aether {
-            let regime: String
-            let skorKategori: String
-            if aether > 60 {
-                regime = "Risk-On"
-                skorKategori = "Olumlu"
-            } else if aether < 40 {
-                regime = "Risk-Off"
-                skorKategori = "Olumsuz"
-            } else {
-                regime = "Nötr"
-                skorKategori = "Belirsiz"
-            }
-            
-            report += """
 
-Rejim: \(regime) | Skor: \(Int(aether))/100
+        // 1. Alkindus Öğrenme Özeti
+        report += """
+┌─────────────────────────────────────────────────────────────┐
+│  [LEARN] BUGÜN ÖĞRENDİKLERİN (ALKİNDUS)                     │
+└─────────────────────────────────────────────────────────────┘
 
-   Durum: \(skorKategori)
-   
-   Yorum: Makro ortam \(regime.lowercased()) modunda.
-   \(aether > 60 ? "Risk iştahı yüksek, agresif pozisyonlar değerlendirilebilir." : (aether < 40 ? "Defansif strateji öneriliyor." : "Temkinli seyir önerilir."))
 """
+        let insights = await AlkindusInsightGenerator.shared.getTodaysInsights()
+        if insights.isEmpty {
+            report += "   Henüz yeterli veri biriktirilmedi. Alkindus öğrenmeye devam ediyor...\n"
         } else {
-            report += "\nRejim: Veri Bekleniyor"
+            for insight in insights.prefix(5) {
+                let icon = insightEmoji(for: insight.category)
+                let importance = insight.importance == .critical ? "[!]" : (insight.importance == .high ? "[*]" : "")
+                report += "   \(icon) \(importance)\(insight.title)\n"
+                report += "      └─ \(insight.detail)\n\n"
+            }
         }
-        
-        // 2. Trade Summary
+
+        // Temporal pattern advice
+        if let timeAdvice = await AlkindusTemporalAnalyzer.shared.getCurrentTimeAdvice() {
+            report += "   [TIME] Zaman Örüntüsü: \(timeAdvice)\n\n"
+        }
+
+        // 2. Makro Atmosfer
         report += """
 
+┌─────────────────────────────────────────────────────────────┐
+│  [MACRO] MAKRO ORTAM (AETHER)                               │
+└─────────────────────────────────────────────────────────────┘
 
-2. İŞLEM ÖZETİ
-───────────────────────────────────────
 """
-        
+        if let aether = atmosphere.aether {
+            let (regime, explanation) = explainRegime(score: aether)
+            report += """
+   Rejim: \(regime) | Skor: \(Int(aether))/100
+
+   [?] Ne Anlama Geliyor?
+   \(explanation)
+
+"""
+        } else {
+            report += "   Veri bekleniyor...\n\n"
+        }
+
+        // 3. İşlem Özeti
+        report += """
+┌─────────────────────────────────────────────────────────────┐
+│  [TRADE] GÜNÜN İŞLEMLERİ                                    │
+└─────────────────────────────────────────────────────────────┘
+
+"""
         let todayTrades = trades.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
         if todayTrades.isEmpty {
-            report += "\nBugün gerçekleştirilen işlem bulunmamaktadır."
+            report += "   Bugün işlem yapılmadı.\n\n"
         } else {
             let buys = todayTrades.filter { $0.type == .buy }
             let sells = todayTrades.filter { $0.type == .sell }
-            let totalVol = todayTrades.reduce(0.0) { $0 + $1.amount }
-            let hasBist = todayTrades.contains { $0.symbol.uppercased().hasSuffix(".IS") }
-            let currency = hasBist ? "TL" : "USD"
-            
+            let totalPnL = sells.compactMap { $0.pnl }.reduce(0, +)
+            let winCount = sells.filter { ($0.pnl ?? 0) > 0 }.count
+            let lossCount = sells.filter { ($0.pnl ?? 0) < 0 }.count
+            let winRate = sells.count > 0 ? Double(winCount) / Double(sells.count) * 100 : 0
+
             report += """
+   [STATS] Özet İstatistikler
+   ├─ Alım: \(buys.count) | Satım: \(sells.count)
+   ├─ Net K/Z: \(totalPnL >= 0 ? "+" : "")\(String(format: "%.2f", totalPnL))
+   └─ Başarı: %\(String(format: "%.0f", winRate)) (\(winCount)W/\(lossCount)L)
 
-   Toplam İşlem:    \(todayTrades.count)
-   Alım:            \(buys.count)
-   Satım:           \(sells.count)
-   Toplam Hacim:    \(String(format: "%.2f", totalVol)) \(currency)
-
-   Saat    Tip    Sembol        Miktar       Fiyat
-   ─────────────────────────────────────────────────
+   [LIST] Her İşlemin Detayı:
 """
-            for trade in todayTrades.prefix(10) {
-                let tip = trade.type == .buy ? "ALIM" : "SATIS"
-                let price = trade.price
-                let qty = price > 0 ? (trade.amount / price) : 0.0
-                let tradeCurrency = trade.symbol.uppercased().hasSuffix(".IS") ? "TL" : "$"
+            for trade in todayTrades.prefix(8) {
                 let timeF = DateFormatter()
                 timeF.dateFormat = "HH:mm"
-                let tradeTime = timeF.string(from: trade.date)
-                let symbolPadded = trade.symbol.padding(toLength: 10, withPad: " ", startingAt: 0)
-                report += "   \(tradeTime)   \(tip.padding(toLength: 5, withPad: " ", startingAt: 0))  \(symbolPadded)  \(String(format: "%8.2f", qty))  \(tradeCurrency)\(String(format: "%.2f", price))\n"
-            }
-        }
-        
-        // 3. Decision Engine Stats
-        report += """
+                let time = timeF.string(from: trade.date)
+                let arrow = trade.type == .buy ? "[+]" : "[-]"
+                let currency = trade.symbol.hasSuffix(".IS") ? "₺" : "$"
 
-3. KARAR MOTORU (ARGUS CORE)
-───────────────────────────────────────
+                report += "   \(time) \(arrow) \(trade.symbol.padding(toLength: 8, withPad: " ", startingAt: 0)) \(currency)\(String(format: "%.2f", trade.price))"
+
+                if trade.type == .sell, let pnl = trade.pnl {
+                    let pnlStr = pnl >= 0 ? "+\(String(format: "%.2f", pnl))" : String(format: "%.2f", pnl)
+                    report += " -> \(pnlStr)"
+                }
+                report += "\n"
+            }
+            report += "\n"
+        }
+
+        // 4. Karar Motoru Analizi
+        report += """
+┌─────────────────────────────────────────────────────────────┐
+│  [BRAIN] KARAR MOTORU ANALİZİ                               │
+└─────────────────────────────────────────────────────────────┘
+
 """
-        
         let todayDecisions = decisions.filter { Calendar.current.isDate($0.timestamp, inSameDayAs: date) }
         let approved = todayDecisions.filter { $0.finalDecision.action == .buy || $0.finalDecision.action == .sell }
-        let vetoed = todayDecisions.filter { 
-            return $0.finalDecision.action == .hold && ($0.debate.claimant?.preferredAction == .buy || $0.debate.claimant?.preferredAction == .sell)
+        let vetoed = todayDecisions.filter {
+            $0.finalDecision.action == .hold && ($0.debate.claimant?.preferredAction == .buy || $0.debate.claimant?.preferredAction == .sell)
         }
-        
-        report += """
 
-   Toplam Analiz:       \(todayDecisions.count)
-   Onaylanan Fırsat:    \(approved.count)
-   Veto Edilen:         \(vetoed.count)
+        report += """
+   Toplam Analiz: \(todayDecisions.count) | Onay: \(approved.count) | Veto: \(vetoed.count)
+
 """
-        
+
         if !vetoed.isEmpty {
-            report += """
+            report += "   [X] VETO EDİLEN İŞLEMLER (Neden yapılmadı?)\n"
+            report += "   ┌──────────┬──────┬────────────────────────────────┐\n"
+            report += "   │ Sembol   │ Yön  │ Neden                          │\n"
+            report += "   ├──────────┼──────┼────────────────────────────────┤\n"
 
-
-   VETO EDİLEN İŞLEMLER (Neden yapılmadı?)
-   ┌──────────┬────────────┬─────────────────────────┐
-   │ Sembol   │ Yön        │ Neden                   │
-   ├──────────┼────────────┼─────────────────────────┤
-"""
             for d in vetoed.prefix(5) {
-                let direction = d.debate.claimant?.preferredAction == .buy ? "Alım" : "Satış"
+                let dir = d.debate.claimant?.preferredAction == .buy ? "AL" : "SAT"
                 let reason = (!d.riskEvaluation.isApproved) ? d.riskEvaluation.reason : d.finalDecision.rationale
-                let shortReason = String(reason.prefix(23))
-                let symbolPad = d.symbol.padding(toLength: 8, withPad: " ", startingAt: 0)
-                let dirPad = direction.padding(toLength: 10, withPad: " ", startingAt: 0)
-                report += "   │ \(symbolPad) │ \(dirPad) │ \(shortReason.padding(toLength: 23, withPad: " ", startingAt: 0)) │\n"
+                let shortReason = String(reason.prefix(30))
+                report += "   │ \(d.symbol.padding(toLength: 8, withPad: " ", startingAt: 0)) │ \(dir.padding(toLength: 4, withPad: " ", startingAt: 0)) │ \(shortReason.padding(toLength: 30, withPad: " ", startingAt: 0)) │\n"
             }
-            report += "   └──────────┴────────────┴─────────────────────────┘"
+            report += "   └──────────┴──────┴────────────────────────────────┘\n\n"
+
+            report += "   [?] Neden Önemli?\n"
+            report += "      Veto edilen işlemler, sistemin sizi koruma mekanizmasıdır.\n"
+            report += "      Risk yönetimi, kar etmekten daha önemlidir.\n\n"
         }
-        
-        // 4. Closing
+
+        // 5. Eğitici Kapanış
         report += """
+┌─────────────────────────────────────────────────────────────┐
+│  [LESSON] GÜNÜN DERSİ                                       │
+└─────────────────────────────────────────────────────────────┘
 
+   \(getDailyLesson(trades: todayTrades, decisions: todayDecisions))
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Rapor Üretim: Argus Terminal
-Bu rapor yatırım tavsiyesi içermez.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+═══════════════════════════════════════════════════════════════
+                    Argus Terminal | Alkindus Öğrenme Sistemi
+                    Bu rapor yatırım tavsiyesi değildir.
+═══════════════════════════════════════════════════════════════
 """
-        
+
+        // Save report
+        let totalPnL = todayTrades.compactMap { $0.pnl }.reduce(0, +)
+        let winCount = todayTrades.filter { ($0.pnl ?? 0) > 0 }.count
+        let winRate = todayTrades.count > 0 ? Double(winCount) / Double(todayTrades.count) : 0
+
+        let stored = StoredReport(
+            id: UUID(),
+            type: .daily,
+            date: date,
+            content: report,
+            metrics: ReportMetrics(
+                totalTrades: todayTrades.count,
+                winRate: winRate,
+                totalPnL: totalPnL,
+                topInsight: insights.first?.title
+            )
+        )
+        await saveReport(stored)
+
         return report
     }
 
-    // MARK: - Weekly Report
-    
+    // MARK: - Weekly Report (Enhanced with Alkindus)
+
     func generateWeeklyReport(
         date: Date = Date(),
-        trades: [Transaction], // All trades
-        decisions: [AgoraTrace] // All decisions
-    ) -> String {
+        trades: [Transaction],
+        decisions: [AgoraTrace]
+    ) async -> String {
         let calendar = Calendar.current
-        // Find start of week (Monday)
         let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)) ?? date
         let weekEnd = date
-        
+
         let formatter = DateFormatter()
         formatter.dateFormat = "dd MMM"
         formatter.locale = Locale(identifier: "tr_TR")
         let rangeStr = "\(formatter.string(from: weekStart)) - \(formatter.string(from: weekEnd))"
-        
+
         var report = """
-        # 📅 Argus HAFTALIK ÖZET
-        **Dönem:** \(rangeStr)
-        
-        ## 📊 Performans
-        """
-        
-        // Filter for this week
+╔══════════════════════════════════════════════════════════════╗
+║              ARGUS HAFTALIK PERFORMANS RAPORU                ║
+║              \(rangeStr.padding(toLength: 35, withPad: " ", startingAt: 0))          ║
+╚══════════════════════════════════════════════════════════════╝
+
+"""
+
+        // 1. Alkindus Haftalık Öğrenmeler
+        report += """
+┌─────────────────────────────────────────────────────────────┐
+│  📚 BU HAFTA ÖĞRENDIKLERIN (ALKİNDUS)                       │
+└─────────────────────────────────────────────────────────────┘
+
+"""
+        let recentInsights = await AlkindusInsightGenerator.shared.getRecentInsights(days: 7)
+        if recentInsights.isEmpty {
+            report += "   Yeterli öğrenme verisi henüz biriktirilmedi.\n\n"
+        } else {
+            // Group by category
+            let grouped = Dictionary(grouping: recentInsights, by: { $0.category })
+            for (category, categoryInsights) in grouped.prefix(4) {
+                report += "   📌 \(category.rawValue)\n"
+                for insight in categoryInsights.prefix(2) {
+                    report += "      • \(insight.detail)\n"
+                }
+                report += "\n"
+            }
+        }
+
+        // Temporal patterns
+        let anomalies = await AlkindusTemporalAnalyzer.shared.getTemporalAnomalies()
+        if !anomalies.isEmpty {
+            report += "   ⏰ Keşfedilen Zaman Örüntüleri:\n"
+            for anomaly in anomalies.prefix(3) {
+                let direction = anomaly.deviation > 0 ? "📈" : "📉"
+                report += "      \(direction) \(anomaly.message)\n"
+            }
+            report += "\n"
+        }
+
+        // 2. Performans Özeti
+        report += """
+┌─────────────────────────────────────────────────────────────┐
+│  📊 HAFTALIK PERFORMANS                                     │
+└─────────────────────────────────────────────────────────────┘
+
+"""
         let weeklyTrades = trades.filter { $0.date >= weekStart && $0.date <= weekEnd }
-        
-        if weeklyTrades.isEmpty {
-            report += "\nBu hafta herhangi bir işlem gerçekleşmedi."
-        } else {
-            let totalPnL = weeklyTrades.reduce(0.0) { $0 + ($1.pnl ?? 0) }
-            let winCount = weeklyTrades.filter { ($0.pnl ?? 0) > 0 }.count
-            let lossCount = weeklyTrades.filter { ($0.pnl ?? 0) < 0 }.count
-            let totalCount = winCount + lossCount
-            let winRate = totalCount > 0 ? (Double(winCount) / Double(totalCount)) * 100 : 0.0
-            
-            // Para birimi: BIST varsa TL, yoksa $
-            let hasBist = weeklyTrades.contains { $0.symbol.uppercased().hasSuffix(".IS") }
-            let currency = hasBist ? "₺" : "$"
-            
-            report += "\n- **Net K/Z:** \(currency)\(String(format: "%.2f", totalPnL))"
-            report += "\n- **İşlem Sayısı:** \(weeklyTrades.count)"
-            report += "\n- **Başarı Oranı (Win Rate):** %\(String(format: "%.1f", winRate))"
-            
-            // Best Trade
-            if let best = weeklyTrades.max(by: { ($0.pnl ?? -999) < ($1.pnl ?? -999) }), let pnl = best.pnl, pnl > 0 {
-                let bestCurrency = best.symbol.uppercased().hasSuffix(".IS") ? "₺" : "$"
-                report += "\n\n🔥 **Haftanın Yıldızı:** \(best.symbol) (+\(bestCurrency)\(String(format: "%.2f", pnl)))"
-            }
-        }
-        
-        report += "\n\n## 🧠 Strateji Analizi\n"
         let weeklyDecisions = decisions.filter { $0.timestamp >= weekStart && $0.timestamp <= weekEnd }
-        let vetoes = weeklyDecisions.filter { !($0.riskEvaluation.isApproved) }
-        
-        if !weeklyDecisions.isEmpty {
-            report += "- Sistem bu hafta **\(weeklyDecisions.count)** fırsatı değerlendirdi.\n"
-            report += "- **\(vetoes.count)** işlem risk protokolüne takılarak engellendi.\n"
-            
-            if !vetoes.isEmpty {
-                // Find most common veto reason
-                // Simple frequency map
-                var reasons: [String: Int] = [:]
-                for v in vetoes {
-                    let r = v.riskEvaluation.reason // Remove redundant ?? "Belirsiz" as reason is non-optional
-                    reasons[r, default: 0] += 1
-                }
-                if let topReason = reasons.max(by: { $0.value < $1.value }) {
-                    report += "- En sık karşılaşılan engel: **\(topReason.key)** (\(topReason.value) kez)"
-                }
-            }
+
+        if weeklyTrades.isEmpty {
+            report += "   Bu hafta işlem gerçekleştirilmedi.\n\n"
         } else {
-            report += "Sistem bu hafta henüz yeterli veri biriktirmedi."
+            let sells = weeklyTrades.filter { $0.type == .sell }
+            let totalPnL = sells.compactMap { $0.pnl }.reduce(0, +)
+            let winCount = sells.filter { ($0.pnl ?? 0) > 0 }.count
+            let lossCount = sells.filter { ($0.pnl ?? 0) < 0 }.count
+            let winRate = sells.count > 0 ? Double(winCount) / Double(sells.count) * 100 : 0
+            let hasBist = weeklyTrades.contains { $0.symbol.hasSuffix(".IS") }
+            let currency = hasBist ? "₺" : "$"
+
+            report += """
+   ┌────────────────────┬────────────────────┐
+   │ Net Kar/Zarar      │ \(currency)\(String(format: "%15.2f", totalPnL)) │
+   ├────────────────────┼────────────────────┤
+   │ Toplam İşlem       │ \(String(format: "%18d", weeklyTrades.count)) │
+   │ Başarı Oranı       │ \(String(format: "%17.1f", winRate))% │
+   │ Kazanan/Kaybeden   │ \(String(format: "%11d", winCount))W / \(String(format: "%dL", lossCount).padding(toLength: 4, withPad: " ", startingAt: 0)) │
+   └────────────────────┴────────────────────┘
+
+"""
+
+            // Best and worst trades
+            if let best = sells.max(by: { ($0.pnl ?? 0) < ($1.pnl ?? 0) }), let bestPnL = best.pnl, bestPnL > 0 {
+                report += "   🏆 Haftanın Yıldızı: \(best.symbol) (+\(currency)\(String(format: "%.2f", bestPnL)))\n"
+            }
+            if let worst = sells.min(by: { ($0.pnl ?? 0) < ($1.pnl ?? 0) }), let worstPnL = worst.pnl, worstPnL < 0 {
+                report += "   💔 En Kötü İşlem: \(worst.symbol) (\(currency)\(String(format: "%.2f", worstPnL)))\n"
+            }
+            report += "\n"
         }
-        
-        report += "\n\n### 🔮 Gelecek Hafta Beklentisi\n"
-        report += "Aether makro verileri ve Phoenix radar taramaları, önümüzdeki hafta volatilite artışına işaret ediyor. Temkinli seyir (Tier 1) önerilir."
-        
-        report += "\n---\n*Argus Weekly Intelligence*"
-        
+
+        // 3. Karar Kalitesi Analizi
+        report += """
+┌─────────────────────────────────────────────────────────────┐
+│  🧠 KARAR KALİTESİ ANALİZİ                                  │
+└─────────────────────────────────────────────────────────────┘
+
+"""
+        let vetoes = weeklyDecisions.filter { !$0.riskEvaluation.isApproved }
+
+        report += "   Değerlendirilen Fırsat: \(weeklyDecisions.count)\n"
+        report += "   Veto Edilen: \(vetoes.count)\n\n"
+
+        if !vetoes.isEmpty {
+            var reasons: [String: Int] = [:]
+            for v in vetoes {
+                reasons[v.riskEvaluation.reason, default: 0] += 1
+            }
+
+            report += "   📖 En Sık Veto Sebepleri:\n"
+            for (reason, count) in reasons.sorted(by: { $0.value > $1.value }).prefix(3) {
+                report += "      • \(reason): \(count) kez\n"
+            }
+            report += "\n"
+        }
+
+        // 4. Eğitici Özet
+        report += """
+┌─────────────────────────────────────────────────────────────┐
+│  📖 HAFTANIN DERSLERİ                                       │
+└─────────────────────────────────────────────────────────────┘
+
+   \(getWeeklyLessons(trades: weeklyTrades, decisions: weeklyDecisions))
+
+═══════════════════════════════════════════════════════════════
+                    Argus Terminal | Alkindus Öğrenme Sistemi
+═══════════════════════════════════════════════════════════════
+"""
+
+        // Save report
+        let totalPnL = weeklyTrades.compactMap { $0.pnl }.reduce(0, +)
+        let winCount = weeklyTrades.filter { ($0.pnl ?? 0) > 0 }.count
+        let winRate = weeklyTrades.count > 0 ? Double(winCount) / Double(weeklyTrades.count) : 0
+
+        let stored = StoredReport(
+            id: UUID(),
+            type: .weekly,
+            date: date,
+            content: report,
+            metrics: ReportMetrics(
+                totalTrades: weeklyTrades.count,
+                winRate: winRate,
+                totalPnL: totalPnL,
+                topInsight: recentInsights.first?.title
+            )
+        )
+        await saveReport(stored)
+
         return report
+    }
+
+    // MARK: - Helper Functions
+
+    private func insightEmoji(for category: AlkindusInsightGenerator.InsightCategory) -> String {
+        switch category {
+        case .correlation: return "🔗"
+        case .anomaly: return "⚡"
+        case .trend: return "📈"
+        case .performance: return "🎯"
+        case .regime: return "🌍"
+        case .warning: return "⚠️"
+        case .discovery: return "💡"
+        }
+    }
+
+    private func explainRegime(score: Double) -> (String, String) {
+        if score > 70 {
+            return ("RISK-ON (Boğa)", """
+      Piyasa risk iştahı yüksek. Yatırımcılar agresif pozisyonlar alıyor.
+      Bu ortamda momentum stratejileri iyi çalışır, ancak dikkatli ol -
+      aşırı iyimserlik genellikle düzeltmelerin habercisidir.
+""")
+        } else if score > 55 {
+            return ("TEMKINLI BOĞA", """
+      Piyasa pozitif ama temkinli. Seçici olmak önemli.
+      Kaliteli hisselerde fırsat aranabilir, ama pozisyon boyutu küçük tutulmalı.
+""")
+        } else if score > 45 {
+            return ("NÖTR", """
+      Piyasa kararsız. Net bir yön yok.
+      Bu ortamda en iyisi beklemek veya çok seçici olmak.
+      İşlem sayısını minimumda tut.
+""")
+        } else if score > 30 {
+            return ("TEMKİNLİ AYI", """
+      Piyasa negatif eğilimli. Risk algısı yükseliyor.
+      Defansif sektörlere yönel, nakit pozisyonunu artır.
+      Short pozisyonlar değerlendirilebilir.
+""")
+        } else {
+            return ("RISK-OFF (Ayı)", """
+      Piyasa ciddi stres altında. Korku hakim.
+      Nakit en değerli pozisyon olabilir.
+      Kontrarian fırsatlar için sabırlı ol - panik satışları fırsat yaratır.
+""")
+        }
+    }
+
+    private func getDailyLesson(trades: [Transaction], decisions: [AgoraTrace]) -> String {
+        let lessons = [
+            "Sabırlı olmak, işlem yapmak kadar önemlidir.",
+            "Risk yönetimi, kâr etmekten önce gelir.",
+            "Piyasa her zaman haklıdır - ego değil, veri takip et.",
+            "Küçük kayıplar normal, büyük kayıplar affedilmez.",
+            "En iyi işlem bazen hiç işlem yapmamaktır.",
+            "Trend dostundur - ona karşı savaşma.",
+            "Diversifikasyon riski azaltır, ama aşırısı getiriyi de azaltır.",
+            "Duygusal kararlar portföy katilidir."
+        ]
+
+        // Context-aware lesson
+        let sells = trades.filter { $0.type == .sell }
+        let losses = sells.filter { ($0.pnl ?? 0) < 0 }
+
+        if losses.count > sells.count / 2 && !sells.isEmpty {
+            return "Bugün kayıplar ağır bastı. Hatırla: Her kayıp bir öğrenme fırsatıdır.\n      Pozisyon boyutunu kontrol altında tutmak, büyük kayıpları önler."
+        }
+
+        let vetoes = decisions.filter { !$0.riskEvaluation.isApproved }
+        if vetoes.count > decisions.count / 2 && !decisions.isEmpty {
+            return "Sistem bugün çok sayıda fırsatı reddetti. Bu iyi bir şey!\n      Seçici olmak, uzun vadede kazandırır."
+        }
+
+        return lessons.randomElement() ?? lessons[0]
+    }
+
+    private func getWeeklyLessons(trades: [Transaction], decisions: [AgoraTrace]) -> String {
+        let sells = trades.filter { $0.type == .sell }
+        let totalPnL = sells.compactMap { $0.pnl }.reduce(0, +)
+        let winRate = sells.isEmpty ? 0 : Double(sells.filter { ($0.pnl ?? 0) > 0 }.count) / Double(sells.count)
+
+        var lessons: [String] = []
+
+        if totalPnL > 0 {
+            lessons.append("✅ Pozitif hafta! Ama dikkat - başarı kibire yol açmasın.")
+        } else if totalPnL < 0 {
+            lessons.append("📉 Negatif hafta. Kayıpları analiz et, ama kendini yıpratma.")
+        }
+
+        if winRate < 0.4 && !sells.isEmpty {
+            lessons.append("📊 Win rate düşük. Giriş noktalarını gözden geçir.")
+        } else if winRate > 0.6 && !sells.isEmpty {
+            lessons.append("🎯 Win rate yüksek! Stratejin çalışıyor.")
+        }
+
+        if trades.isEmpty {
+            lessons.append("🧘 İşlem yapmamak da bir stratejidir. Bazen beklemek en iyi hamledir.")
+        }
+
+        return lessons.joined(separator: "\n   ")
     }
 }

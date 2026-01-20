@@ -192,17 +192,11 @@ actor OrionRelativeStrengthEngine {
     }
     
     private func guessSector(symbol: String) -> String {
-        // Basit sembol bazlı sektör tahmini
-        let banks = ["AKBNK", "GARAN", "ISCTR", "YKBNK", "HALKB", "VAKBN", "TSKB"]
-        let industrials = ["EREGL", "KRDMD", "TOASO", "FROTO", "TUPRS", "PETKM"]
-        let holdings = ["SAHOL", "KCHOL", "DOHOL", "KOZAL", "TAVHL"]
-        let tech = ["ASELS", "LOGO", "NETAS"]
-        
-        if banks.contains(symbol) { return "Bankacılık (XBANK)" }
-        if industrials.contains(symbol) { return "Sınai (XUSIN)" }
-        if holdings.contains(symbol) { return "Holding (XHOLD)" }
-        if tech.contains(symbol) { return "Teknoloji (XBLSM)" }
-        
+        // BistSectorRegistry'den merkezi erişim
+        if let sectorName = BistSectorRegistry.sectorName(for: symbol),
+           let sectorCode = BistSectorRegistry.sectorCode(for: symbol) {
+            return "\(sectorName) (\(sectorCode))"
+        }
         return "Diğer"
     }
     

@@ -12,101 +12,101 @@ struct GrafikEducationalCard: View {
     @State private var isExpanded = true
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header
-            HStack {
-                Image(systemName: "waveform.path.ecg")
-                    .foregroundColor(.cyan)
-                Text("Teknik Analiz Göstergeleri")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                Spacer()
-                
-                if isLoading {
-                    ProgressView().scaleEffect(0.7)
-                } else if let r = orionResult {
-                    Text(r.signal.rawValue)
-                        .font(.caption.bold())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(signalColor(r.signal).opacity(0.2))
-                        .foregroundColor(signalColor(r.signal))
-                        .cornerRadius(8)
-                }
-            }
-            
-            if !isLoading {
-                // 1️⃣ SAR TRY (Parabolic SAR)
-                IndicatorRow(
-                    icon: "arrow.triangle.swap",
-                    title: "SAR TRY (Parabolic SAR)",
-                    value: orionResult?.sarStatus ?? "N/A",
-                    color: orionResult?.sarStatus.contains("AL") == true ? .green : .red,
-                    explanation: sarExplanation,
-                    formula: "SAR(n+1) = SAR(n) + AF × (EP - SAR(n))"
-                )
-                
-                // 2️⃣ TSI (True Strength Index)
-                IndicatorRow(
-                    icon: "gauge.with.dots.needle.50percent",
-                    title: "TSI (Momentum)",
-                    value: String(format: "%.1f", orionResult?.tsiValue ?? 0),
-                    color: tsiColor(orionResult?.tsiValue ?? 0),
-                    explanation: tsiExplanation,
-                    formula: "TSI = 100 × EMA(EMA(ΔFiyat)) / EMA(EMA(|ΔFiyat|))"
-                )
-                
-                // 3️⃣ RSI
-                if let rsi = rsiValue {
-                    IndicatorRow(
-                        icon: "speedometer",
-                        title: "RSI (14)",
-                        value: String(format: "%.0f", rsi),
-                        color: rsiColor(rsi),
-                        explanation: rsiExplanation(rsi),
-                        formula: "RSI = 100 - (100 / (1 + RS))"
-                    )
-                }
-                
-                // 4️⃣ Sonuç Puanı
-                if let r = orionResult {
-                    Divider().background(Color.white.opacity(0.2))
+        GlassCard(cornerRadius: 16) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                HStack {
+                    Image(systemName: "waveform.path.ecg")
+                        .foregroundColor(.cyan)
+                    Text("Teknik Analiz Göstergeleri")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Spacer()
                     
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "target")
-                                    .font(.caption2)
-                                    .foregroundColor(.cyan)
-                                Text("TOPLAM SKOR")
+                    if isLoading {
+                        ProgressView().scaleEffect(0.7)
+                    } else if let r = orionResult {
+                        Text(r.signal.rawValue)
+                            .font(.caption.bold())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(signalColor(r.signal).opacity(0.2))
+                            .foregroundColor(signalColor(r.signal))
+                            .cornerRadius(8)
+                    }
+                }
+                
+                if !isLoading {
+                    // 1️⃣ SAR TRY (Parabolic SAR)
+                    IndicatorRow(
+                        icon: "arrow.triangle.swap",
+                        title: "SAR TRY (Parabolic SAR)",
+                        value: orionResult?.sarStatus ?? "N/A",
+                        color: orionResult?.sarStatus.contains("AL") == true ? .green : .red,
+                        explanation: sarExplanation,
+                        formula: "SAR(n+1) = SAR(n) + AF × (EP - SAR(n))"
+                    )
+                    
+                    // 2️⃣ TSI (True Strength Index)
+                    IndicatorRow(
+                        icon: "gauge.with.dots.needle.50percent",
+                        title: "TSI (Momentum)",
+                        value: String(format: "%.1f", orionResult?.tsiValue ?? 0),
+                        color: tsiColor(orionResult?.tsiValue ?? 0),
+                        explanation: tsiExplanation,
+                        formula: "TSI = 100 × EMA(EMA(ΔFiyat)) / EMA(EMA(|ΔFiyat|))"
+                    )
+                    
+                    // 3️⃣ RSI
+                    if let rsi = rsiValue {
+                        IndicatorRow(
+                            icon: "speedometer",
+                            title: "RSI (14)",
+                            value: String(format: "%.0f", rsi),
+                            color: rsiColor(rsi),
+                            explanation: rsiExplanation(rsi),
+                            formula: "RSI = 100 - (100 / (1 + RS))"
+                        )
+                    }
+                    
+                    // 4️⃣ Sonuç Puanı
+                    if let r = orionResult {
+                        Divider().background(Color.white.opacity(0.2))
+                        
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "target")
+                                        .font(.caption2)
+                                        .foregroundColor(.cyan)
+                                    Text("TOPLAM SKOR")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                                Text("\(Int(r.score))/100")
+                                    .font(.title2.bold())
+                                    .foregroundColor(signalColor(r.signal))
+                            }
+                            
+                            Spacer()
+                            
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text("SİNYAL")
                                     .font(.caption2)
                                     .foregroundColor(.gray)
+                                Text(r.signal.rawValue)
+                                    .font(.headline)
+                                    .foregroundColor(signalColor(r.signal))
                             }
-                            Text("\(Int(r.score))/100")
-                                .font(.title2.bold())
-                                .foregroundColor(signalColor(r.signal))
                         }
-                        
-                        Spacer()
-                        
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text("SİNYAL")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                            Text(r.signal.rawValue)
-                                .font(.headline)
-                                .foregroundColor(signalColor(r.signal))
-                        }
+                        .padding()
+                        .background(signalColor(r.signal).opacity(0.1))
+                        .cornerRadius(12)
                     }
-                    .padding()
-                    .background(signalColor(r.signal).opacity(0.1))
-                    .cornerRadius(12)
                 }
             }
+            .padding(16)
         }
-        .padding(16)
-        .background(Theme.cardBackground)
-        .cornerRadius(16)
         .onAppear { loadData() }
     }
     
@@ -1143,4 +1143,7 @@ struct GlobalModuleDetailCard: View {
         }
     }
 }
+
+// Orion UI Bileşenleri OrionDetailView.swift'te tanımlı - duplikasyon kaldırıldı
+// LinearGauge, StructureLinearMap, Sparkline → OrionDetailView.swift
 

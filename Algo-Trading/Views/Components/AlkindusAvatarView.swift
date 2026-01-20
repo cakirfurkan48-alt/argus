@@ -29,11 +29,11 @@ struct AlkindusAvatarView: View {
                 .fill(activeColor)
                 .frame(width: size * 0.8, height: size * 0.8)
                 .blur(radius: size * 0.5)
-                .opacity(isThinking ? 0.3 + (sin(animPhase) * 0.1) : 0.2)
+                .opacity(isThinking ? 0.3 + (Foundation.sin(animPhase) * 0.1) : 0.2)
             
             // 2. The Sage (Profil - Neon Line Art)
             SageShape()
-                .trim(from: 0, to: isThinking ? 0.8 + (sin(animPhase) * 0.1) : 1.0)
+                .trim(from: 0, to: isThinking ? 0.8 + (Foundation.sin(animPhase) * 0.1) : 1.0)
                 .stroke(activeColor, style: StrokeStyle(lineWidth: size * 0.04, lineCap: .round, lineJoin: .round))
                 .frame(width: size, height: size)
                 .shadow(color: activeColor, radius: 4)
@@ -46,7 +46,7 @@ struct AlkindusAvatarView: View {
                     .offset(x: size * 0.1, y: -size * 0.2)
                     .blur(radius: 2)
                     .shadow(color: ideaGreen, radius: 5)
-                    .scaleEffect(1.0 + (sin(animPhase * 5) * 0.3))
+                    .scaleEffect(1.0 + (Foundation.sin(animPhase * 5) * 0.3))
             }
         }
         .onAppear {

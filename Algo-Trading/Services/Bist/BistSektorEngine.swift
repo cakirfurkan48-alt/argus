@@ -108,24 +108,10 @@ actor BistSektorEngine {
     }
     
     // MARK: - Sembolün Sektörünü Bul
-    
+
     func getSector(for symbol: String) -> String? {
-        // BistSectorRegistry kullanıyoruz
-        // Not: actor olduğu için sync erişim için bilinen değerleri cache'liyoruz
-        let cleanSymbol = symbol.uppercased().replacingOccurrences(of: ".IS", with: "")
-        
-        // Bilinen semboller (BistSectorRegistry ile sync)
-        let bankSymbols = ["AKBNK", "GARAN", "ISCTR", "YKBNK", "HALKB", "VAKBN", "TSKB"]
-        let industrialSymbols = ["EREGL", "KRDMD", "TOASO", "FROTO", "TUPRS", "PETKM"]
-        let holdingSymbols = ["SAHOL", "KCHOL", "DOHOL", "KOZAL", "TAVHL"]
-        let techSymbols = ["ASELS", "LOGO", "NETAS"]
-        
-        if bankSymbols.contains(cleanSymbol) { return "XBANK" }
-        if industrialSymbols.contains(cleanSymbol) { return "XUSIN" }
-        if holdingSymbols.contains(cleanSymbol) { return "XHOLD" }
-        if techSymbols.contains(cleanSymbol) { return "XBLSM" }
-        
-        return nil
+        // BistSectorRegistry'den merkezi erişim
+        return BistSectorRegistry.sectorCode(for: symbol)
     }
 }
 

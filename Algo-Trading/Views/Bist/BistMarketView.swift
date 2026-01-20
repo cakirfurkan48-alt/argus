@@ -118,14 +118,14 @@ struct BistMarketView: View {
                         .font(.headline)
                         .bold()
                     
-                    if let score = viewModel.orionScores[symbol]?.score {
-                        Text(scoreLabel(score))
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(scoreColor(score))
-                            .cornerRadius(4)
+                    // Score Badges (Grafik, Rejim)
+                    HStack(spacing: 2) {
+                        if let faktorScore = viewModel.orionScores[symbol]?.score {
+                            TerminalScoreBadge(label: "G", score: faktorScore, color: .cyan)
+                        }
+                        if let rejimScore = viewModel.orionScores[symbol]?.score {
+                            TerminalScoreBadge(label: "R", score: rejimScore, color: .red)
+                        }
                     }
                 }
                 
@@ -222,3 +222,5 @@ struct BistMarketView: View {
         return .orange
     }
 }
+
+// ScoreBadge kaldırıldı - TerminalScoreBadge kullanılıyor (ArgusCockpitView'dan)
